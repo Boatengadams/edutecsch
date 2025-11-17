@@ -1107,33 +1107,38 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             case 'dashboard':
                 return <TeacherDashboard userProfile={userProfile} students={students} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} />;
             case 'my_students':
-                const studentsByClass = students.reduce((acc, student) => {
+                const studentsByClass = students.reduce((acc: Record<string, UserProfile[]>, student) => {
                     const classKey = student.class || 'Unassigned';
-                    if (!acc[classKey]) acc[classKey] = [];
+                    if (!acc[classKey]) {
+                        acc[classKey] = [];
+                    }
                     acc[classKey].push(student);
                     return acc;
-                }, {} as Record<string, UserProfile[]>);
+                }, {});
                  return (
                     <div className="space-y-6">
                          <div className="flex justify-between items-center">
                              <h2 className="text-3xl font-bold">My Students</h2>
                              <Button onClick={() => setShowCreateParentModal(true)}>Create Parent Account</Button>
                          </div>
-                         {Object.entries(studentsByClass).map(([classId, classStudents]) => (
-                             <Card key={classId}>
-                                 <div className="flex justify-between items-center mb-4">
-                                     <h3 className="text-xl font-semibold">{classId} ({classStudents.length} students)</h3>
-                                     <Button size="sm" onClick={() => { setStudentCreationClass(classId); setShowCreateStudentModal(true); }}>+ Add Student</Button>
-                                 </div>
-                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                     {classStudents.map(student => (
-                                         <button key={student.uid} onClick={() => setViewingStudentProgress(student)} className="p-3 bg-slate-700 rounded-lg text-left hover:bg-slate-600 transition-colors">
-                                             {student.name}
-                                         </button>
-                                     ))}
-                                 </div>
-                             </Card>
-                         ))}
+                         {Object.keys(studentsByClass).map((classId) => {
+                            const classStudents = studentsByClass[classId];
+                            return (
+                                <Card key={classId}>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h3 className="text-xl font-semibold">{classId} ({classStudents.length} students)</h3>
+                                        <Button size="sm" onClick={() => { setStudentCreationClass(classId); setShowCreateStudentModal(true); }}>+ Add Student</Button>
+                                    </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                        {classStudents.map(student => (
+                                            <button key={student.uid} onClick={() => setViewingStudentProgress(student)} className="p-3 bg-slate-700 rounded-lg text-left hover:bg-slate-600 transition-colors">
+                                                {student.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </Card>
+                            );
+                         })}
                      </div>
                  );
             case 'assignments':

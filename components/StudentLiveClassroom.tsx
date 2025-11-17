@@ -26,6 +26,7 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
   const boardRef = useRef<HTMLDivElement>(null);
   const isDrawing = useRef(false);
   const currentStroke = useRef<Stroke | null>(null);
+  const [teacherProfile, setTeacherProfile] = useState<UserProfile | null>(null);
   
   const reconstructedLesson = useMemo(() => {
     if (!lesson) return null;
@@ -67,7 +68,7 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
 
   const isDrawingAllowed = !!(lesson?.whiteboardActive || studentRoomId);
 
-  const { highlightRange } = useLiveLessonAudio(reconstructedLesson, reconstructedLesson?.currentStepIndex ?? 0);
+  useLiveLessonAudio(reconstructedLesson, reconstructedLesson?.currentStepIndex ?? 0, teacherProfile);
 
   useEffect(() => {
     const lessonRef = db.collection('liveLessons').doc(lessonId);
@@ -77,6 +78,15 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
         if (lessonData.status !== 'active') { onClose(); }
         setLesson(lessonData);
         setLoading(false);
+
+        // Fetch teacher profile if not already fetched
+        if (!teacherProfile && lessonData.teacherId) {
+            db.collection('users').doc(lessonData.teacherId).get().then(teacherDoc => {
+                if (teacherDoc.exists) {
+                    setTeacherProfile(teacherDoc.data() as UserProfile);
+                }
+            });
+        }
       } else {
         onClose();
       }
@@ -101,7 +111,7 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
       unsubscribeImages();
       unsubscribeResponses();
     };
-  }, [lessonId, onClose, userProfile.uid]);
+  }, [lessonId, onClose, userProfile.uid, teacherProfile]);
 
   // Listener for this student's breakout room whiteboard
   useEffect(() => {
@@ -264,7 +274,7 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
             <h3 className="text-xl font-bold mb-4 flex-shrink-0">On The Board</h3>
             <div className="flex-grow overflow-y-auto bg-slate-900 p-6 rounded-md prose-styles prose-invert relative">
                  <div className="relative z-0">
-                    <TrackedReading htmlContent={reconstructedLesson.currentBoardContent} highlightRange={highlightRange} />
+                    <TrackedReading htmlContent={reconstructedLesson.currentBoardContent} />
                  </div>
             </div>
         </>

@@ -8,11 +8,12 @@ import { useLiveLessonAudio } from '../hooks/useLiveLessonAudio';
 
 interface TeacherLiveClassroomProps {
   lessonId: string;
+  userProfile: UserProfile;
   onClose: () => void;
   setToast: (toast: { message: string, type: 'success' | 'error' } | null) => void;
 }
 
-export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ lessonId, onClose, setToast }) => {
+const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ lessonId, userProfile, onClose, setToast }) => {
   const [lesson, setLesson] = useState<LiveLesson | null>(null);
   const [slideImages, setSlideImages] = useState<Record<string, { imageUrl: string; imageStyle: string }>>({});
   const [responses, setResponses] = useState<LiveLessonResponse[]>([]);
@@ -65,7 +66,7 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
     };
   }, [lesson, slideImages]);
 
-  useLiveLessonAudio(reconstructedLesson, reconstructedLesson?.currentStepIndex ?? 0);
+  useLiveLessonAudio(reconstructedLesson, reconstructedLesson?.currentStepIndex ?? 0, userProfile);
 
   // Main lesson listener
   useEffect(() => {
@@ -415,6 +416,122 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
   };
   
   const DrawingToolbar = () => {
+    if (toolMode !== 'draw') return null;
     const colors = ['#EF4444', '#3B82F6', '#FACC15', '#4ADE80', '#FFFFFF'];
     return (
-        <div className="absolute top-
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-800 p-2 rounded-lg shadow-lg flex items-center gap-1.5 z-20">
+            {colors.map(color => (
+                <button key={color} onClick={() => setDrawColor(color)} className={`w-6 h-6 rounded-full border-2 ${drawColor === color ? 'border-white' : 'border-transparent'}`} style={{ backgroundColor: color }} />
+            ))}
+            <div className="w-px h-6 bg-slate-600 mx-1"></div>
+            <Button size="sm" variant="secondary" onClick={handleClearDrawing}>Clear</Button>
+        </div>
+    );
+  };
+
+  return (
+    <div className="h-full flex flex-col p-4 bg-slate-900/50 rounded-lg">
+        <header className="flex-shrink-0 pb-4 mb-4 border-b border-slate-700 flex justify-between items-start">
+            <div>
+                <h2 className="text-2xl font-bold">{reconstructedLesson.topic}</h2>
+                <p className="text-sm text-gray-400">{reconstructedLesson.subject} - {reconstructedLesson.classId}</p>
+            </div>
+            <div className="flex gap-2">
+                <Button onClick={handleEndLesson} variant="danger" disabled={isEnding}>
+                    {isEnding ? 'Ending...' : 'End Lesson'}
+                </Button>
+            </div>
+        </header>
+        <div className="flex-grow grid grid-cols-1 md:grid-cols-3 gap-4 overflow-hidden">
+            <div className="md:col-span-2 relative h-full">
+                <DrawingToolbar />
+                <Card className="h-full flex flex-col" fullHeight={false} ref={boardRef} 
+                    onMouseDown={handleMouseDown} 
+                    onMouseMove={handleMouseMove} 
+                    onMouseUp={handleMouseUp} 
+                    onMouseLeave={handleMouseLeave}>
+                    <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full pointer-events-none z-10" />
+                    {renderMainContent()}
+                </Card>
+                {reconstructedLesson?.pointerPosition && (
+                    <div className="absolute w-4 h-4 bg-red-500 rounded-full pointer-events-none z-20 shadow-[0_0_8px_4px_rgba(239,68,68,0.7)] transform -translate-x-1/2 -translate-y-1/2" 
+                        style={{ left: `${reconstructedLesson.pointerPosition.x * 100}%`, top: `${reconstructedLesson.pointerPosition.y * 100}%`, transition: 'left 0.05s linear, top 0.05s linear' }} 
+                    />
+                )}
+            </div>
+
+            <Card className="md:col-span-1 flex flex-col">
+                <h3 className="text-xl font-bold mb-4 flex-shrink-0">Controls &amp; Responses</h3>
+                <div className="flex-grow overflow-y-auto space-y-4">
+                    {currentQuestion ? (
+                        <div>
+                            <p className="font-semibold">{currentQuestion.text}</p>
+                            <div className="mt-4 p-4 bg-slate-700 rounded-lg">
+                                <p className="text-sm text-gray-400">Response Rate</p>
+                                <p className="text-2xl font-bold">{responseRate.toFixed(0)}% Correct</p>
+                                <p className="text-xs text-gray-500">{correctAnswers} of {questionResponses.length} correct</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="text-sm text-gray-400">No question is currently active.</p>
+                    )}
+                    <div className="pt-4 border-t border-slate-700">
+                        <h4 className="font-semibold mb-2">Lesson Navigation</h4>
+                        <div className="flex justify-between items-center">
+                            <Button onClick={() => changeStep(reconstructedLesson.currentStepIndex - 1)} disabled={reconstructedLesson.currentStepIndex === 0}>Prev</Button>
+                            <span>Step {reconstructedLesson.currentStepIndex + 1} / {reconstructedLesson.lessonPlan.length}</span>
+                            <Button onClick={() => changeStep(reconstructedLesson.currentStepIndex + 1)} disabled={reconstructedLesson.currentStepIndex >= reconstructedLesson.lessonPlan.length - 1}>Next</Button>
+                        </div>
+                    </div>
+                    
+                    <div className="pt-4 border-t border-slate-700">
+                         <h4 className="font-semibold mb-2">Collaboration Tools</h4>
+                         <div className="flex flex-wrap gap-2">
+                             <Button size="sm" variant={toolMode === 'draw' ? 'primary' : 'secondary'} onClick={() => setToolMode(p => p === 'draw' ? 'none' : 'draw')}>Draw</Button>
+                             <Button size="sm" variant={toolMode === 'pointer' ? 'primary' : 'secondary'} onClick={() => setToolMode(p => p === 'pointer' ? 'none' : 'pointer')}>Pointer</Button>
+                             <Button size="sm" variant={lesson?.whiteboardActive ? 'primary' : 'secondary'} onClick={handleToggleWhiteboard}>Whiteboard</Button>
+                             <Button size="sm" variant={lesson?.screenShareActive ? 'primary' : 'secondary'} onClick={handleToggleScreenShare}>{lesson?.screenShareActive ? 'Stop Share' : 'Share Screen'}</Button>
+                         </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-700">
+                         <h4 className="font-semibold mb-2">Breakout Rooms</h4>
+                         {lesson?.breakoutRoomsActive ? (
+                            <div className="space-y-2">
+                                <Button size="sm" variant="danger" onClick={handleCloseBreakoutRooms}>Close Rooms</Button>
+                                <div className="space-y-1">
+                                    {Object.keys(lesson.breakoutRooms || {}).map(roomId => (
+                                        <Button key={roomId} size="sm" variant={viewingBreakoutRoomId === roomId ? 'primary' : 'secondary'} className="w-full" onClick={() => setViewingBreakoutRoomId(p => p === roomId ? null : roomId)}>
+                                            {roomId} ({(lesson.breakoutRooms?.[roomId] as any).students.length} students)
+                                        </Button>
+                                    ))}
+                                </div>
+                            </div>
+                         ) : (
+                            <Button size="sm" variant="secondary" onClick={() => setShowBreakoutModal(true)}>Create Rooms</Button>
+                         )}
+                    </div>
+                </div>
+            </Card>
+        </div>
+
+        {showBreakoutModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
+                <Card className="w-full max-w-sm">
+                    <h3 className="text-lg font-bold">Create Breakout Rooms</h3>
+                    <div className="my-4">
+                        <label htmlFor="num-rooms" className="text-sm">Number of Rooms</label>
+                        <input id="num-rooms" type="number" min="2" max="10" value={numBreakoutRooms} onChange={e => setNumBreakoutRooms(parseInt(e.target.value))} className="w-full p-2 mt-1 bg-slate-700 rounded-md" />
+                    </div>
+                    <div className="flex gap-2">
+                        <Button onClick={handleCreateBreakoutRooms}>Create</Button>
+                        <Button variant="secondary" onClick={() => setShowBreakoutModal(false)}>Cancel</Button>
+                    </div>
+                </Card>
+            </div>
+        )}
+    </div>
+  );
+};
+
+export default TeacherLiveClassroom;

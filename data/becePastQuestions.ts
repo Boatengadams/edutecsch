@@ -243,7 +243,6 @@ export const beceQuestions: PastQuestionPaper[] = [
         instructions: 'Answer all the questions in this section.',
         marks: 40,
         questions: [
-            // FIX: Corrected object property for the option 'Australia'. It had a typo.
             { number: '1', text: 'In which continent are the Appalachian mountains located?', options: [{key: 'A', text: 'Africa'}, {key: 'B', text: 'North America'}, {key: 'C', text: 'South America'}, {key: 'D', text: 'Australia'}], answer: 'B' },
             { number: '2', text: 'The main purpose of sex education in Ghanaian schools is to', options: [{key: 'A', text: 'increase the likelihood of early marriage.'}, {key: 'B', text: 'promote reproductive health and responsible behavior.'}, {key: 'C', text: 'discourage communication between adolescents and health care providers.'}, {key: 'D', text: 'promote chastity among adolescents.'}], answer: 'B' },
             { number: '3', text: 'One of the effective ways by which parents carry out socialization of the family members is by', options: [{key: 'A', text: 'teaching them the importance of drum music and dance.'}, {key: 'B', text: 'telling them ancient stories.'}, {key: 'C', text: 'rebuking and punitive punishment.'}, {key: 'D', text: 'open communication and admonishment.'}], answer: 'D' },

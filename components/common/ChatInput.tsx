@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
 import Button from './Button';
 import CameraModal from './CameraModal';
-import Spinner from './Spinner';
 
 // Helper to convert dataURL to File object
 const dataURLtoFile = (dataurl: string, filename: string): File => {
@@ -137,7 +136,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isSending }) => {
                     <button type="button" title={isRecording ? "Stop Recording" : "Record Audio"} onClick={handleMicClick} className={`p-2 rounded-full text-gray-300 hover:bg-slate-700 ${isRecording ? 'bg-red-500 text-white animate-pulse' : ''}`}>🎙️</button>
                     
                     <input type="text" value={text} onChange={e => setText(e.target.value)} placeholder="Type a message..." className="flex-grow p-2 bg-slate-800 rounded-md border border-slate-600"/>
-                    <Button type="submit" disabled={!canSend}>{isSending ? <Spinner/> : 'Send'}</Button>
+                    <Button type="submit" disabled={!canSend}>{isSending ? '...' : 'Send'}</Button>
                 </div>
             </form>
             {showCamera && <CameraModal onCapture={handleCameraCapture} onClose={() => setShowCamera(false)} />}

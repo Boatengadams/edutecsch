@@ -7,8 +7,8 @@ import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
 import AuthForm from './components/AuthForm';
 import RoleSelector from './components/RoleSelector';
-// FIX: Changed TeacherView import from named to default to match its export.
-import TeacherView from './components/TeacherView';
+// FIX: Changed import to a named import to match the export in TeacherView.tsx.
+import { TeacherView } from './components/TeacherView';
 // FIX: Changed to a default import as StudentView is now default exported.
 import StudentView from './components/StudentView';
 import AdminView from './components/AdminView';

@@ -25,6 +25,14 @@ export interface PortfolioItem {
   createdAt: firebase.firestore.Timestamp;
 }
 
+export interface CustomVoice {
+  id: string; // uuid
+  name: string;
+  status: 'ready'; // Simplified status for simulation
+  createdAt: firebase.firestore.Timestamp;
+}
+
+
 // --- CORE USER PROFILE ---
 export interface UserProfile {
   uid: string;
@@ -54,6 +62,9 @@ export interface UserProfile {
   badges: Badge[];
   portfolioItems: PortfolioItem[];
   lastWellbeingCheck?: firebase.firestore.Timestamp;
+  preferredVoice?: string; // For Gemini TTS - can be prebuilt name or custom voice ID
+  customVoices?: CustomVoice[];
+  learningStyle?: 'visual' | 'auditory' | 'kinesthetic' | 'reading/writing';
 }
 
 // --- LEARNING PATHWAYS ---
@@ -340,126 +351,164 @@ export interface Slide {
   imageUrl: string;
   imageStyle?: 'contain' | 'cover';
 }
-export interface Presentation { slides: Slide[]; }
-export interface QuizQuestion { question: string; options: string[]; correctAnswer: string; }
-export interface Quiz { quiz: QuizQuestion[]; }
-export interface Collaborator { uid: string; name: string; email: string | null; }
+export interface Presentation {
+  slides: Slide[];
+}
+export interface QuizQuestion {
+    question: string;
+    options: string[];
+    correctAnswer: string;
+}
+export interface Quiz {
+    quiz: QuizQuestion[];
+}
+
+export interface Collaborator {
+    uid: string;
+    name: string | null;
+    email: string | null;
+}
 
 export interface GeneratedContent {
-  id: string; teacherId: string; teacherName: string; classes: string[]; subject: string; topic: string;
-  presentation: Presentation; quiz: Quiz | null; createdAt: firebase.firestore.Timestamp;
-  collaborators?: Collaborator[]; collaboratorUids?: string[]; liveCollaborators?: Collaborator[];
-  expiresAt?: firebase.firestore.Timestamp;
-  audience?: string;
+    id: string;
+    teacherId: string;
+    teacherName: string;
+    classes: string[];
+    subject: string;
+    topic: string;
+    audience?: string;
+    presentation: Presentation;
+    quiz: Quiz | null;
+    createdAt: firebase.firestore.Timestamp;
+    expiresAt?: firebase.firestore.Timestamp;
+    collaboratorUids: string[];
+    collaborators: Collaborator[];
+    liveCollaborators?: Collaborator[];
 }
 
-export interface TimetablePeriod { subject: string; startTime: string; endTime: string; teacher: string; }
-export type TimetableDay = TimetablePeriod[];
-export interface TimetableData { Monday?: TimetableDay; Tuesday?: TimetableDay; Wednesday?: TimetableDay; Thursday?: TimetableDay; Friday?: TimetableDay; }
-export interface Timetable { id: string; classId: string; timetableData: TimetableData; publishedAt: firebase.firestore.Timestamp; publishedBy: string; }
-
-export interface ParsedUser {
-    clientId: string; // Unique ID for client-side state management (e.g., UUID)
-    id: number | string;
-    name: string;
+export interface TimetablePeriod {
+    subject: string;
+    teacher: string;
+    startTime: string;
+    endTime: string;
+}
+export interface TimetableData {
+    Monday?: TimetablePeriod[];
+    Tuesday?: TimetablePeriod[];
+    Wednesday?: TimetablePeriod[];
+    Thursday?: TimetablePeriod[];
+    Friday?: TimetablePeriod[];
+}
+export interface Timetable {
+    id: string;
     classId: string;
-    registrationStatus?: 'pending' | 'registering' | 'success' | 'error';
-    registrationError?: string;
-    email?: string;
-    password?: string;
+    timetableData: TimetableData;
+    publishedBy: string;
+    publishedAt: firebase.firestore.Timestamp;
 }
 
-export interface TranscriptEntry { speaker: 'Edu' | 'Student'; text: string; timestamp: firebase.firestore.Timestamp; }
-export interface LiveTutoringSession {
-    id: string; roomId: string; teacherId: string; teacherName: string;
-    studentId: string | null; studentName: string | null; topic: string; status: 'waiting' | 'active' | 'ended';
-    transcript: TranscriptEntry[]; createdAt: firebase.firestore.Timestamp; endedAt: firebase.firestore.Timestamp | null;
-}
-
-// --- Terminal Reports ---
 export interface TerminalReportMark {
-  studentName: string;
-  indivTest?: number;
-  groupWork?: number;
-  classTest?: number;
-  project?: number;
-  endOfTermExams?: number;
-  totalClassScore?: number;
-  scaledClassScore?: number;
-  scaledExamScore?: number;
-  overallTotal?: number;
-  grade?: string;
-  position?: number;
+    studentName: string;
+    indivTest?: number;      // 15
+    groupWork?: number;      // 15
+    classTest?: number;      // 15
+    project?: number;        // 15
+    totalClassScore?: number; // 60 -> scaled to 50
+    endOfTermExams?: number; // 100 -> scaled to 50
+    scaledClassScore?: number;
+    scaledExamScore?: number;
+    overallTotal?: number;   // 100
+    grade?: string;
+    position?: number;
 }
-
 export interface TerminalReport {
-  id: string; // {academicYear}_{term}_{classId}
-  academicYear: string;
-  term: number;
-  classId:string;
-  subjects: {
-    [subjectName: string]: {
-      teacherId: string;
-      updatedAt: firebase.firestore.Timestamp;
-      marks: {
-        [studentId: string]: TerminalReportMark;
-      }
+    id: string; // e.g., 2023-2024_1_Basic-1
+    academicYear: string;
+    term: number;
+    classId: string;
+    subjects: {
+        [subjectName: string]: {
+            teacherId: string;
+            updatedAt: firebase.firestore.Timestamp;
+            marks: {
+                [studentId: string]: TerminalReportMark;
+            }
+        }
     }
-  };
 }
-
 export interface ReportSummary {
-  id: string; // {academicYear}_{term}_{studentId}
-  studentId: string;
-  classId: string;
-  academicYear: string;
-  term: number;
-  conduct?: string;
-  attitude?: string;
-  interest?: string;
-  classTeacherRemarks?: string;
-  headTeacherRemarks?: string;
+    id: string; // e.g., 2023-2024_1_studentUid
+    studentId: string;
+    classId: string;
+    academicYear: string;
+    term: number;
+    conduct?: string;
+    attitude?: string;
+    interest?: string;
+    classTeacherRemarks?: string;
+    headTeacherRemarks?: string;
 }
 
-// --- Group Work ---
 export interface GroupMember {
-  uid: string;
-  name: string;
+    uid: string;
+    name: string;
+}
+export interface GroupMessage {
+    id: string;
+    groupId: string;
+    senderId: string;
+    senderName: string;
+    text?: string;
+    createdAt: firebase.firestore.Timestamp;
+    imageUrl?: string;
+    storagePath?: string;
+    audioUrl?: string;
+    audioStoragePath?: string;
 }
 
 export interface Group {
-  id: string; // Firestore auto-id
-  name: string;
-  classId: string;
-  subject: string;
-  teacherId: string;
-  members: GroupMember[];
-  memberUids: string[];
-  createdAt: firebase.firestore.Timestamp;
-
-  assignmentTitle: string;
-  assignmentDescription: string;
-  dueDate: string | null;
-
-  isSubmitted: boolean;
-  submission?: {
-      content: string;
-      submittedBy: GroupMember;
-      submittedAt: firebase.firestore.Timestamp;
-  };
-  grade?: string; // The score e.g., "14" out of 15
-  feedback?: string;
+    id: string;
+    name: string;
+    classId: string;
+    subject: string;
+    teacherId: string;
+    members: GroupMember[];
+    memberUids: string[];
+    createdAt: firebase.firestore.Timestamp;
+    assignmentTitle: string;
+    assignmentDescription: string;
+    dueDate: string | null;
+    isSubmitted: boolean;
+    submission?: {
+        content: string;
+        submittedBy: GroupMember;
+        submittedAt: firebase.firestore.Timestamp;
+    };
+    grade?: string;
+    feedback?: string;
 }
 
-export interface GroupMessage {
-  id: string; // Firestore auto-id
-  groupId: string;
-  senderId: string;
-  senderName: string;
-  text?: string;
-  imageUrl?: string;
-  storagePath?: string;
-  audioUrl?: string;
-  audioStoragePath?: string;
-  createdAt: firebase.firestore.Timestamp;
+export interface ParsedUser {
+  clientId: string; // A temporary client-side ID for list management
+  id: number;
+  name: string;
+  email: string | null;
+  password?: string;
+  classId: string | null;
+}
+export interface TranscriptEntry {
+  speaker: 'user' | 'model' | 'system';
+  text: string;
+  timestamp: Date;
+}
+export interface LiveTutoringSession {
+  id: string;
+  studentId: string;
+  studentName: string;
+  teacherId?: string;
+  subject: string;
+  status: 'active' | 'ended';
+  startedAt: firebase.firestore.Timestamp;
+  endedAt?: firebase.firestore.Timestamp;
+  transcript: TranscriptEntry[];
 }

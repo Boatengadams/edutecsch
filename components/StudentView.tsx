@@ -12,7 +12,6 @@ import { ProgressDashboard } from './ProgressDashboard';
 import Sidebar from './common/Sidebar';
 import NotebookTimetable from './common/NotebookTimetable';
 import TTSAudioPlayer from './common/TTSAudioPlayer';
-import ChangePasswordModal from './common/ChangePasswordModal';
 import Toast from './common/Toast';
 import { GoogleGenAI, Modality, LiveServerMessage, Blob as GenAIBlob, Session, Type } from '@google/genai';
 import PieChart from './common/charts/PieChart';
@@ -289,7 +288,7 @@ interface StudentViewProps {
 }
 
 const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
-  const { user, userProfile, schoolSettings } = useAuthentication();
+  const { user, userProfile } = useAuthentication();
   const [activeTab, setActiveTab] = useState('dashboard');
 
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -314,10 +313,16 @@ const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, setIsSideb
   const [showStudyMode, setShowStudyMode] = useState(false);
   const [subjectFilter, setSubjectFilter] = useState('all');
 
-  // New states for objective answers and voice-to-text
   const [objectiveAnswers, setObjectiveAnswers] = useState<Record<string, string>>({});
   const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<any>(null); // Using 'any' for browser compatibility
+  const [micError, setMicError] = useState('');
+
+  const sessionPromiseRef = useRef<Promise<Session> | null>(null);
+  const liveAudioContextRef = useRef<AudioContext | null>(null);
+  const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const mediaStreamSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  
 
   const submissions = useMemo(() => {
     return allSubmissions.reduce((acc, sub) => {
@@ -462,352 +467,254 @@ const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, setIsSideb
         return () => unsubscribe();
     }, [user]);
 
-  // Setup Speech Recognition
-  useEffect(() => {
-      // FIX: Cast window to any to access experimental SpeechRecognition APIs
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
-          recognitionRef.current = new SpeechRecognition();
-          recognitionRef.current.continuous = true;
-          recognitionRef.current.interimResults = true;
-          recognitionRef.current.lang = 'en-US';
-
-          recognitionRef.current.onresult = (event: any) => {
-              let interimTranscript = '';
-              let finalTranscript = '';
-              for (let i = event.resultIndex; i < event.results.length; ++i) {
-                  if (event.results[i].isFinal) {
-                      finalTranscript += event.results[i][0].transcript;
-                  } else {
-                      interimTranscript += event.results[i][0].transcript;
-                  }
-              }
-              setSubmissionText(prev => prev + finalTranscript);
-          };
-          
-          recognitionRef.current.onend = () => {
-              setIsListening(false);
-          };
-      }
-  }, []);
-
-  const handleToggleListening = () => {
-      if (!recognitionRef.current) return;
-      if (isListening) {
-          recognitionRef.current.stop();
-      } else {
-          recognitionRef.current.start();
-          setIsListening(true);
-      }
-  };
-
-
-  const handleSubmission = async (assignmentId: string) => {
-    if (!user || !viewingAssignment) return;
-    const isObjective = viewingAssignment.type === 'Objective';
-    
-    if (isObjective) {
-        if (Object.keys(objectiveAnswers).length !== (viewingAssignment.quiz?.quiz.length || 0)) {
-            setToast({ message: "Please answer all questions before submitting.", type: 'error' });
-            return;
-        }
-    } else {
-        if (!submissionText.trim() && !submissionFile) {
-             setToast({ message: "Please provide an answer or an attachment.", type: 'error' });
-             return;
-        }
-    }
-
-    setIsSubmitting(assignmentId);
-
-    try {
-      const submissionRef = db.collection('submissions').doc(`${assignmentId}_${user.uid}`);
-      let attachmentURL = '';
-      let attachmentName = '';
-
-      if (submissionFile) {
-        const storagePath = `submissions/${assignmentId}/${user.uid}/${submissionFile.name}`;
-        const uploadTask = storage.ref(storagePath).put(submissionFile);
-        await uploadTask;
-        attachmentURL = await uploadTask.snapshot.ref.getDownloadURL();
-        attachmentName = submissionFile.name;
-      }
-      
-      const assignment = assignments.find(a => a.id === assignmentId);
-      if(!assignment) throw new Error("Assignment not found");
-
-      const studentDoc = await db.collection('users').doc(user.uid).get();
-      const parentUids = studentDoc.data()?.parentUids || [];
-
-      const submissionData: Omit<Submission, 'id'> = {
-        assignmentId: assignmentId,
-        studentId: user.uid,
-        studentName: userProfile?.name || 'Unknown',
-        teacherId: assignment.teacherId,
-        classId: assignment.classId,
-        text: isObjective ? '' : submissionText,
-        answers: isObjective ? objectiveAnswers : undefined,
-        attachmentURL,
-        attachmentName,
-        submittedAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
-        status: 'Submitted',
-        parentUids
-      };
-
-      await submissionRef.set(submissionData, { merge: true });
-      
-      setViewingAssignment(null);
-      setSubmissionText('');
-      setSubmissionFile(null);
-      setObjectiveAnswers({});
-      setToast({ message: "Assignment submitted successfully!", type: 'success' });
-
-    } catch (err: any) {
-      console.error("Error submitting assignment:", err);
-      setToast({ message: `Error submitting: ${err.message}`, type: 'error' });
-    } finally {
-      setIsSubmitting(null);
-    }
-  };
-
-    const renderDashboard = () => {
-        if (!userProfile) return null;
-        const pendingAssignments = assignments.filter(a => !submissions[a.id]);
-        const recentEvents = events.slice(0, 3);
-        const latestMaterial = learningMaterials[0];
-        
-        return (
-            <div className="space-y-6">
-                <h2 className="text-3xl font-bold">Welcome, {userProfile.name}</h2>
-                <Card fullHeight={false}>
-                    <h3 className="text-xl font-semibold mb-4">Quick Links</h3>
-                    <div className="flex flex-wrap gap-4">
-                        <Button onClick={() => setActiveTab('assignments')} variant="secondary">My Assignments</Button>
-                        <Button onClick={() => setActiveTab('timetable')} variant="secondary">My Timetable</Button>
-                        <Button onClick={() => setActiveTab('my_profile')} variant="secondary">My Profile & Progress</Button>
-                    </div>
-                </Card>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <Card className="lg:col-span-2">
-                        <h3 className="text-xl font-semibold mb-4">Pending Assignments ({pendingAssignments.length})</h3>
-                        {pendingAssignments.length > 0 ? (
-                            pendingAssignments.slice(0, 3).map(a => (
-                                <div key={a.id} className="p-3 bg-slate-700 rounded-lg mb-2 flex justify-between items-center">
-                                    <div>
-                                        <p className="font-semibold">{a.title}</p>
-                                        <p className="text-sm text-gray-400">{a.subject}</p>
-                                    </div>
-                                    <Button size="sm" onClick={() => { setActiveTab('assignments'); setViewingAssignment(a); setObjectiveAnswers({}); }}>View</Button>
-                                </div>
-                            ))
-                        ) : <p className="text-gray-400">Great job! No pending assignments.</p>}
-                    </Card>
-                     <Card>
-                        <h3 className="text-xl font-semibold mb-4">What's New</h3>
-                        {latestMaterial ? (
-                            <div className="p-3 bg-slate-700 rounded-lg">
-                                <p className="text-xs text-blue-400 font-semibold">New Learning Material</p>
-                                <p className="font-semibold">{latestMaterial.title}</p>
-                            </div>
-                        ) : <p className="text-gray-400 text-sm">No new learning materials.</p>}
-                    </Card>
-                </div>
-                {group && (
-                    <Card>
-                        <h3 className="text-xl font-semibold mb-2">Group Project</h3>
-                        <div className="p-3 bg-slate-700 rounded-lg flex justify-between items-center">
-                           <div>
-                             <p className="font-bold">{group.assignmentTitle}</p>
-                             <p className={`text-sm font-semibold ${group.isSubmitted ? 'text-green-400' : 'text-yellow-400'}`}>
-                                {group.isSubmitted ? 'Submitted' : 'In Progress'}
-                             </p>
-                           </div>
-                           <Button size="sm" onClick={() => setActiveTab('groups')}>Open Group</Button>
-                        </div>
-                    </Card>
-                )}
-            </div>
-        );
+    const handleViewAssignment = (assignment: Assignment) => {
+        setViewingAssignment(assignment);
+        setSubmissionText(submissions[assignment.id]?.text || '');
+        setSubmissionFile(null);
+        setObjectiveAnswers(submissions[assignment.id]?.answers || {});
     };
 
-    const renderAssignments = () => {
-        if (viewingAssignment) {
-            const submission = submissions[viewingAssignment.id];
-            const isObjective = viewingAssignment.type === 'Objective' && viewingAssignment.quiz;
-
-            return (
-                 <Card>
-                    <button onClick={() => setViewingAssignment(null)} className="mb-4 text-blue-400 hover:underline">&larr; Back to all assignments</button>
-                    <h3 className="text-2xl font-bold">{viewingAssignment.title}</h3>
-                    <p className="text-sm text-gray-400">{viewingAssignment.subject}</p>
-                    <p className="text-xs text-yellow-400 mt-1">Due: {viewingAssignment.dueDate || 'Not set'}</p>
-                    <div className="prose-styles prose-invert mt-4 max-w-none" dangerouslySetInnerHTML={{__html: viewingAssignment.description.replace(/\n/g, '<br/>')}} />
-                    {viewingAssignment.attachmentURL && (
-                        <a href={viewingAssignment.attachmentURL} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block text-blue-400 hover:underline">Download Attachment</a>
-                    )}
-                    <div className="mt-6 pt-6 border-t border-slate-700">
-                        {submission ? (
-                            <div>
-                                <h4 className="text-xl font-semibold">Your Submission</h4>
-                                <p className={`text-sm font-bold ${submission.status === 'Graded' ? 'text-green-400' : 'text-yellow-400'}`}>Status: {submission.status}</p>
-                                
-                                {isObjective && submission.answers ? (
-                                    <div className="mt-4 space-y-3">
-                                        {viewingAssignment.quiz?.quiz.map((q, index) => {
-                                            const studentAnswer = submission.answers?.[index];
-                                            const isCorrect = studentAnswer === q.correctAnswer;
-                                            return (
-                                                <div key={index} className={`p-3 rounded-md ${isCorrect ? 'bg-green-900/50' : 'bg-red-900/50'}`}>
-                                                    <p className="font-semibold">{index + 1}. {q.question}</p>
-                                                    <p className="text-sm mt-1">Your Answer: <span className="font-bold">{studentAnswer || 'Not answered'}</span></p>
-                                                    {!isCorrect && <p className="text-sm text-green-400">Correct Answer: {q.correctAnswer}</p>}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    <pre className="mt-2 p-4 bg-slate-800 rounded-md whitespace-pre-wrap font-sans">{submission.text}</pre>
-                                )}
-
-                                {submission.grade && <p className="mt-2"><strong>Grade:</strong> {submission.grade}</p>}
-                                {submission.feedback && <p className="mt-2"><strong>Feedback:</strong> {submission.feedback}</p>}
-                            </div>
-                        ) : (
-                            <form onSubmit={(e) => { e.preventDefault(); handleSubmission(viewingAssignment.id)}}>
-                                <h4 className="text-xl font-semibold mb-4">Submit Your Work</h4>
-                                {isObjective ? (
-                                    <div className="space-y-4">
-                                        {viewingAssignment.quiz?.quiz.map((q, index) => (
-                                            <div key={index}>
-                                                <p className="font-semibold mb-2">{index + 1}. {q.question}</p>
-                                                <div className="space-y-2">
-                                                    {q.options.map(opt => (
-                                                        <label key={opt} className={`flex items-center gap-3 p-3 rounded-md cursor-pointer border ${objectiveAnswers[index] === opt ? 'bg-blue-800/80 border-blue-600' : 'bg-slate-700 hover:bg-slate-600 border-transparent'}`}>
-                                                            <input type="radio" name={`q_${index}`} value={opt} checked={objectiveAnswers[index] === opt} onChange={e => setObjectiveAnswers(prev => ({ ...prev, [index]: e.target.value }))} className="h-4 w-4 text-blue-500 bg-slate-800 border-slate-600 focus:ring-blue-500"/>
-                                                            <span>{opt}</span>
-                                                        </label>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <>
-                                        <div className="relative">
-                                            <textarea value={submissionText} onChange={(e) => setSubmissionText(e.target.value)} rows={5} className="w-full p-2 bg-slate-700 rounded-md mb-2" placeholder="Type or use voice to enter your answer..."/>
-                                            <button type="button" onClick={handleToggleListening} className={`absolute top-2 right-2 p-2 rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-600 hover:bg-slate-500 text-white'}`} title={isListening ? "Stop Listening" : "Start Voice-to-Text"}>
-                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m12 7.5v-1.5a6 6 0 0 0-6-6m-6 2.25v-1.5a6 6 0 0 1 6-6v1.5m0 0V5.625M12 18.75v-1.5m0 0a6.002 6.002 0 0 1-5.25-3 6.002 6.002 0 0 1 10.5 0 6.002 6.002 0 0 1-5.25 3Z" /></svg>
-                                            </button>
-                                        </div>
-                                        <input type="file" onChange={(e) => setSubmissionFile(e.target.files ? e.target.files[0] : null)} className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
-                                    </>
-                                )}
-                                <Button type="submit" disabled={isSubmitting === viewingAssignment.id} className="mt-4">
-                                    {isSubmitting === viewingAssignment.id ? 'Submitting...' : 'Submit'}
-                                </Button>
-                            </form>
-                        )}
-                    </div>
-                 </Card>
-            );
+    const handleSubmission = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!viewingAssignment || !userProfile || isSubmitting) return;
+    
+        setIsSubmitting(viewingAssignment.id);
+        
+        const submissionData: Partial<Submission> = {
+            assignmentId: viewingAssignment.id,
+            studentId: userProfile.uid,
+            studentName: userProfile.name,
+            classId: userProfile.class!,
+            teacherId: viewingAssignment.teacherId,
+            submittedAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
+            status: 'Submitted',
+            parentUids: userProfile.parentUids || []
+        };
+        
+        if (viewingAssignment.type === 'Objective') {
+            submissionData.answers = objectiveAnswers;
+        } else {
+            submissionData.text = submissionText;
         }
-        return (
-            <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                    <h2 className="text-3xl font-bold">My Assignments</h2>
-                    <div className="flex items-center gap-2">
-                        <label htmlFor="subject-filter" className="text-sm text-gray-400">Filter:</label>
-                        <select id="subject-filter" value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                            <option value="all">All Subjects</option>
-                            {subjectsForClass.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                    </div>
-                </div>
-                {filteredAssignments.map(assignment => {
-                    const submission = submissions[assignment.id];
-                    let status: 'Pending' | 'Submitted' | 'Graded' = 'Pending';
-                    if (submission) status = submission.status;
 
-                    return (
-                        <Card key={assignment.id}>
-                            <div className="flex justify-between items-start gap-4">
-                                <div>
-                                    <h3 className="text-xl font-bold">{assignment.title}</h3>
-                                    <p className="text-sm text-gray-400">{assignment.subject} &bull; Due: {assignment.dueDate || 'Not set'}</p>
-                                </div>
-                                <div className="flex flex-col items-end gap-2 text-right">
-                                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${status === 'Graded' ? 'bg-green-500 text-green-900' : status === 'Submitted' ? 'bg-yellow-500 text-yellow-900' : 'bg-slate-600 text-slate-200'}`}>
-                                        {status}
-                                    </span>
-                                    <Button size="sm" onClick={() => { setViewingAssignment(assignment); setObjectiveAnswers({}); }}>
-                                        {status === 'Pending' ? 'View & Submit' : 'View Details'}
-                                    </Button>
-                                </div>
-                            </div>
-                        </Card>
-                    );
-                })}
-                {filteredAssignments.length === 0 && (
-                    <p className="text-center text-gray-500 py-8">
-                        {subjectFilter === 'all' ? 'You have no assignments yet.' : `No assignments for ${subjectFilter}.`}
-                    </p>
-                )}
-            </div>
-        );
+        try {
+            if (submissionFile) {
+                const storagePath = `submissions/${viewingAssignment.id}/${userProfile.uid}/${submissionFile.name}`;
+                const storageRef = storage.ref(storagePath);
+                await storageRef.put(submissionFile);
+                submissionData.attachmentURL = await storageRef.getDownloadURL();
+                submissionData.attachmentName = submissionFile.name;
+            }
+            
+            const existingSubmission = submissions[viewingAssignment.id];
+            if (existingSubmission) {
+                await db.collection('submissions').doc(existingSubmission.id).update(submissionData);
+            } else {
+                await db.collection('submissions').add(submissionData);
+            }
+
+            setToast({ message: 'Assignment submitted successfully!', type: 'success' });
+            setViewingAssignment(null);
+        } catch (err) {
+            console.error(err);
+            setToast({ message: 'Submission failed. Please try again.', type: 'error' });
+        } finally {
+            setIsSubmitting(null);
+        }
+    };
+
+  const stopListening = async () => {
+    setIsListening(false);
+    if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(track => track.stop());
+        micStreamRef.current = null;
     }
-
-
-    if (!user || !userProfile) {
-        return <p>Loading profile...</p>;
+    if (mediaStreamSourceRef.current) {
+        mediaStreamSourceRef.current.disconnect();
+        mediaStreamSourceRef.current = null;
     }
-
-    if (showStudyMode) {
-        return <StudentStudyMode onExit={() => setShowStudyMode(false)} userProfile={userProfile} assignments={assignments} submissions={submissions} learningMaterials={learningMaterials} />
+    if (scriptProcessorRef.current) {
+        scriptProcessorRef.current.disconnect();
+        scriptProcessorRef.current = null;
     }
+    if (liveAudioContextRef.current && liveAudioContextRef.current.state !== 'closed') {
+        await liveAudioContextRef.current.close();
+        liveAudioContextRef.current = null;
+    }
+    if (sessionPromiseRef.current) {
+        try {
+            const session = await sessionPromiseRef.current;
+            session.close();
+        } catch (e) {
+            console.error("Error closing session:", e);
+        } finally {
+            sessionPromiseRef.current = null;
+        }
+    }
+  };
+
+  const startListening = async () => {
+    setIsListening(true);
+    setMicError('');
+    const baseTranscript = submissionText.trim() ? submissionText.trim() + ' ' : '';
+    let currentTranscription = baseTranscript;
+
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        sessionPromiseRef.current = ai.live.connect({
+            model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+            callbacks: {
+                onopen: async () => {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        micStreamRef.current = stream;
+                        liveAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+                        const audioCtx = liveAudioContextRef.current;
+                        mediaStreamSourceRef.current = audioCtx.createMediaStreamSource(stream);
+                        scriptProcessorRef.current = audioCtx.createScriptProcessor(4096, 1, 1);
+                        scriptProcessorRef.current.onaudioprocess = (event) => {
+                            const inputData = event.inputBuffer.getChannelData(0);
+                            const pcmBlob = createBlob(inputData);
+                            if (sessionPromiseRef.current) {
+                                sessionPromiseRef.current.then((session) => {
+                                    session.sendRealtimeInput({ media: pcmBlob });
+                                });
+                            }
+                        };
+                        mediaStreamSourceRef.current.connect(scriptProcessorRef.current);
+                        scriptProcessorRef.current.connect(audioCtx.destination);
+                    } catch (err) {
+                        setMicError("Could not access microphone. Please check permissions.");
+                        stopListening();
+                    }
+                },
+                onmessage: (message: LiveServerMessage) => {
+                    const transcription = message.serverContent?.inputTranscription;
+                    if (transcription) {
+                        if (transcription.isFinal) {
+                            currentTranscription += transcription.text + ' ';
+                            setSubmissionText(currentTranscription);
+                        } else {
+                            setSubmissionText(currentTranscription + transcription.text);
+                        }
+                    }
+                },
+                onerror: (e: ErrorEvent) => {
+                    setMicError('A connection error occurred with the voice service.');
+                    stopListening();
+                },
+                onclose: () => {
+                    setIsListening(false);
+                },
+            },
+            config: { inputAudioTranscription: {} },
+        });
+        await sessionPromiseRef.current;
+    } catch (e) {
+        setMicError('Failed to start voice recognition service.');
+        stopListening();
+    }
+  };
+
+  const handleToggleListening = () => {
+    if (isSubmitting) return;
+    if (isListening) {
+        stopListening();
+    } else {
+        startListening();
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      stopListening();
+    };
+  }, []);
     
     const navItems = [
-        { key: 'dashboard', label: 'Dashboard', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h12A2.25 2.25 0 0 0 20.25 14.25V3M3.75 21h16.5M16.5 3.75h.008v.008H16.5V3.75Z" /></svg> },
-        { key: 'assignments', label: 'Assignments', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg> },
-        { key: 'live_lesson', label: <span className="flex items-center">Live Lesson {activeLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0-2.51 2.225.515-3.572-3.108-3.108l4.286-1.071L12 3l2.225 4.515 4.286 1.07L15.215 11.7l.515 3.572Z" /></svg> },
-        { key: 'groups', label: 'My Group', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" /></svg> },
-        { key: 'messages', label: <span className="flex items-center justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm1.707 2.293a1 1 0 00-1.414 1.414l5 5a1 1 0 001.414 0l5-5a1 1 0 10-1.414-1.414L10 10.586 3.707 7.293z" /></svg> },
-        { key: 'timetable', label: 'Timetable', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0h18" /></svg> },
-        { key: 'my_profile', label: 'My Profile', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg> },
-        { key: 'past_questions', label: 'BECE Questions', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg> },
+        { key: 'dashboard', label: 'Dashboard', icon: '📈' },
+        { key: 'assignments', label: 'Assignments', icon: '📝' },
+        { key: 'my_profile', label: 'My Profile', icon: '👤' },
+        { key: 'group_work', label: 'Group Work', icon: '👥' },
+        { key: 'messages', label: <span className="flex items-center justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: '💬' },
+        { key: 'study_mode', label: 'AI Learning Hub', icon: '▶️' },
+        { key: 'live_lesson', label: 'Live Lesson', icon: '💡' },
+        { key: 'timetable', label: 'Timetable', icon: '❓' },
+        { key: 'past_questions', label: 'BECE Questions', icon: 'ℹ️' },
     ];
     
-    const renderContent = () => {
-        if (loading) {
-            return <div className="flex justify-center items-center h-full"><Spinner /></div>;
-        }
+    if (loading || !userProfile) {
+        return <div className="flex justify-center items-center h-full"><Spinner /></div>;
+    }
 
+    const contactsForMessaging = [...teachers];
+
+    const renderContent = () => {
         switch (activeTab) {
             case 'dashboard':
-                return renderDashboard();
+                return (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center">
+                             <h2 className="text-3xl font-bold">Welcome, {userProfile.name}</h2>
+                             <Button onClick={() => setShowStudyMode(true)}>Enter AI Learning Hub</Button>
+                        </div>
+                        <ProgressDashboard student={userProfile} isModal={false} />
+                    </div>
+                );
             case 'assignments':
-                return renderAssignments();
-            case 'live_lesson':
-                return activeLesson ?
-                    <StudentLiveClassroom lessonId={activeLesson.id} userProfile={userProfile} onClose={() => setActiveLesson(null)} /> :
-                    <Card><div className="text-center p-8"><h3 className="text-xl font-bold">No Active Live Lesson</h3><p className="mt-2 text-gray-400">Please wait for your teacher to start a lesson.</p></div></Card>;
-            case 'groups':
-                return group ? <StudentGroupView group={group} userProfile={userProfile} setToast={setToast} /> : <Card><p className="text-center">You are not part of any group project.</p></Card>;
-            case 'messages':
-                return <MessagingView userProfile={userProfile} contacts={teachers} />;
-            case 'timetable':
-                return <Card>{timetable ? <NotebookTimetable classId={userProfile.class!} timetableData={timetable.timetableData} /> : <p>Timetable not available.</p>}</Card>;
+                return (
+                    <div className="space-y-6">
+                       <div className="flex justify-between items-center">
+                         <h2 className="text-3xl font-bold">My Assignments</h2>
+                         <div className="flex items-center gap-2">
+                            <label htmlFor="subject-filter" className="text-sm text-gray-400">Subject:</label>
+                            <select id="subject-filter" value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm">
+                                <option value="all">All Subjects</option>
+                                {subjectsForClass.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                         </div>
+                       </div>
+                       {filteredAssignments.map(assignment => (
+                         <Card key={assignment.id}>
+                            <div className="flex justify-between items-start gap-2">
+                                <div>
+                                    <h3 className="text-xl font-bold">{assignment.title}</h3>
+                                    <p className="text-sm text-gray-400">{assignment.subject}</p>
+                                </div>
+                                <span className={`flex-shrink-0 px-3 py-1 text-sm font-semibold rounded-full ${submissions[assignment.id] ? (submissions[assignment.id].status === 'Graded' ? 'bg-green-500' : 'bg-blue-500') : 'bg-yellow-500'}`}>
+                                    {submissions[assignment.id] ? submissions[assignment.id].status : 'Pending'}
+                                </span>
+                            </div>
+                            <div className="mt-4 flex justify-between items-end">
+                                <p className="text-sm text-yellow-400">Due: {assignment.dueDate || 'Not set'}</p>
+                                <Button onClick={() => handleViewAssignment(assignment)}>
+                                    {submissions[assignment.id] ? 'View Submission' : 'Start Assignment'}
+                                </Button>
+                            </div>
+                         </Card>
+                       ))}
+                    </div>
+                );
             case 'my_profile':
-                 return <StudentProfile userProfile={userProfile} assignments={assignments} submissions={Object.values(submissions)} />;
+                return <StudentProfile userProfile={userProfile} assignments={assignments} submissions={allSubmissions} />;
+            case 'group_work':
+                return group ? <StudentGroupView group={group} userProfile={userProfile} setToast={setToast}/> : <Card><p className="text-center text-gray-400">You are not part of any group project right now.</p></Card>;
+            case 'messages':
+                return <MessagingView userProfile={userProfile} contacts={contactsForMessaging} />;
+            case 'live_lesson':
+                return activeLesson ? <StudentLiveClassroom lessonId={activeLesson.id} userProfile={userProfile} onClose={() => setActiveLesson(null)} /> : <Card><p className="text-center text-gray-400">There is no live lesson for your class at the moment.</p></Card>;
+            case 'timetable':
+                return timetable && userProfile.class ? <NotebookTimetable classId={userProfile.class} timetableData={timetable.timetableData} /> : <Card><p className="text-center text-gray-400">Timetable not available.</p></Card>;
             case 'past_questions':
                 return <BECEPastQuestionsView />;
             default:
-                return renderDashboard();
+                return <div>Select a tab</div>;
         }
-    }
+    };
 
     return (
         <div className="flex flex-1 overflow-hidden">
-             <Sidebar
+            <Sidebar 
                 isExpanded={isSidebarExpanded}
                 navItems={navItems}
                 activeTab={activeTab}
@@ -816,13 +723,70 @@ const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, setIsSideb
                 title="Student Portal"
             />
             <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
-                <div className="flex justify-between items-center mb-6">
-                    <div/>
-                    <Button onClick={() => setShowStudyMode(true)}>Enter AI Study Mode</Button>
-                </div>
                  {renderContent()}
             </main>
-             <AIAssistant systemInstruction={aiSystemInstruction} suggestedPrompts={aiSuggestedPrompts} />
+            <AIAssistant systemInstruction={aiSystemInstruction} suggestedPrompts={aiSuggestedPrompts} />
+            {viewingAssignment && (
+                <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
+                    <Card className="w-full max-w-2xl h-[90vh] flex flex-col">
+                        <form onSubmit={handleSubmission} className="flex flex-col h-full">
+                            <div className="flex justify-between items-start flex-shrink-0">
+                                <h3 className="text-xl font-bold">{viewingAssignment.title}</h3>
+                                <Button type="button" variant="secondary" size="sm" onClick={() => setViewingAssignment(null)}>Close</Button>
+                            </div>
+                             <div className="flex-grow overflow-y-auto py-4 pr-2 my-4 border-y border-slate-700 space-y-4">
+                                <p className="text-sm text-gray-400 whitespace-pre-wrap">{viewingAssignment.description}</p>
+                                {viewingAssignment.attachmentURL && <a href={viewingAssignment.attachmentURL} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">View Attachment</a>}
+                                
+                                {viewingAssignment.type === 'Theory' ? (
+                                    <div className="relative">
+                                        <textarea
+                                            value={submissionText}
+                                            onChange={e => setSubmissionText(e.target.value)}
+                                            rows={10}
+                                            placeholder="Type your answer here..."
+                                            className="w-full p-2 bg-slate-800 rounded-md"
+                                        />
+                                        <button type="button" onClick={handleToggleListening} className={`absolute bottom-3 right-3 p-2 rounded-full hover:bg-slate-700 ${isListening ? 'text-red-500 animate-pulse' : 'text-gray-300'}`} title="Use microphone">🎙️</button>
+                                    </div>
+                                ) : viewingAssignment.quiz ? (
+                                    <div className="space-y-4">
+                                        {viewingAssignment.quiz.quiz.map((q, index) => (
+                                            <div key={index} className="p-3 bg-slate-800 rounded-md">
+                                                <p className="font-semibold">{index + 1}. {q.question}</p>
+                                                <div className="mt-2 space-y-1">
+                                                    {q.options.map(opt => (
+                                                        <label key={opt} className="flex items-center gap-2 p-2 rounded-md hover:bg-slate-700 cursor-pointer">
+                                                            <input type="radio" name={`q_${index}`} value={opt} checked={objectiveAnswers[index] === opt} onChange={e => setObjectiveAnswers(p => ({...p, [index]: e.target.value}))} className="h-4 w-4 text-blue-500 bg-slate-900 border-slate-600 focus:ring-blue-500" />
+                                                            <span>{opt}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : null}
+
+                                <input type="file" onChange={e => setSubmissionFile(e.target.files ? e.target.files[0] : null)} className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                            </div>
+                            <div className="flex-shrink-0 flex justify-end">
+                                <Button type="submit" disabled={!!isSubmitting}>
+                                    {isSubmitting ? 'Submitting...' : (submissions[viewingAssignment.id] ? 'Update Submission' : 'Submit Assignment')}
+                                </Button>
+                            </div>
+                        </form>
+                    </Card>
+                </div>
+            )}
+            {showStudyMode && (
+                <StudentStudyMode
+                    onExit={() => setShowStudyMode(false)}
+                    userProfile={userProfile}
+                    assignments={assignments}
+                    submissions={submissions}
+                    learningMaterials={learningMaterials}
+                />
+            )}
             {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         </div>
     );

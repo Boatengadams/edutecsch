@@ -1,41 +1,34 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI, Modality } from "@google/genai";
+import { GoogleGenAI, Modality, LiveServerMessage, Blob as GenAIBlob, Session } from "@google/genai";
 import type { Chat } from '@google/genai';
 import html2canvas from 'html2canvas';
 
 import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
+import CameraModal from './common/CameraModal';
 
-// FIX: Add type definitions for the Web Speech API to resolve TypeScript errors.
-// These types are not included in standard DOM typings.
-interface SpeechRecognitionAlternative {
-  transcript: string;
+// Helper functions for Gemini Live audio streaming
+function encode(bytes: Uint8Array): string {
+    let binary = '';
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
 }
-interface SpeechRecognitionResult {
-  [index: number]: SpeechRecognitionAlternative;
-  length: number;
+function createBlob(data: Float32Array): GenAIBlob {
+  const l = data.length;
+  const int16 = new Int16Array(l);
+  for (let i = 0; i < l; i++) {
+    int16[i] = data[i] * 32768;
+  }
+  return {
+    data: encode(new Uint8Array(int16.buffer)),
+    mimeType: 'audio/pcm;rate=16000',
+  };
 }
-interface SpeechRecognitionResultList {
-  [index: number]: SpeechRecognitionResult;
-  length: number;
-}
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-}
-interface SpeechRecognitionErrorEvent extends Event {
-  error: string;
-}
-interface SpeechRecognition {
-  continuous: boolean;
-  lang: string;
-  interimResults: boolean;
-  start(): void;
-  stop(): void;
-  onresult: (event: SpeechRecognitionEvent) => void;
-  onend: () => void;
-  onerror: (event: SpeechRecognitionErrorEvent) => void;
-}
+
 
 interface WebSearchResult {
   uri: string;
@@ -89,149 +82,6 @@ function decode(base64: string): Uint8Array {
 }
 
 
-// Camera Modal Component
-const CameraModal: React.FC<{ onClose: () => void; onCapture: (dataUrl: string) => void; }> = ({ onClose, onCapture }) => {
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const streamRef = useRef<MediaStream | null>(null);
-    const [capturedImage, setCapturedImage] = useState<string | null>(null);
-    const [cameraError, setCameraError] = useState('');
-    const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
-    const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
-
-    useEffect(() => {
-        const checkForMultipleCameras = async () => {
-            if (navigator.mediaDevices?.enumerateDevices) {
-                try {
-                    const devices = await navigator.mediaDevices.enumerateDevices();
-                    const videoInputs = devices.filter(device => device.kind === 'videoinput');
-                    setHasMultipleCameras(videoInputs.length > 1);
-                } catch (err) {
-                    console.error("Error enumerating devices:", err);
-                }
-            }
-        };
-        checkForMultipleCameras();
-    }, []);
-
-    useEffect(() => {
-        // Stop any existing stream before starting a new one when switching cameras
-        if (streamRef.current) {
-            streamRef.current.getTracks().forEach(track => track.stop());
-        }
-
-        const startCamera = async () => {
-            try {
-                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facingMode } });
-                    streamRef.current = stream;
-                    if (videoRef.current) {
-                        videoRef.current.srcObject = stream;
-                    }
-                } else {
-                    setCameraError("Camera not supported on this device.");
-                }
-            } catch (err) {
-                console.error("Error accessing camera:", err);
-                setCameraError("Could not access the camera. Please check permissions or try a different camera.");
-            }
-        };
-
-        startCamera();
-
-        // Cleanup function to stop the stream when the component unmounts
-        return () => {
-            if (streamRef.current) {
-                streamRef.current.getTracks().forEach(track => track.stop());
-            }
-        };
-    }, [facingMode]);
-
-    const handleCapture = () => {
-        const video = videoRef.current;
-        if (video) {
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const context = canvas.getContext('2d');
-            if (context) {
-                // If using the front camera, we flip the canvas horizontally before drawing
-                // to get a non-mirrored final image.
-                if (facingMode === 'user') {
-                    context.translate(canvas.width, 0);
-                    context.scale(-1, 1);
-                }
-                context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const dataUrl = canvas.toDataURL('image/jpeg');
-                setCapturedImage(dataUrl);
-            }
-        }
-    };
-    
-    const handleUsePhoto = () => {
-        if (capturedImage) {
-            onCapture(capturedImage);
-        }
-    };
-
-    const handleSwitchCamera = () => {
-        setFacingMode(prevMode => (prevMode === 'user' ? 'environment' : 'user'));
-    };
-
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-[60]">
-            <Card className="w-full max-w-lg">
-                 <h3 className="text-lg font-bold mb-4">Take a Picture</h3>
-                 {cameraError ? (
-                    <p className="text-red-400">{cameraError}</p>
-                 ) : (
-                    <div className="space-y-4">
-                        <div className="bg-black rounded-md overflow-hidden aspect-video relative">
-                            {capturedImage ? (
-                                <img src={capturedImage} alt="Captured" className="w-full h-full object-contain" />
-                            ) : (
-                                <>
-                                    <video 
-                                        ref={videoRef} 
-                                        autoPlay 
-                                        playsInline 
-                                        className="w-full h-full object-contain"
-                                        style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)' }}
-                                    ></video>
-                                    {hasMultipleCameras && (
-                                        <button 
-                                            onClick={handleSwitchCamera} 
-                                            type="button"
-                                            className="absolute top-2 right-2 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-75 transition-colors"
-                                            title="Switch Camera"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 11.667 0l3.181-3.183m-4.991-2.691v4.992h-4.992m0 0-3.181-3.183a8.25 8.25 0 0 1 11.667 0l3.181 3.183" />
-                                            </svg>
-                                        </button>
-                                    )}
-                                </>
-                            )}
-                        </div>
-                         <div className="flex justify-center gap-4">
-                            {capturedImage ? (
-                                <>
-                                    <Button onClick={() => setCapturedImage(null)}>Retake</Button>
-                                    <Button onClick={handleUsePhoto}>Use Photo</Button>
-                                </>
-                            ) : (
-                                <Button onClick={handleCapture}>Capture</Button>
-                            )}
-                        </div>
-                    </div>
-                 )}
-                 <Button variant="secondary" onClick={onClose} className="w-full mt-4">Cancel</Button>
-            </Card>
-        </div>
-    );
-};
-
-
 const AIAssistant: React.FC<AIAssistantProps> = ({ systemInstruction, suggestedPrompts = [], isEmbedded = false }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
@@ -258,10 +108,15 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ systemInstruction, suggestedP
 
   const chatRef = useRef<Chat | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-  
   const hasInitialized = useRef(false);
 
+  // Refs for Gemini Live speech recognition
+  const sessionPromiseRef = useRef<Promise<Session> | null>(null);
+  const liveAudioContextRef = useRef<AudioContext | null>(null);
+  const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const mediaStreamSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  
   // Initialize or re-initialize the chat session when system instruction changes
   useEffect(() => {
     try {
@@ -292,45 +147,6 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ systemInstruction, suggestedP
       setError("Could not initialize the AI Assistant. Please check your configuration.");
     }
   }, [systemInstruction, isEmbedded]);
-
-  // Setup Speech Recognition
-  useEffect(() => {
-    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognitionAPI) {
-        const recognition: SpeechRecognition = new SpeechRecognitionAPI();
-        recognition.continuous = false;
-        recognition.lang = 'en-US';
-        recognition.interimResults = true;
-        
-        recognition.onresult = (event: SpeechRecognitionEvent) => {
-            const transcript = Array.from(event.results)
-                .map(result => result[0])
-                .map(result => result.transcript)
-                .join('');
-            setInput(transcript);
-        };
-
-        recognition.onend = () => {
-            setIsListening(false);
-        };
-        
-        recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-            console.error("Speech recognition error", event.error);
-            let errorMessage = `Speech recognition error: ${event.error}.`;
-            if (event.error === 'not-allowed') {
-                errorMessage = "Microphone access was denied. Please allow microphone access in your browser's site settings to use voice input.";
-            } else if (event.error === 'no-speech') {
-                errorMessage = "No speech was detected. Please try again.";
-            }
-            setError(errorMessage);
-            setIsListening(false);
-        };
-
-        recognitionRef.current = recognition;
-    } else {
-        console.warn("Speech Recognition not supported in this browser.");
-    }
-  }, []);
   
     // Audio Player Cleanup
     useEffect(() => {
@@ -525,21 +341,113 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ systemInstruction, suggestedP
       sendMessage(prompt, null);
   };
 
-  const handleToggleListening = () => {
-    if (isLoading) return;
-    if (!recognitionRef.current) {
-        setError("Voice recognition is not supported by your browser.");
-        return;
+  const stopListening = async () => {
+    setIsListening(false);
+    if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(track => track.stop());
+        micStreamRef.current = null;
     }
-    if (isListening) {
-        recognitionRef.current.stop();
-    } else {
-        recognitionRef.current.start();
-        setIsListening(true);
-        setInput('');
-        setError('');
+    if (mediaStreamSourceRef.current) {
+        mediaStreamSourceRef.current.disconnect();
+        mediaStreamSourceRef.current = null;
+    }
+    if (scriptProcessorRef.current) {
+        scriptProcessorRef.current.disconnect();
+        scriptProcessorRef.current = null;
+    }
+    if (liveAudioContextRef.current && liveAudioContextRef.current.state !== 'closed') {
+        await liveAudioContextRef.current.close();
+        liveAudioContextRef.current = null;
+    }
+    if (sessionPromiseRef.current) {
+        try {
+            const session = await sessionPromiseRef.current;
+            session.close();
+        } catch (e) {
+            console.error("Error closing session:", e);
+        } finally {
+            sessionPromiseRef.current = null;
+        }
     }
   };
+
+  const startListening = async () => {
+    setIsListening(true);
+    setError('');
+    const baseTranscript = input.trim() ? input.trim() + ' ' : '';
+    let currentTranscription = baseTranscript;
+
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        sessionPromiseRef.current = ai.live.connect({
+            model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+            callbacks: {
+                onopen: async () => {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        micStreamRef.current = stream;
+                        liveAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+                        const audioCtx = liveAudioContextRef.current;
+                        mediaStreamSourceRef.current = audioCtx.createMediaStreamSource(stream);
+                        scriptProcessorRef.current = audioCtx.createScriptProcessor(4096, 1, 1);
+                        scriptProcessorRef.current.onaudioprocess = (event) => {
+                            const inputData = event.inputBuffer.getChannelData(0);
+                            const pcmBlob = createBlob(inputData);
+                            if (sessionPromiseRef.current) {
+                                sessionPromiseRef.current.then((session) => {
+                                    session.sendRealtimeInput({ media: pcmBlob });
+                                });
+                            }
+                        };
+                        mediaStreamSourceRef.current.connect(scriptProcessorRef.current);
+                        scriptProcessorRef.current.connect(audioCtx.destination);
+                    } catch (err) {
+                        setError("Could not access microphone. Please check permissions.");
+                        stopListening();
+                    }
+                },
+                onmessage: (message: LiveServerMessage) => {
+                    const transcription = message.serverContent?.inputTranscription;
+                    if (transcription) {
+                        if (transcription.isFinal) {
+                            currentTranscription += transcription.text + ' ';
+                            setInput(currentTranscription);
+                        } else {
+                            setInput(currentTranscription + transcription.text);
+                        }
+                    }
+                },
+                onerror: (e: ErrorEvent) => {
+                    setError('A connection error occurred with the voice service.');
+                    stopListening();
+                },
+                onclose: () => {
+                    setIsListening(false);
+                },
+            },
+            config: { inputAudioTranscription: {} },
+        });
+        await sessionPromiseRef.current;
+    } catch (e) {
+        setError('Failed to start voice recognition service.');
+        stopListening();
+    }
+  };
+
+  const handleToggleListening = () => {
+    if (isLoading) return;
+    if (isListening) {
+        stopListening();
+    } else {
+        startListening();
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      stopListening();
+    };
+  }, []);
 
     const handlePlayPause = () => {
         if (!audioBufferRef.current) return;

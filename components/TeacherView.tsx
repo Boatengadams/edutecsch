@@ -23,12 +23,15 @@ import VideoGenerator from './VideoGenerator';
 import TeacherCreateStudentForm from './TeacherCreateStudentForm';
 import TeacherCreateParentForm from './TeacherCreateParentForm';
 import SnapToRegister from './SnapToRegister';
-// FIX: Changed import of TeacherLiveClassroom to be a named import as it is not a default export.
-import { TeacherLiveClassroom } from './TeacherLiveClassroom';
+// FIX: Changed import of TeacherLiveClassroom to be a default import as it is now a default export.
+import TeacherLiveClassroom from './TeacherLiveClassroom';
 import BECEPastQuestionsView from './common/BECEPastQuestionsView';
 import MessagingView from './MessagingView';
 import html2canvas from 'html2canvas';
 import { ProgressDashboard } from './ProgressDashboard';
+import TeacherMyVoice from './TeacherMyVoice';
+import TeacherProgressDashboard from './TeacherProgressDashboard';
+import TeacherAITools from './TeacherAITools';
 
 const getGrade = (score: number) => {
     if (score >= 80) return 'A';
@@ -405,7 +408,7 @@ interface TeacherViewProps {
   setIsSidebarExpanded: (isExpanded: boolean) => void;
 }
 
-const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
+export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
     const { user, userProfile, schoolSettings } = useAuthentication();
     const [activeTab, setActiveTab] = useState('dashboard');
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
@@ -838,7 +841,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             console.error("Error starting live lesson:", error);
             setToast({ message: `Error starting live lesson`, type: 'error' });
         }
-    }, [user, userProfile, setToast]);
+    }, [user, userProfile]);
 
     
     const handleDeleteContent = async () => {
@@ -1082,16 +1085,19 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
 
 
     const navItems = [
-        { key: 'dashboard', label: 'Dashboard', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h12A2.25 2.25 0 0 0 20.25 14.25V3M3.75 21h16.5M16.5 3.75h.008v.008H16.5V3.75Z" /></svg> },
-        { key: 'my_students', label: 'My Students', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-7.962a9.348 9.348 0 0 0-1.25-4.433-9.338 9.338 0 0 0-4.088-3.952m-13.5 7.962a9.348 9.348 0 0 0 1.25 4.433m11-4.433c0 1.631-1.314 2.945-2.945 2.945-1.631 0-2.945-1.314-2.945-2.945s1.314-2.945 2.945-2.945 2.945 1.314 2.945 2.945Z" /></svg> },
-        { key: 'assignments', label: 'Assignments', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg> },
-        { key: 'live_lesson', label: <span className="flex items-center">Live Lesson {activeLiveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0-2.51 2.225.515-3.572-3.108-3.108l4.286-1.071L12 3l2.225 4.515 4.286 1.07L15.215 11.7l.515 3.572Z" /></svg> },
-        { key: 'group_work', label: 'Group Work', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" /></svg> },
-        { key: 'messages', label: <span className="flex items-center justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm1.707 2.293a1 1 0 00-1.414 1.414l5 5a1 1 0 001.414 0l5-5a1 1 0 10-1.414-1.414L10 10.586 3.707 7.293z" /></svg> },
-        { key: 'my_library', label: 'My Library', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg> },
-        { key: 'attendance', label: 'Attendance', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
-        { key: 'terminal_reports', label: 'Terminal Reports', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg> },
-        { key: 'past_questions', label: 'BECE Questions', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg> },
+        { key: 'dashboard', label: 'Dashboard', icon: '📊' },
+        { key: 'progress_dashboard', label: 'Progress Dashboard', icon: '📈' },
+        { key: 'my_students', label: 'My Students', icon: '👥' },
+        { key: 'assignments', label: 'Assignments', icon: '📝' },
+        { key: 'live_lesson', label: <span className="flex items-center">Live Lesson {activeLiveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: '▶️' },
+        { key: 'group_work', label: 'Group Work', icon: '👥' },
+        { key: 'messages', label: <span className="flex items-center justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: '✉️' },
+        { key: 'my_library', label: 'My Library', icon: '📚' },
+        { key: 'ai_tools', label: 'AI Tools', icon: '✨' },
+        { key: 'my_voice', label: 'My Voice', icon: '🔊' },
+        { key: 'attendance', label: 'Attendance', icon: '🕒' },
+        { key: 'terminal_reports', label: 'Terminal Reports', icon: '📊' },
+        { key: 'past_questions', label: 'BECE Questions', icon: '❓' },
     ];
     
     if (!user || !userProfile) {
@@ -1106,34 +1112,43 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         switch (activeTab) {
             case 'dashboard':
                 return <TeacherDashboard userProfile={userProfile} students={students} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} />;
+            case 'progress_dashboard':
+                return <TeacherProgressDashboard students={students} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} />;
+            case 'ai_tools':
+                return <TeacherAITools students={students} userProfile={userProfile} />;
             case 'my_students':
-                const studentsByClass = students.reduce((acc, student) => {
+                const studentsByClass = students.reduce((acc: Record<string, UserProfile[]>, student) => {
                     const classKey = student.class || 'Unassigned';
-                    if (!acc[classKey]) acc[classKey] = [];
+                    if (!acc[classKey]) {
+                        acc[classKey] = [];
+                    }
                     acc[classKey].push(student);
                     return acc;
-                }, {} as Record<string, UserProfile[]>);
+                }, {});
                  return (
                     <div className="space-y-6">
                          <div className="flex justify-between items-center">
                              <h2 className="text-3xl font-bold">My Students</h2>
                              <Button onClick={() => setShowCreateParentModal(true)}>Create Parent Account</Button>
                          </div>
-                         {Object.entries(studentsByClass).map(([classId, classStudents]) => (
-                             <Card key={classId}>
-                                 <div className="flex justify-between items-center mb-4">
-                                     <h3 className="text-xl font-semibold">{classId} ({classStudents.length} students)</h3>
-                                     <Button size="sm" onClick={() => { setStudentCreationClass(classId); setShowCreateStudentModal(true); }}>+ Add Student</Button>
-                                 </div>
-                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                     {classStudents.map(student => (
-                                         <button key={student.uid} onClick={() => setViewingStudentProgress(student)} className="p-3 bg-slate-700 rounded-lg text-left hover:bg-slate-600 transition-colors">
-                                             {student.name}
-                                         </button>
-                                     ))}
-                                 </div>
-                             </Card>
-                         ))}
+                         {Object.keys(studentsByClass).map((classId) => {
+                            const classStudents = studentsByClass[classId];
+                            return (
+                                <Card key={classId}>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h3 className="text-xl font-semibold">{classId} ({classStudents.length} students)</h3>
+                                        <Button size="sm" onClick={() => { setStudentCreationClass(classId); setShowCreateStudentModal(true); }}>+ Add Student</Button>
+                                    </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                        {classStudents.map(student => (
+                                            <button key={student.uid} onClick={() => setViewingStudentProgress(student)} className="p-3 bg-slate-700 rounded-lg text-left hover:bg-slate-600 transition-colors">
+                                                {student.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </Card>
+                            );
+                         })}
                      </div>
                  );
             case 'assignments':
@@ -1188,7 +1203,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 );
             case 'live_lesson':
                 return activeLiveLesson ? 
-                        <TeacherLiveClassroom lessonId={activeLiveLesson.id} onClose={() => {}} setToast={setToast} />
+                        <TeacherLiveClassroom lessonId={activeLiveLesson.id} userProfile={userProfile} onClose={() => {}} setToast={setToast} />
                         :
                         <div className="text-center p-8">
                             <h2 className="text-3xl font-bold">Live Lesson</h2>
@@ -1259,6 +1274,8 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                         </div>
                     </div>
                 );
+            case 'my_voice':
+                return <TeacherMyVoice userProfile={userProfile} setToast={setToast} />;
             case 'attendance':
                 if (!userProfile.classTeacherOf) {
                     return <Card><p className="text-center">You are not a designated class teacher. Only class teachers can take attendance.</p></Card>;
@@ -1555,5 +1572,3 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         </div>
     );
 };
-
-export default TeacherView;
