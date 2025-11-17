@@ -104,6 +104,7 @@ const TeacherGroupChatView: React.FC<{ group: Group }> = ({ group }) => {
                         <span className="text-xs text-gray-400 font-bold ml-1">{msg.senderName}</span>
                         <div className="p-2 bg-slate-700 rounded-lg max-w-xs break-words">
                            {msg.imageUrl && <img src={msg.imageUrl} alt="Group attachment" className="rounded-md max-w-xs mb-1" />}
+                           {msg.audioUrl && <audio controls src={msg.audioUrl} className="w-full max-w-xs" />}
                            {msg.text && <p className="text-sm px-1">{msg.text}</p>}
                         </div>
                     </div>
@@ -493,12 +494,24 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                      .flat();
     }, [userProfile?.subjectsByClass]);
 
-    // Set initial report class once teacher classes are loaded
+    const subjectsForReport = useMemo<string[]>(() => {
+        const subs = userProfile?.subjectsByClass?.[reportClass];
+        return Array.isArray(subs) ? subs : [];
+    }, [userProfile?.subjectsByClass, reportClass]);
+    
     useEffect(() => {
         if (teacherClasses.length > 0 && !reportClass) {
             setReportClass(teacherClasses[0]);
         }
     }, [teacherClasses, reportClass]);
+
+    useEffect(() => {
+        if (subjectsForReport.length > 0 && !subjectsForReport.includes(reportSubject)) {
+            setReportSubject(subjectsForReport[0]);
+        } else if (subjectsForReport.length === 0) {
+            setReportSubject('');
+        }
+    }, [subjectsForReport, reportSubject]);
 
 
     const subjectsForFilter = useMemo<string[]>(() => {
@@ -1282,12 +1295,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                      </Card>
                 );
             case 'terminal_reports':
-                const subjectsForReport = useMemo(() => {
-                    const subs = userProfile?.subjectsByClass?.[reportClass];
-                    return Array.isArray(subs) ? subs : [];
-                }, [userProfile?.subjectsByClass, reportClass]);
-                
-
                 const studentsForReport = students.filter(s => s.class === reportClass);
                 return (
                     <Card>
@@ -1448,7 +1455,9 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                                             {submission.attachmentURL && (
                                                 <div className="mt-2">
                                                      <a href={submission.attachmentURL} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline inline-block">View Attachment</a>
-                                                     <img src={submission.attachmentURL} alt="Submission" className="max-w-xs rounded-md mt-2"/>
+                                                     {/\.(jpg|jpeg|png|gif|webp)$/i.test(submission.attachmentName) &&
+                                                         <img src={submission.attachmentURL} alt="Submission" className="max-w-xs rounded-md mt-2"/>
+                                                     }
                                                 </div>
                                             )}
                                             <div className="mt-4 pt-2 border-t border-slate-600">

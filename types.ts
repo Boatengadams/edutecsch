@@ -175,6 +175,8 @@ export interface Message {
   readBy?: string[];
   imageUrl?: string;
   storagePath?: string;
+  audioUrl?: string;
+  audioStoragePath?: string;
 }
 
 export interface ConversationParticipantInfo {
@@ -457,5 +459,7 @@ export interface GroupMessage {
   text?: string;
   imageUrl?: string;
   storagePath?: string;
+  audioUrl?: string;
+  audioStoragePath?: string;
   createdAt: firebase.firestore.Timestamp;
 }

@@ -23,6 +23,7 @@ import ConfirmationModal from './common/ConfirmationModal';
 import StudentStudyMode from './StudentStudyMode';
 import StudentProfile from './StudentProfile';
 import MessagingView from './MessagingView';
+import ChatInput from './common/ChatInput';
 
 
 // Helper functions for audio encoding/decoding for Live API
@@ -72,7 +73,6 @@ function createBlob(data: Float32Array): GenAIBlob {
 
 const StudentGroupChatView: React.FC<{ group: Group; userProfile: UserProfile; }> = ({ group, userProfile }) => {
     const [messages, setMessages] = useState<GroupMessage[]>([]);
-    const [newMessage, setNewMessage] = useState('');
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
     const [askingEdu, setAskingEdu] = useState(false);
@@ -93,21 +93,38 @@ const StudentGroupChatView: React.FC<{ group: Group; userProfile: UserProfile; }
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, aiResponse]);
 
-    const handleSendMessage = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newMessage.trim() || sending) return;
+    const handleSendMessage = async ({ text, image, audio }: { text: string; image: File | null; audio: Blob | null; }) => {
+        if ((!text.trim() && !image && !audio) || sending) return;
 
         setSending(true);
-        const messageData: Omit<GroupMessage, 'id'> = {
+        const messageRef = db.collection('groups').doc(group.id).collection('groupMessages').doc();
+        const messageData: Partial<GroupMessage> = {
             groupId: group.id,
             senderId: userProfile.uid,
             senderName: userProfile.name,
-            text: newMessage,
             createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp
         };
+        
+        if (text) messageData.text = text;
+
         try {
-            await db.collection('groups').doc(group.id).collection('groupMessages').add(messageData);
-            setNewMessage('');
+            if (image) {
+                const storagePath = `group_messages/${group.id}/${messageRef.id}-${image.name}`;
+                const storageRef = storage.ref(storagePath);
+                await storageRef.put(image);
+                messageData.imageUrl = await storageRef.getDownloadURL();
+                messageData.storagePath = storagePath;
+            }
+
+            if (audio) {
+                const storagePath = `group_messages/${group.id}/${messageRef.id}.webm`;
+                const storageRef = storage.ref(storagePath);
+                await storageRef.put(audio);
+                messageData.audioUrl = await storageRef.getDownloadURL();
+                messageData.audioStoragePath = storagePath;
+            }
+
+            await messageRef.set(messageData);
         } catch (error) {
             console.error("Error sending message:", error);
         } finally {
@@ -145,8 +162,10 @@ const StudentGroupChatView: React.FC<{ group: Group; userProfile: UserProfile; }
                 {messages.map(msg => (
                     <div key={msg.id} className={`flex flex-col ${msg.senderId === userProfile.uid ? 'items-end' : 'items-start'}`}>
                         <span className="text-xs text-gray-400 font-bold mx-1">{msg.senderId === userProfile.uid ? 'You' : msg.senderName}</span>
-                        <div className={`p-3 rounded-lg max-w-xs text-sm break-words ${msg.senderId === userProfile.uid ? 'bg-blue-600 text-white' : 'bg-slate-700'}`}>
-                           {msg.text}
+                        <div className={`p-2 rounded-lg max-w-xs break-words ${msg.senderId === userProfile.uid ? 'bg-blue-600 text-white' : 'bg-slate-700'}`}>
+                           {msg.imageUrl && <img src={msg.imageUrl} alt="Attachment" className="rounded-md max-w-xs mb-1" />}
+                           {msg.audioUrl && <audio controls src={msg.audioUrl} className="w-full max-w-xs" />}
+                           {msg.text && <p className="text-sm px-1">{msg.text}</p>}
                         </div>
                     </div>
                 ))}
@@ -162,10 +181,7 @@ const StudentGroupChatView: React.FC<{ group: Group; userProfile: UserProfile; }
             </div>
             <div className="flex-shrink-0 p-2 border-t border-slate-700">
                 <Button onClick={handleAskEdu} disabled={askingEdu} size="sm" variant="secondary" className="w-full mb-2">{askingEdu ? 'Thinking...' : 'Ask Edu for a Hint'}</Button>
-                <form onSubmit={handleSendMessage} className="flex gap-2">
-                    <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type your message..." className="flex-grow p-2 bg-slate-800 rounded-md border border-slate-600"/>
-                    <Button type="submit" disabled={sending}>{sending ? '...' : 'Send'}</Button>
-                </form>
+                <ChatInput onSendMessage={handleSendMessage} isSending={sending} />
             </div>
         </div>
     );

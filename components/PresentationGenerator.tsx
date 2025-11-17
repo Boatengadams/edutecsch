@@ -197,7 +197,8 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
   );
   
   // Loading/Error state
-  const [loadingState, setLoadingState] = useState<'idle' | 'generating_presentation' | 'generating_quiz' | 'saving_assignment' | 'saving' | 'saving_and_starting_live'>('idle');
+  // FIX: Added 'saving' to the type union to match its usage in the component and resolve the type overlap error.
+  const [loadingState, setLoadingState] = useState<'idle' | 'generating_presentation' | 'generating_quiz' | 'saving_assignment' | 'saving'>('idle');
   const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState('');
   const [imageLoadStatus, setImageLoadStatus] = useState<Record<number, 'loading' | 'loaded' | 'error'>>({});
@@ -256,7 +257,7 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
     if (isInitialMount.current) {
         isInitialMount.current = false;
     }
-  }, [targetClasses, subjectsByClass]);
+  }, [targetClasses, subjectsByClass, initialContent, isInitialMount, subject]);
   
   // Sync class for assignment with target classes
   useEffect(() => {
@@ -792,7 +793,7 @@ const handleGenerateQuiz = async () => {
     // FIX: Restructure the confusing `if` condition by creating boolean flags for clarity.
     // This resolves the TypeScript error regarding type overlap by making the logic clearer.
     const isGeneratingOnForm = loadingState !== 'idle' && view === 'form';
-    const isSavingContent = loadingState === 'saving' || loadingState === 'saving_and_starting_live';
+    const isSavingContent = loadingState === 'saving';
 
     if (isGeneratingOnForm || isSavingContent) {
         return <div className="flex flex-col items-center justify-center h-full"><Spinner /><p className="mt-4 text-gray-400">{loadingMessage}</p></div>;

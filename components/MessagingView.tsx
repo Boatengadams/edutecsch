@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { db, firebase } from '../services/firebase';
+import { db, firebase, storage } from '../services/firebase';
 import { UserProfile, Conversation, Message } from '../types';
 import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
+import ChatInput from './common/ChatInput';
 
 interface MessagingViewProps {
   userProfile: UserProfile;
@@ -14,7 +15,6 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -52,30 +52,11 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
         const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
         setMessages(msgs);
         setLoadingMessages(false);
-
-        // Mark unread messages as read
-        const unreadMessages = msgs.filter(m => m.senderId !== userProfile.uid && !m.readBy?.includes(userProfile.uid));
-        if (unreadMessages.length > 0) {
-            const batch = db.batch();
-            unreadMessages.forEach(msg => {
-                const msgRef = db.collection('conversations').doc(activeConversationId).collection('messages').doc(msg.id);
-                batch.update(msgRef, {
-                    readBy: firebase.firestore.FieldValue.arrayUnion(userProfile.uid)
-                });
-            });
-            await batch.commit().catch(err => console.error("Error marking messages as read:", err));
-        }
-
-        // Also reset unread count for the conversation
+        
         const convRef = db.collection('conversations').doc(activeConversationId);
         const convDoc = await convRef.get();
-        if (convDoc.exists) {
-            const convData = convDoc.data() as Conversation;
-            if ((convData.unreadCount?.[userProfile.uid] || 0) > 0) {
-                 await convRef.update({
-                    [`unreadCount.${userProfile.uid}`]: 0
-                });
-            }
+        if (convDoc.exists && (convDoc.data() as Conversation).unreadCount?.[userProfile.uid] > 0) {
+            await convRef.update({ [`unreadCount.${userProfile.uid}`]: 0 });
         }
       }, () => setLoadingMessages(false));
 
@@ -85,11 +66,10 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
   // Scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isSending]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !activeConversationId || isSending) return;
+  const handleSendMessage = async ({ text, image, audio }: { text: string; image: File | null; audio: Blob | null; }) => {
+    if ((!text.trim() && !image && !audio) || !activeConversationId) return;
     
     setIsSending(true);
     const conversationRef = db.collection('conversations').doc(activeConversationId);
@@ -102,33 +82,54 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
     };
     const conversationData = conversationDoc.data() as Conversation;
 
-    const messageData: Omit<Message, 'id'> = {
+    const messageData: Partial<Message> = {
       senderId: userProfile.uid,
       senderName: userProfile.name,
-      text: newMessage,
       createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
-      readBy: [userProfile.uid], // Sender has read it
+      readBy: [userProfile.uid],
     };
     
-    const batch = db.batch();
-    batch.set(messageRef, messageData);
-    
-    const otherParticipantUid = conversationData.participantUids.find(uid => uid !== userProfile.uid);
-    if (otherParticipantUid) {
-        batch.update(conversationRef, {
-            lastMessage: {
-                text: newMessage,
-                senderId: userProfile.uid,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            },
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            [`unreadCount.${otherParticipantUid}`]: firebase.firestore.FieldValue.increment(1)
-        });
+    if (text) messageData.text = text;
+
+    try {
+        if (image) {
+            const storagePath = `direct_messages/${activeConversationId}/${messageRef.id}-${image.name}`;
+            const storageRef = storage.ref(storagePath);
+            await storageRef.put(image);
+            messageData.imageUrl = await storageRef.getDownloadURL();
+            messageData.storagePath = storagePath;
+        }
+
+        if (audio) {
+            const storagePath = `direct_messages/${activeConversationId}/${messageRef.id}.webm`;
+            const storageRef = storage.ref(storagePath);
+            await storageRef.put(audio);
+            messageData.audioUrl = await storageRef.getDownloadURL();
+            messageData.audioStoragePath = storagePath;
+        }
+        
+        const batch = db.batch();
+        batch.set(messageRef, messageData);
+        
+        const otherParticipantUid = conversationData.participantUids.find(uid => uid !== userProfile.uid);
+        if (otherParticipantUid) {
+            batch.update(conversationRef, {
+                lastMessage: {
+                    text: messageData.audioUrl ? '[Audio]' : messageData.imageUrl ? '[Photo]' : messageData.text,
+                    senderId: userProfile.uid,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                },
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                [`unreadCount.${otherParticipantUid}`]: firebase.firestore.FieldValue.increment(1)
+            });
+        }
+        
+        await batch.commit();
+    } catch (error) {
+        console.error("Error sending message:", error);
+    } finally {
+        setIsSending(false);
     }
-    
-    await batch.commit();
-    setNewMessage('');
-    setIsSending(false);
   };
   
   const handleStartNewConversation = async (contact: UserProfile) => {
@@ -169,7 +170,6 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
   const filteredContacts = useMemo(() => {
     if (!Array.isArray(contacts)) return [];
     return contacts
-        // Ensure all items are valid before sorting or filtering to prevent crashes.
         .filter(c => c && c.uid && c.name) 
         .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
         .filter(c => (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
@@ -215,28 +215,19 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
                             <p className="text-xs text-gray-400 capitalize">{otherParticipantInfo.role}</p>
                         </div>
                         <div className="flex-grow overflow-y-auto p-4 space-y-4">
-                            {loadingMessages ? <div className="flex justify-center items-center h-full"><Spinner /></div> : messages.map(msg => {
-                                const otherParticipantUid = activeConversation?.participantUids.find(uid => uid !== userProfile.uid);
-                                const isRead = msg.senderId === userProfile.uid && otherParticipantUid && msg.readBy?.includes(otherParticipantUid);
-
-                                return (
-                                    <div key={msg.id} className={`flex flex-col ${msg.senderId === userProfile.uid ? 'items-end' : 'items-start'}`}>
-                                        <span className="text-xs text-gray-400 font-bold mx-1">{msg.senderId === userProfile.uid ? 'You' : msg.senderName}</span>
-                                        <div className={`p-3 rounded-lg max-w-xs text-sm break-words ${msg.senderId === userProfile.uid ? 'bg-blue-600 text-white' : 'bg-slate-700'}`}>
-                                            {msg.text}
-                                        </div>
-                                        {msg.senderId === userProfile.uid && (
-                                            <p className="text-xs text-gray-500 mt-1 mr-1">{isRead ? 'Read' : 'Sent'}</p>
-                                        )}
+                            {loadingMessages ? <div className="flex justify-center items-center h-full"><Spinner /></div> : messages.map(msg => (
+                                <div key={msg.id} className={`flex flex-col ${msg.senderId === userProfile.uid ? 'items-end' : 'items-start'}`}>
+                                    <span className="text-xs text-gray-400 font-bold mx-1">{msg.senderId === userProfile.uid ? 'You' : msg.senderName}</span>
+                                    <div className={`p-2 rounded-lg max-w-sm break-words ${msg.senderId === userProfile.uid ? 'bg-blue-600 text-white' : 'bg-slate-700'}`}>
+                                        {msg.imageUrl && <img src={msg.imageUrl} alt="Sent attachment" className="rounded-md max-w-xs mb-1" />}
+                                        {msg.audioUrl && <audio controls src={msg.audioUrl} className="w-full max-w-xs h-10" />}
+                                        {msg.text && <p className="text-sm px-1">{msg.text}</p>}
                                     </div>
-                                );
-                            })}
+                                </div>
+                            ))}
                             <div ref={messagesEndRef} />
                         </div>
-                        <form onSubmit={handleSendMessage} className="p-2 flex gap-2 flex-shrink-0">
-                            <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type a message..." className="flex-grow p-2 bg-slate-800 rounded-md border border-slate-600"/>
-                            <Button type="submit" disabled={isSending || !newMessage.trim()}>{isSending ? '...' : 'Send'}</Button>
-                        </form>
+                        <ChatInput onSendMessage={handleSendMessage} isSending={isSending} />
                     </>
                 ) : (
                     <div className="flex items-center justify-center h-full text-gray-500">
