@@ -877,6 +877,7 @@ ${requestFromUser}
                 jsonString = jsonString.substring(7, jsonString.length - 3).trim();
             }
 
+            // FIX: Cast the result of JSON.parse to the expected type to resolve type errors.
             const generatedTimetables = JSON.parse(jsonString) as GeneratedTimetable[];
             
             if (!Array.isArray(generatedTimetables)) {

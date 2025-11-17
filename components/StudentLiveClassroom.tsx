@@ -4,7 +4,6 @@ import { LiveLesson, LiveLessonResponse, UserProfile, BreakoutWhiteboard, Stroke
 import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
-import SirEduAvatar from './common/SirEduAvatar';
 import { useLiveLessonAudio } from '../hooks/useLiveLessonAudio';
 import TrackedReading from './common/TrackedReading';
 
@@ -68,7 +67,7 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
 
   const isDrawingAllowed = !!(lesson?.whiteboardActive || studentRoomId);
 
-  const { isPlaying: isSirEduSpeaking, highlightRange } = useLiveLessonAudio(reconstructedLesson, reconstructedLesson?.currentStepIndex ?? 0);
+  const { highlightRange } = useLiveLessonAudio(reconstructedLesson, reconstructedLesson?.currentStepIndex ?? 0);
 
   useEffect(() => {
     const lessonRef = db.collection('liveLessons').doc(lessonId);
@@ -305,7 +304,6 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
                     style={{ left: `${reconstructedLesson.pointerPosition.x * 100}%`, top: `${reconstructedLesson.pointerPosition.y * 100}%`, transition: 'left 0.05s linear, top 0.05s linear' }} 
                 />
             )}
-          <div className="absolute bottom-0 left-4 pointer-events-none"><SirEduAvatar isSpeaking={isSirEduSpeaking} /></div>
         </div>
 
         <Card className="md:col-span-1 flex flex-col">

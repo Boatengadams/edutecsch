@@ -581,7 +581,7 @@ const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, setIsSideb
                                         <p className="font-semibold">{a.title}</p>
                                         <p className="text-sm text-gray-400">{a.subject}</p>
                                     </div>
-                                    <Button size="sm" onClick={() => { setActiveTab('assignments'); setViewingAssignment(a); }}>View</Button>
+                                    <Button size="sm" onClick={() => { setActiveTab('assignments'); setViewingAssignment(a); setObjectiveAnswers({}); }}>View</Button>
                                 </div>
                             ))
                         ) : <p className="text-gray-400">Great job! No pending assignments.</p>}
@@ -723,7 +723,7 @@ const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, setIsSideb
                                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${status === 'Graded' ? 'bg-green-500 text-green-900' : status === 'Submitted' ? 'bg-yellow-500 text-yellow-900' : 'bg-slate-600 text-slate-200'}`}>
                                         {status}
                                     </span>
-                                    <Button size="sm" onClick={() => setViewingAssignment(assignment)}>
+                                    <Button size="sm" onClick={() => { setViewingAssignment(assignment); setObjectiveAnswers({}); }}>
                                         {status === 'Pending' ? 'View & Submit' : 'View Details'}
                                     </Button>
                                 </div>

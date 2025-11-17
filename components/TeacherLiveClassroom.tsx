@@ -4,7 +4,6 @@ import { LiveLesson, LiveLessonResponse, BreakoutWhiteboard, Stroke, Point, User
 import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
-import SirEduAvatar from './common/SirEduAvatar';
 import { useLiveLessonAudio } from '../hooks/useLiveLessonAudio';
 
 interface TeacherLiveClassroomProps {
@@ -66,7 +65,7 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
     };
   }, [lesson, slideImages]);
 
-  const { isPlaying: isSirEduSpeaking } = useLiveLessonAudio(reconstructedLesson, reconstructedLesson?.currentStepIndex ?? 0);
+  useLiveLessonAudio(reconstructedLesson, reconstructedLesson?.currentStepIndex ?? 0);
 
   // Main lesson listener
   useEffect(() => {
@@ -459,7 +458,6 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
                     style={{ left: `${reconstructedLesson.pointerPosition.x * 100}%`, top: `${reconstructedLesson.pointerPosition.y * 100}%`, transition: 'left 0.05s linear, top 0.05s linear' }} 
                 />
             )}
-            <div className="absolute bottom-0 left-4 pointer-events-none"><SirEduAvatar isSpeaking={isSirEduSpeaking} /></div>
         </div>
 
         {/* Sidebar */}

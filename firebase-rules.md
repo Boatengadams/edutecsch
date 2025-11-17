@@ -8,16 +8,24 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null;
     }
+    
+    function getCaller() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    
+    function callerExists() {
+        return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
 
     function isCallerApproved() {
       // An admin's approval status doesn't prevent them from acting.
-      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved' ||
-              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      return isSignedIn() && callerExists() &&
+             (getCaller().data.status == 'approved' ||
+              getCaller().data.role == 'admin');
     }
 
     function isAuthorizedToCreateUser(newUserId) {
-      let callerProfile = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let callerProfile = getCaller().data;
       let isTeacher = callerProfile.role == 'teacher';
       let isAdmin = callerProfile.role == 'admin';
 
@@ -56,29 +64,38 @@ service cloud.firestore {
     // users collection
     // ---------------------
     match /users/{userId} {
-      // Any user can read their own profile. Approved non-students can read others.
-      // This is structured to avoid recursive checks that cause permission errors.
-      allow read: if isSignedIn() && (
+      // Replaced 'read' with more granular 'get' and 'list' to fix permissions.
+      // A user can always GET their own document.
+      // Parents can GET their children's documents.
+      // Admins and Teachers can GET any user document.
+      // Students can GET teacher documents.
+      allow get: if isSignedIn() && (
         request.auth.uid == userId ||
-        (
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved' &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role != 'student'
+        (callerExists() && (
+            getCaller().data.role == 'admin' ||
+            getCaller().data.role == 'teacher' ||
+            (getCaller().data.role == 'parent' && userId in getCaller().data.childUids) ||
+            (getCaller().data.role == 'student' && resource.data.role == 'teacher')
+          )
         )
       );
-
+      
+      // Any approved user can perform list queries. Client side must filter appropriately.
+      // This allows students to query for teachers, parents to query for their children's teachers etc.
+      allow list: if isCallerApproved();
+      
       // A user can create their own profile (self-registration) OR an authorized admin/teacher can create one.
-      allow create: if (isSignedIn() && request.auth.uid == userId) || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && isAuthorizedToCreateUser(userId));
+      allow create: if (isSignedIn() && request.auth.uid == userId) || (callerExists() && isAuthorizedToCreateUser(userId));
 
       // An admin can update any profile, OR a user can update their own profile with restrictions.
-      allow update: if (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') || (
+      allow update: if (callerExists() && getCaller().data.role == 'admin') || (
         isSignedIn() && request.auth.uid == userId &&
         request.resource.data.role == resource.data.role && // Cannot change own role
         request.resource.data.status == resource.data.status // Cannot change own status
       );
 
       // Only an admin can delete a user document.
-      allow delete: if (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      allow delete: if (callerExists() && getCaller().data.role == 'admin');
     }
 
 

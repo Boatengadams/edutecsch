@@ -173,6 +173,8 @@ export interface Message {
   text: string;
   createdAt: firebase.firestore.Timestamp;
   readBy?: string[];
+  imageUrl?: string;
+  storagePath?: string;
 }
 
 export interface ConversationParticipantInfo {

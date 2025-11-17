@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db, storage, firebase } from '../services/firebase';
-import type { Assignment, UserProfile, SubjectsByClass, AssignmentType } from '../types';
+import type { Assignment, UserProfile, SubjectsByClass, AssignmentType, Quiz, QuizQuestion } from '../types';
 import Card from './common/Card';
 import Button from './common/Button';
 import type firebase_app from 'firebase/compat/app';
@@ -26,6 +26,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
   const [file, setFile] = useState<File | null>(null);
   const [existingAttachment, setExistingAttachment] = useState({ name: '', url: '' });
   const [assignmentType, setAssignmentType] = useState<AssignmentType>('Theory');
+  const [quiz, setQuiz] = useState<Quiz | null>(null);
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -53,6 +54,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
             setExistingAttachment({ name: assignment.attachmentName, url: assignment.attachmentURL });
             setSubject(assignment.subject || '');
             setAssignmentType(assignment.type || 'Theory');
+            setQuiz(assignment.quiz || null);
             // A simple way to get topic from title for re-generation
             if (assignment.title.toLowerCase().startsWith('assignment:')) {
                 setTopicForAI(assignment.title.substring(11).trim());
@@ -68,6 +70,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
             setExistingAttachment({ name: '', url: '' });
             setSubject('');
             setAssignmentType('Theory');
+            setQuiz(null);
         }
         setError('');
         setAiError('');
@@ -151,23 +154,24 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
       const result = JSON.parse(response.text);
       let generatedDescription = '';
       let answerKey = '';
+      let generatedQuiz: QuizQuestion[] = [];
   
       if (result.objectiveQuestions) {
-          generatedDescription += `This is a quiz for the topic "${topicForAI}". Please answer the questions.\n\n`;
+          generatedDescription += `This is a quiz for the topic "${topicForAI}". Please select the correct answer for each question.\n\n`;
           answerKey += 'OBJECTIVE ANSWERS\n';
           result.objectiveQuestions.forEach((q: any, index: number) => {
-              generatedDescription += `${index + 1}. ${q.question}\nOptions:\n`;
-              q.options.forEach((opt: string) => {
-                  generatedDescription += `• ${opt}\n`;
-              });
-              generatedDescription += '\n';
               answerKey += `${index + 1}. ${q.correctAnswer}\n`;
+
+              generatedQuiz.push({
+                  question: q.question,
+                  options: q.options,
+                  correctAnswer: q.correctAnswer,
+              });
           });
       }
   
       if (result.theoryQuestions) {
-          generatedDescription += '\nTHEORY QUESTIONS\n\n';
-          answerKey += '\nTHEORY ANSWERS (SUGGESTED)\n';
+          generatedDescription += (generatedDescription ? '\n\n' : '') + 'THEORY QUESTIONS\n\n';
           result.theoryQuestions.forEach((q: any, index: number) => {
               generatedDescription += `Question ${index + 1}: ${q.question}\n`;
               if (q.sub_questions && q.sub_questions.length > 0) {
@@ -180,7 +184,19 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
       }
   
       setTitle(`Assignment: ${topicForAI}`);
-      setDescription(`${generatedDescription}\n\nTEACHER'S ANSWER KEY (Important: Remove before saving!)\n${answerKey}`);
+      setDescription(`${generatedDescription}${answerKey ? `\n\nTEACHER'S ANSWER KEY (Important: Remove before saving!)\n${answerKey}` : ''}`);
+
+      if (generatedQuiz.length > 0) {
+        setQuiz({ quiz: generatedQuiz });
+        if (result.theoryQuestions) {
+            setAssignmentType('Theory'); // If mixed, default to theory for text entry, quiz data is still saved
+        } else {
+            setAssignmentType('Objective');
+        }
+      } else {
+        setQuiz(null);
+        setAssignmentType('Theory');
+      }
   
     } catch (err: any) {
       console.error("AI Generation Error:", err);
@@ -204,7 +220,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
       let attachmentURL = existingAttachment.url;
       let attachmentName = existingAttachment.name;
 
-      const assignmentData = {
+      const assignmentData: any = {
         title,
         description,
         classId,
@@ -214,6 +230,12 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
         teacherName: userProfile.name,
         dueDate: dueDate || null,
       };
+
+      if (assignmentType === 'Objective') {
+        assignmentData.quiz = quiz;
+      } else {
+        assignmentData.quiz = null;
+      }
 
       if (assignment) { // Editing existing assignment
         const docRef = db.collection('assignments').doc(assignment.id);
@@ -339,6 +361,25 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
                 <input type="text" placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} required className="w-full p-2 bg-slate-700 rounded-md border border-slate-600" />
                 
                 <textarea placeholder="Description" value={description} onChange={e => setDescription(e.target.value)} required rows={8} className="w-full p-2 bg-slate-700 rounded-md border border-slate-600" />
+                
+                {assignmentType === 'Objective' && quiz && (
+                    <div className="mt-4 p-4 bg-slate-800 rounded-lg space-y-4">
+                        <h4 className="font-semibold text-gray-300">Objective Questions Preview</h4>
+                        {quiz.quiz.map((q, index) => (
+                            <div key={index} className="text-sm">
+                                <p className="font-semibold text-gray-200">{index + 1}. {q.question}</p>
+                                <ul className="list-disc list-inside pl-4 text-gray-400">
+                                    {q.options.map((opt, optIndex) => (
+                                        <li key={optIndex} className={opt === q.correctAnswer ? 'text-green-400' : ''}>
+                                            {opt} {opt === q.correctAnswer && '(Correct)'}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
 
                 <div>
                     <label htmlFor="dueDate" className="block text-sm font-medium text-gray-300">Due Date (Optional)</label>

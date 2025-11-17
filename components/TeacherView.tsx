@@ -484,19 +484,22 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     }, [teacherClasses, reportClass]);
 
 
-    // FIX: Explicitly type the useMemo hook to ensure correct type inference.
     const subjectsForFilter = useMemo<string[]>(() => {
-        // FIX: Cast subjectsByClass to its specific type to prevent it from being treated as `unknown`.
         if (!userProfile?.subjectsByClass) return [];
         const allSubs = new Set<string>();
-        // FIX: Removed 'as SubjectsByClass' cast to let TypeScript infer the type safely.
         const subjectsMap = userProfile.subjectsByClass;
         if (classFilter === 'all') {
             teacherClasses.forEach(c => {
-                 (subjectsMap[c] || []).forEach(s => allSubs.add(s));
+                 const subjects = subjectsMap[c];
+                 if (Array.isArray(subjects)) {
+                    subjects.forEach(s => allSubs.add(s));
+                 }
             });
         } else {
-            (subjectsMap[classFilter] || []).forEach(s => allSubs.add(s));
+            const subjects = subjectsMap[classFilter];
+            if (Array.isArray(subjects)) {
+                subjects.forEach(s => allSubs.add(s));
+            }
         }
         return Array.from(allSubs).sort();
     }, [userProfile, classFilter, teacherClasses]);
@@ -562,11 +565,15 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         // Fetch groups
         unsubscribers.push(db.collection('groups').where('teacherId', '==', user.uid).onSnapshot(snap => setGroups(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group)))));
         
-        // Fetch terminal reports
-        // FIX: Rewrote reduce to handle potential type inference issues with Object.values.
-        const teacherSubjects: string[] = userProfile?.subjectsByClass
-            ? Object.values(userProfile.subjectsByClass as SubjectsByClass).reduce((acc: string[], subjects: string[]) => acc.concat(subjects), [])
-            : [];
+        const teacherSubjects = useMemo(() => {
+            if (!userProfile?.subjectsByClass) return [];
+            // Ensure subjectsByClass is treated as an object, and filter out non-array values before flattening.
+            const subjectsMap = userProfile.subjectsByClass;
+            return Object.values(subjectsMap)
+                         .filter(Array.isArray)
+                         .flat();
+        }, [userProfile?.subjectsByClass]);
+
             
         if (teacherClasses.length > 0 && teacherSubjects.length > 0) {
             unsubscribers.push(
@@ -908,17 +915,56 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
 
         studentsInClass.forEach(student => {
             const studentSubmissions = submissionsForSubject.filter(s => s.studentId === student.uid);
-            const assignmentScore = studentSubmissions.length > 0 ? studentSubmissions.reduce((sum, s) => sum + (parseFloat(s.grade!) || 0), 0) / studentSubmissions.length : undefined;
+
+            let totalPercentageSum = 0;
+            const totalAssignmentsCount = assignmentsForSubject.length;
+
+            if (totalAssignmentsCount > 0) {
+                assignmentsForSubject.forEach(assignment => {
+                    const submission = studentSubmissions.find(s => s.assignmentId === assignment.id);
+                    if (submission && submission.grade) {
+                        let score: number | null = null;
+                        let maxScore: number | null = null;
+
+                        if (submission.grade.includes('/')) {
+                            const parts = submission.grade.split('/').map(p => parseFloat(p.trim()));
+                            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && parts[1] > 0) {
+                                score = parts[0];
+                                maxScore = parts[1];
+                            }
+                        } else if (!isNaN(parseFloat(submission.grade))) {
+                            score = parseFloat(submission.grade);
+                            maxScore = 20; // Default max for single-number grades
+                        }
+
+                        if (score !== null && maxScore !== null && maxScore > 0) {
+                            totalPercentageSum += (score / maxScore);
+                        }
+                    }
+                    // If no submission, score is 0, so we add nothing to the sum.
+                });
+                
+                const averagePercentage = totalPercentageSum / totalAssignmentsCount;
+                const assignmentScore = averagePercentage * 15; // Scale to 15
+
+                newMarks[student.uid] = {
+                    ...marks[student.uid],
+                    studentName: student.name,
+                    indivTest: parseFloat(assignmentScore.toFixed(1)),
+                };
+            }
 
             const studentGroup = groupsForSubject.find(g => g.memberUids.includes(student.uid));
-            const groupWorkScore = studentGroup ? parseFloat(studentGroup.grade!) : undefined;
-
-            newMarks[student.uid] = {
-                ...marks[student.uid],
-                studentName: student.name,
-                indivTest: assignmentScore !== undefined ? parseFloat(assignmentScore.toFixed(1)) : marks[student.uid]?.indivTest,
-                groupWork: groupWorkScore !== undefined ? parseFloat(groupWorkScore.toFixed(1)) : marks[student.uid]?.groupWork,
-            };
+            if (studentGroup && studentGroup.grade) {
+                 const groupWorkScore = parseFloat(studentGroup.grade);
+                 if (!isNaN(groupWorkScore)) {
+                     newMarks[student.uid] = {
+                        ...newMarks[student.uid],
+                        studentName: student.name,
+                        groupWork: parseFloat(groupWorkScore.toFixed(1)),
+                    };
+                 }
+            }
         });
         setMarks(newMarks);
         setToast({message: "Scores from assignments and group work have been filled in.", type: "success"});
@@ -938,20 +984,21 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         studentsInClass.forEach(student => {
             const studentMark = marks[student.uid] || {};
             
-            const classScore = (studentMark.indivTest || 0) + (studentMark.groupWork || 0) + (studentMark.classTest || 0);
+            const totalClassScore = (studentMark.indivTest || 0) + (studentMark.groupWork || 0) + (studentMark.classTest || 0) + (studentMark.project || 0);
             const examScore = studentMark.endOfTermExams || 0;
 
-            const scaledClassScore = (classScore / 50) * 50; // Max 50
-            const scaledExamScore = (examScore / 50) * 50; // Max 50
-            const overallTotal = Math.min(100, scaledClassScore + scaledExamScore);
+            const scaledClassScore = (totalClassScore / 60) * 50;
+            const scaledExamScore = (examScore / 100) * 50;
+            const overallTotal = scaledClassScore + scaledExamScore;
             
             calculatedMarks[student.uid] = {
                 studentName: student.name,
                 indivTest: studentMark.indivTest,
                 groupWork: studentMark.groupWork,
                 classTest: studentMark.classTest,
+                project: studentMark.project,
                 endOfTermExams: studentMark.endOfTermExams,
-                totalClassScore: classScore,
+                totalClassScore: parseFloat(totalClassScore.toFixed(1)),
                 scaledClassScore: parseFloat(scaledClassScore.toFixed(1)),
                 scaledExamScore: parseFloat(scaledExamScore.toFixed(1)),
                 overallTotal: parseFloat(overallTotal.toFixed(1)),
@@ -960,7 +1007,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             studentTotals.push({ studentId: student.uid, total: overallTotal });
         });
         
-        // Calculate positions
         studentTotals.sort((a, b) => b.total - a.total);
         studentTotals.forEach((item, index) => {
             let position = index + 1;
@@ -1229,8 +1275,15 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                      </Card>
                 );
             case 'terminal_reports':
-                // FIX: Added a cast to SubjectsByClass to resolve type 'unknown' error.
-                const subjectsForReport = (userProfile?.subjectsByClass as SubjectsByClass)?.[reportClass] || [];
+                // FIX: Explicitly specify the return type for useMemo as string[] to resolve TypeScript inference issues.
+                const subjectsForReport = useMemo<string[]>(() => {
+                    // Defensive check to ensure subjectsByClass and its properties are arrays.
+                    if (!userProfile?.subjectsByClass || !Array.isArray(userProfile.subjectsByClass[reportClass])) {
+                        return [];
+                    }
+                    return userProfile.subjectsByClass[reportClass];
+                }, [userProfile?.subjectsByClass, reportClass]);
+
                 const studentsForReport = students.filter(s => s.class === reportClass);
                 return (
                     <Card>
@@ -1246,34 +1299,59 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                              </div>
                         </div>
                         <div className="flex gap-2 mb-4">
-                            <Button onClick={calculateTotalsAndSave} disabled={isSavingMarks}>{isSavingMarks ? 'Saving...' : 'Calculate Totals & Save'}</Button>
+                            <Button onClick={calculateTotalsAndSave} disabled={isSavingMarks}>{isSavingMarks ? 'Saving...' : 'Calculate & Save'}</Button>
                             <Button variant="secondary" onClick={handleAutoFillScores}>Auto-fill Scores</Button>
                         </div>
                          <div className="overflow-x-auto">
                              <table className="min-w-full text-sm">
                                  <thead className="bg-slate-700">
-                                    <tr>
-                                        <th className="p-2 text-left">Student Name</th>
-                                        <th className="p-2">Assignments (20)</th>
-                                        <th className="p-2">Group Work (15)</th>
-                                        <th className="p-2">Class Test (15)</th>
-                                        <th className="p-2">Exam Score (50)</th>
-                                        <th className="p-2 font-bold">Total (100)</th>
-                                        <th className="p-2 font-bold">Grade</th>
+                                    <tr className="text-center">
+                                        <th rowSpan={2} className="p-2 text-left border-r border-slate-600">Student Name</th>
+                                        <th colSpan={5} className="p-2 border-b border-slate-600">Class Score (Weight 50%)</th>
+                                        <th rowSpan={2} className="p-2 border-x border-slate-600">End of Term Exam (100)</th>
+                                        <th colSpan={5} className="p-2 border-b border-slate-600">Final Marks</th>
+                                    </tr>
+                                    <tr className="text-xs">
+                                        <th className="p-2 font-normal border-r border-slate-600">Assignments (15)</th>
+                                        <th className="p-2 font-normal border-r border-slate-600">Group Work (15)</th>
+                                        <th className="p-2 font-normal border-r border-slate-600">Class Test (15)</th>
+                                        <th className="p-2 font-normal border-r border-slate-600">Project (15)</th>
+                                        <th className="p-2 font-bold border-r border-slate-600">Total (60)</th>
+                                        <th className="p-2 font-bold border-r border-slate-600">Scaled Class (50)</th>
+                                        <th className="p-2 font-bold border-r border-slate-600">Scaled Exam (50)</th>
+                                        <th className="p-2 font-bold border-r border-slate-600">Overall (100)</th>
+                                        <th className="p-2 font-bold border-r border-slate-600">Grade</th>
+                                        <th className="p-2 font-bold">Position</th>
                                     </tr>
                                  </thead>
-                                 <tbody>
+                                 <tbody className="divide-y divide-slate-800">
                                     {studentsForReport.map(student => {
                                         const mark = marks[student.uid] || {};
+                                        const totalClassScore = (mark.indivTest || 0) + (mark.groupWork || 0) + (mark.classTest || 0) + (mark.project || 0);
+                                        const scaledClassScore = (totalClassScore / 60) * 50;
+                                        const scaledExamScore = ((mark.endOfTermExams || 0) / 100) * 50;
+                                        const overallTotal = scaledClassScore + scaledExamScore;
+                                        const grade = getGrade(overallTotal);
+
+                                        let gradeColor = 'text-gray-200';
+                                        if (grade === 'A' || grade === 'B+') gradeColor = 'text-green-400';
+                                        else if (grade === 'F') gradeColor = 'text-red-400';
+                                        else if (grade === 'D' || grade === 'D+') gradeColor = 'text-yellow-400';
+
                                         return (
-                                            <tr key={student.uid} className="border-b border-slate-700">
-                                                <td className="p-2 font-semibold">{student.name}</td>
-                                                <td><input type="number" min="0" max="20" value={mark.indivTest ?? ''} onChange={e => handleMarkChange(student.uid, 'indivTest', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td><input type="number" min="0" max="15" value={mark.groupWork ?? ''} onChange={e => handleMarkChange(student.uid, 'groupWork', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td><input type="number" min="0" max="15" value={mark.classTest ?? ''} onChange={e => handleMarkChange(student.uid, 'classTest', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td><input type="number" min="0" max="50" value={mark.endOfTermExams ?? ''} onChange={e => handleMarkChange(student.uid, 'endOfTermExams', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td className="p-2 text-center font-bold">{mark.overallTotal?.toFixed(1)}</td>
-                                                <td className="p-2 text-center font-bold">{mark.grade}</td>
+                                            <tr key={student.uid} className="even:bg-slate-800/50">
+                                                <td className="p-2 font-semibold text-left">{student.name}</td>
+                                                <td><input type="number" step="0.1" min="0" max="15" value={mark.indivTest ?? ''} onChange={e => handleMarkChange(student.uid, 'indivTest', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
+                                                <td><input type="number" step="0.1" min="0" max="15" value={mark.groupWork ?? ''} onChange={e => handleMarkChange(student.uid, 'groupWork', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
+                                                <td><input type="number" step="0.1" min="0" max="15" value={mark.classTest ?? ''} onChange={e => handleMarkChange(student.uid, 'classTest', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
+                                                <td><input type="number" step="0.1" min="0" max="15" value={mark.project ?? ''} onChange={e => handleMarkChange(student.uid, 'project', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
+                                                <td className="p-2 text-center font-semibold bg-slate-900/30">{totalClassScore.toFixed(1)}</td>
+                                                <td><input type="number" step="0.1" min="0" max="100" value={mark.endOfTermExams ?? ''} onChange={e => handleMarkChange(student.uid, 'endOfTermExams', e.target.value)} className="w-24 p-1 bg-slate-800 rounded text-center"/></td>
+                                                <td className="p-2 text-center font-bold bg-slate-900/30">{scaledClassScore.toFixed(1)}</td>
+                                                <td className="p-2 text-center font-bold bg-slate-900/30">{scaledExamScore.toFixed(1)}</td>
+                                                <td className="p-2 text-center font-bold text-lg bg-slate-900/30">{overallTotal.toFixed(1)}</td>
+                                                <td className={`p-2 text-center font-bold text-lg bg-slate-900/30 ${gradeColor}`}>{grade}</td>
+                                                <td className="p-2 text-center font-bold text-lg bg-slate-900/30">{mark.position}</td>
                                             </tr>
                                         );
                                     })}
