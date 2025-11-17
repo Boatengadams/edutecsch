@@ -233,6 +233,8 @@ const CreateGroupModal: React.FC<{
     }, [editingGroup, isEditing, classes]);
 
     useEffect(() => {
+        // FIX: Defensively check if subjectsByClass[selectedClass] is an array before using it.
+        // Data from Firestore might not match the expected type.
         const potentialSubs = subjectsByClass[selectedClass];
         const subs = Array.isArray(potentialSubs) ? potentialSubs : [];
         setSubjectsForClass(subs);
@@ -465,9 +467,11 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     const [groupToDelete, setGroupToDelete] = useState<Group | null>(null);
     const [isDeletingGroup, setIsDeletingGroup] = useState(false);
     
+    // FIX: Add missing state for AI Assistant
     const [aiSystemInstruction, setAiSystemInstruction] = useState('');
     const [aiSuggestedPrompts, setAiSuggestedPrompts] = useState<string[]>([]);
   
+    // FIX: Add explicit type to useMemo to help with type inference.
     const teacherClasses = useMemo<string[]>(() => {
         if (!userProfile) return [];
         const allClasses = new Set([
@@ -477,10 +481,12 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         return Array.from(allClasses).sort();
     }, [userProfile]);
     
+    // FIX: Add explicit type and more robust checks to prevent errors from malformed Firestore data.
     const teacherSubjects = useMemo<string[]>(() => {
         if (!userProfile || !userProfile.subjectsByClass || typeof userProfile.subjectsByClass !== 'object') {
             return [];
         }
+        // Ensure subjectsByClass is treated as an object, and filter out non-array values before flattening.
         const subjectsMap = userProfile.subjectsByClass;
         return Object.values(subjectsMap)
                      .filter(Array.isArray)
@@ -493,21 +499,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             setReportClass(teacherClasses[0]);
         }
     }, [teacherClasses, reportClass]);
-    
-    const subjectsForReport = useMemo<string[]>(() => {
-        const subs = userProfile?.subjectsByClass?.[reportClass];
-        return Array.isArray(subs) ? subs : [];
-    }, [userProfile?.subjectsByClass, reportClass]);
-
-    useEffect(() => {
-        // When the class changes, the list of subjects changes.
-        // If the current subject isn't in the new list, reset to the first available one.
-        if (subjectsForReport.length > 0 && !subjectsForReport.includes(reportSubject)) {
-            setReportSubject(subjectsForReport[0]);
-        } else if (subjectsForReport.length === 0) {
-            setReportSubject('');
-        }
-    }, [subjectsForReport, reportSubject]);
 
 
     const subjectsForFilter = useMemo<string[]>(() => {
@@ -626,6 +617,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         return () => unsubscribe();
     }, [user]);
     
+    // FIX: Add useEffect for AI Assistant context
     useEffect(() => {
         const baseInstruction = "You are an AI assistant for a teacher at UTOPIA INTERNATIONAL SCHOOL. Your role is to help with lesson planning, student progress analysis, and administrative tasks. Maintain a professional and supportive tone. You can summarize the content on the teacher's current page if asked. As a bilingual AI, you can also be 'Kofi AI'. If a user speaks Twi, respond as Kofi AI in fluent Asante Twi, using correct grammar and letters like 'ɛ' and 'ɔ'.";
         let context = '';
@@ -754,6 +746,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
 
         setShowPresentationGenerator(false); // Close generator if it was open
 
+        // FIX: Map the `question` property from the quiz to the `text` property required by LiveLessonStep.
         const lessonPlan: LiveLessonStep[] = content.presentation.slides.map((slide, index) => {
             const quizQuestion = content.quiz?.quiz[index];
             return {
@@ -791,7 +784,10 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            if (!content.id) { 
+            // The "optimistic start" approach: write text content instantly,
+            // then process and upload images in the background.
+            // Split data: main doc for text, sub-collection for images.
+            if (!content.id) { // This is a new, unsaved presentation
                 const imagePromises = content.presentation.slides.map(async (slide, index) => {
                     if (slide.imageUrl && slide.imageUrl.startsWith('data:')) {
                         const response = await fetch(slide.imageUrl);
@@ -802,17 +798,19 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                         await storageRef.put(compressedBlob);
                         const downloadURL = await storageRef.getDownloadURL();
                         
+                        // Save image URL to sub-collection
                         return lessonRef.collection('images').doc(index.toString()).set({
                             imageUrl: downloadURL,
                             imageStyle: slide.imageStyle
                         });
                     }
                 });
+                // We don't await these promises, letting them run in the background
                 Promise.all(imagePromises).catch(err => {
                     console.error("Background image upload failed:", err);
                     setToast({ message: "Some lesson images failed to upload.", type: 'error' });
                 });
-            } else { 
+            } else { // This is a saved presentation with permanent URLs
                 const imagePromises = content.presentation.slides.map((slide, index) => {
                     return lessonRef.collection('images').doc(index.toString()).set({
                         imageUrl: slide.imageUrl,
@@ -873,6 +871,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 parentUids: parentUids,
             }, { merge: true });
             
+            // Send notifications for absences
             const absentStudentIds = classStudents.filter(s => attendanceData[s.uid] === 'Absent').map(s => s.uid);
             if (absentStudentIds.length > 0) {
                  const sendNotifications = functions.httpsCallable('sendNotificationsToParentsOfStudents');
@@ -949,10 +948,11 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                             totalPercentageSum += (score / maxScore);
                         }
                     }
+                    // If no submission, score is 0, so we add nothing to the sum.
                 });
                 
                 const averagePercentage = totalPercentageSum / totalAssignmentsCount;
-                const assignmentScore = averagePercentage * 15;
+                const assignmentScore = averagePercentage * 15; // Scale to 15
 
                 newMarks[student.uid] = {
                     ...marks[student.uid],
@@ -1282,6 +1282,12 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                      </Card>
                 );
             case 'terminal_reports':
+                const subjectsForReport = useMemo(() => {
+                    const subs = userProfile?.subjectsByClass?.[reportClass];
+                    return Array.isArray(subs) ? subs : [];
+                }, [userProfile?.subjectsByClass, reportClass]);
+                
+
                 const studentsForReport = students.filter(s => s.class === reportClass);
                 return (
                     <Card>
@@ -1439,13 +1445,10 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                                             ) : (
                                                 <pre className="mt-4 p-2 bg-slate-800 rounded-md whitespace-pre-wrap font-sans">{submission.text}</pre>
                                             )}
-                                            {/* FIX: Changed submission.imageUrl to submission.attachmentURL and added a link. */}
                                             {submission.attachmentURL && (
                                                 <div className="mt-2">
                                                      <a href={submission.attachmentURL} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline inline-block">View Attachment</a>
-                                                     {/\.(jpg|jpeg|png|gif|webp)$/i.test(submission.attachmentName) &&
-                                                         <img src={submission.attachmentURL} alt="Submission" className="max-w-xs rounded-md mt-2"/>
-                                                     }
+                                                     <img src={submission.attachmentURL} alt="Submission" className="max-w-xs rounded-md mt-2"/>
                                                 </div>
                                             )}
                                             <div className="mt-4 pt-2 border-t border-slate-600">

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI } from '@google/genai';
+// FIX: Import VideoGenerationReferenceImage and VideoGenerationReferenceType to resolve type errors.
+import { GoogleGenAI, VideoGenerationReferenceImage, VideoGenerationReferenceType } from '@google/genai';
 import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
@@ -117,9 +118,10 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({ onClose, userProfile, a
                 
                 const finalPrompt = `A photorealistic video of the person in the reference image, acting as a teacher for a '${selectedClass}' class on '${selectedSubject}'. The teacher is ${prompt}. Video style: ${style}. ${backgroundMusic ? `Include background music that is: ${backgroundMusic}.` : 'No background music.'}`;
                 
-                const referenceImagesPayload = [{
+                // FIX: Used VideoGenerationReferenceType enum and defined the payload type.
+                const referenceImagesPayload: VideoGenerationReferenceImage[] = [{
                     image: { imageBytes: imageBase64, mimeType: imageFile.type },
-                    referenceType: 'ASSET',
+                    referenceType: VideoGenerationReferenceType.ASSET,
                 }];
 
                 operation = await ai.models.generateVideos({

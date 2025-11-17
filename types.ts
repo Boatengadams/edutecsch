@@ -170,7 +170,7 @@ export interface Message {
   id: string;
   senderId: string;
   senderName: string;
-  text: string;
+  text?: string;
   createdAt: firebase.firestore.Timestamp;
   readBy?: string[];
   imageUrl?: string;

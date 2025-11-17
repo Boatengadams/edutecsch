@@ -295,7 +295,7 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
       <div className="flex-grow grid grid-cols-1 md:grid-cols-3 gap-4 overflow-hidden">
         <div className="md:col-span-2 relative h-full">
           <DrawingToolbar />
-          <Card className="h-full flex flex-col" ref={boardRef} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
+          <Card className="h-full flex flex-col" fullHeight={false} ref={boardRef} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
              <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full pointer-events-none z-10" />
              {renderMainContent()}
           </Card>

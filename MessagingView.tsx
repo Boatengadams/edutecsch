@@ -1,9 +1,36 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { db, firebase } from '../services/firebase';
+import { db, firebase, storage } from '../services/firebase';
 import { UserProfile, Conversation, Message } from '../types';
 import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
+import CameraModal from './common/CameraModal';
+
+// Helper to convert dataURL to File object
+const dataURLtoFile = (dataurl: string, filename: string): File => {
+    const arr = dataurl.split(',');
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    if (!mimeMatch) throw new Error('Invalid data URL');
+    const mime = mimeMatch[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], filename, { type: mime });
+};
+
+// Helper to get a preview URL from a File object
+const fileToDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+};
+
 
 interface MessagingViewProps {
   userProfile: UserProfile;
@@ -15,11 +42,14 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
+  const [imageToSend, setImageToSend] = useState<{ file: File | null; preview: string | null }>({ file: null, preview: null });
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [showNewMessageModal, setShowNewMessageModal] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Fetch conversations
@@ -53,29 +83,10 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
         setMessages(msgs);
         setLoadingMessages(false);
 
-        // Mark unread messages as read
-        const unreadMessages = msgs.filter(m => m.senderId !== userProfile.uid && !m.readBy?.includes(userProfile.uid));
-        if (unreadMessages.length > 0) {
-            const batch = db.batch();
-            unreadMessages.forEach(msg => {
-                const msgRef = db.collection('conversations').doc(activeConversationId).collection('messages').doc(msg.id);
-                batch.update(msgRef, {
-                    readBy: firebase.firestore.FieldValue.arrayUnion(userProfile.uid)
-                });
-            });
-            await batch.commit().catch(err => console.error("Error marking messages as read:", err));
-        }
-
-        // Also reset unread count for the conversation
         const convRef = db.collection('conversations').doc(activeConversationId);
         const convDoc = await convRef.get();
-        if (convDoc.exists) {
-            const convData = convDoc.data() as Conversation;
-            if ((convData.unreadCount?.[userProfile.uid] || 0) > 0) {
-                 await convRef.update({
-                    [`unreadCount.${userProfile.uid}`]: 0
-                });
-            }
+        if (convDoc.exists && (convDoc.data() as Conversation).unreadCount?.[userProfile.uid] > 0) {
+            await convRef.update({ [`unreadCount.${userProfile.uid}`]: 0 });
         }
       }, () => setLoadingMessages(false));
 
@@ -85,11 +96,11 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
   // Scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isSending]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !activeConversationId || isSending) return;
+    if ((!newMessage.trim() && !imageToSend.file) || !activeConversationId || isSending) return;
     
     setIsSending(true);
     const conversationRef = db.collection('conversations').doc(activeConversationId);
@@ -102,13 +113,24 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
     };
     const conversationData = conversationDoc.data() as Conversation;
 
-    const messageData: Omit<Message, 'id'> = {
+    const messageData: Partial<Message> = {
       senderId: userProfile.uid,
       senderName: userProfile.name,
-      text: newMessage,
       createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
-      readBy: [userProfile.uid], // Sender has read it
+      readBy: [],
     };
+    
+    if (newMessage.trim()) {
+        messageData.text = newMessage;
+    }
+
+    if (imageToSend.file) {
+        const storagePath = `direct_messages/${activeConversationId}/${messageRef.id}-${imageToSend.file.name}`;
+        const storageRef = storage.ref(storagePath);
+        await storageRef.put(imageToSend.file);
+        messageData.imageUrl = await storageRef.getDownloadURL();
+        messageData.storagePath = storagePath;
+    }
     
     const batch = db.batch();
     batch.set(messageRef, messageData);
@@ -117,7 +139,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
     if (otherParticipantUid) {
         batch.update(conversationRef, {
             lastMessage: {
-                text: newMessage,
+                text: messageData.imageUrl ? '[Photo]' : messageData.text,
                 senderId: userProfile.uid,
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             },
@@ -128,6 +150,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
     
     await batch.commit();
     setNewMessage('');
+    setImageToSend({ file: null, preview: null });
     setIsSending(false);
   };
   
@@ -157,6 +180,20 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
     }
   };
   
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const preview = await fileToDataUrl(file);
+      setImageToSend({ file, preview });
+    }
+  };
+
+  const handleCameraCapture = (dataUrl: string) => {
+    const file = dataURLtoFile(dataUrl, `capture-${Date.now()}.jpg`);
+    setImageToSend({ file, preview: dataUrl });
+    setShowCamera(false);
+  };
+  
   const activeConversation = conversations.find(c => c.id === activeConversationId);
   
   const otherParticipantInfo = useMemo(() => {
@@ -169,16 +206,15 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
   const filteredContacts = useMemo(() => {
     if (!Array.isArray(contacts)) return [];
     return contacts
-        // Ensure all items are valid before sorting or filtering to prevent crashes.
         .filter(c => c && c.uid && c.name) 
         .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
         .filter(c => (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
   }, [contacts, searchTerm]);
 
   return (
+    <>
     <Card className="h-[calc(100vh-100px)]">
         <div className="grid grid-cols-1 md:grid-cols-3 h-full gap-4">
-            {/* Conversations List */}
             <div className="md:col-span-1 flex flex-col h-full border-r border-slate-700 pr-4">
                 <div className="flex justify-between items-center mb-4 flex-shrink-0">
                     <h3 className="text-xl font-bold">Conversations</h3>
@@ -206,7 +242,6 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
                     </div>
                 )}
             </div>
-            {/* Chat Window */}
             <div className="md:col-span-2 flex flex-col h-full">
                 {activeConversationId && otherParticipantInfo ? (
                     <>
@@ -215,27 +250,31 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
                             <p className="text-xs text-gray-400 capitalize">{otherParticipantInfo.role}</p>
                         </div>
                         <div className="flex-grow overflow-y-auto p-4 space-y-4">
-                            {loadingMessages ? <div className="flex justify-center items-center h-full"><Spinner /></div> : messages.map(msg => {
-                                const otherParticipantUid = activeConversation?.participantUids.find(uid => uid !== userProfile.uid);
-                                const isRead = msg.senderId === userProfile.uid && otherParticipantUid && msg.readBy?.includes(otherParticipantUid);
-
-                                return (
-                                    <div key={msg.id} className={`flex flex-col ${msg.senderId === userProfile.uid ? 'items-end' : 'items-start'}`}>
-                                        <span className="text-xs text-gray-400 font-bold mx-1">{msg.senderId === userProfile.uid ? 'You' : msg.senderName}</span>
-                                        <div className={`p-3 rounded-lg max-w-xs text-sm break-words ${msg.senderId === userProfile.uid ? 'bg-blue-600 text-white' : 'bg-slate-700'}`}>
-                                            {msg.text}
-                                        </div>
-                                        {msg.senderId === userProfile.uid && (
-                                            <p className="text-xs text-gray-500 mt-1 mr-1">{isRead ? 'Read' : 'Sent'}</p>
-                                        )}
+                            {loadingMessages ? <div className="flex justify-center items-center h-full"><Spinner /></div> : messages.map(msg => (
+                                <div key={msg.id} className={`flex flex-col ${msg.senderId === userProfile.uid ? 'items-end' : 'items-start'}`}>
+                                    <span className="text-xs text-gray-400 font-bold mx-1">{msg.senderId === userProfile.uid ? 'You' : msg.senderName}</span>
+                                    <div className={`p-2 rounded-lg max-w-sm break-words ${msg.senderId === userProfile.uid ? 'bg-blue-600 text-white' : 'bg-slate-700'}`}>
+                                        {msg.imageUrl && <img src={msg.imageUrl} alt="Sent attachment" className="rounded-md max-w-xs mb-1" />}
+                                        {msg.text && <p className="text-sm px-1">{msg.text}</p>}
                                     </div>
-                                );
-                            })}
+                                </div>
+                            ))}
                             <div ref={messagesEndRef} />
                         </div>
-                        <form onSubmit={handleSendMessage} className="p-2 flex gap-2 flex-shrink-0">
-                            <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type a message..." className="flex-grow p-2 bg-slate-800 rounded-md border border-slate-600"/>
-                            <Button type="submit" disabled={isSending || !newMessage.trim()}>{isSending ? '...' : 'Send'}</Button>
+                        <form onSubmit={handleSendMessage} className="p-2 flex flex-col gap-2 flex-shrink-0">
+                           {imageToSend.preview && (
+                                <div className="relative w-24 h-24 p-1">
+                                    <img src={imageToSend.preview} alt="Preview" className="w-full h-full object-cover rounded-md" />
+                                    <button type="button" onClick={() => setImageToSend({ file: null, preview: null })} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center">&times;</button>
+                                </div>
+                            )}
+                            <div className="flex gap-2 items-center">
+                                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+                                <Button type="button" variant="secondary" size="sm" onClick={() => setShowCamera(true)}>📷</Button>
+                                <Button type="button" variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>📎</Button>
+                                <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type a message..." className="flex-grow p-2 bg-slate-800 rounded-md border border-slate-600"/>
+                                <Button type="submit" disabled={isSending || (!newMessage.trim() && !imageToSend.file)}>{isSending ? '...' : 'Send'}</Button>
+                            </div>
                         </form>
                     </>
                 ) : (
@@ -245,8 +284,6 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
                 )}
             </div>
         </div>
-
-        {/* New Message Modal */}
         {showNewMessageModal && (
             <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
                 <Card className="w-full max-w-md h-[70vh] flex flex-col">
@@ -268,6 +305,8 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
             </div>
         )}
     </Card>
+    {showCamera && <CameraModal onCapture={handleCameraCapture} onClose={() => setShowCamera(false)} />}
+    </>
   );
 };
 

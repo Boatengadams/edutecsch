@@ -203,7 +203,6 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
   const [imageLoadStatus, setImageLoadStatus] = useState<Record<number, 'loading' | 'loaded' | 'error'>>({});
   const [regeneratingImageIndex, setRegeneratingImageIndex] = useState<number | null>(null);
   const imageReplaceInputRef = useRef<HTMLInputElement>(null);
-  // FIX: Moved uploadProgressRef to the top level of the component.
   const uploadProgressRef = useRef(0);
 
 
@@ -355,10 +354,13 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
     const newSlides = [...presentation.slides];
     const updatedSlide = { ...newSlides[index] };
     
+    // FIX: Handle 'imageStyle' separately to satisfy its specific type.
     if (field === 'content') {
         updatedSlide[field] = value as string[];
-    } else if (field === 'title' || field === 'imageStyle' || field === 'imageUrl') {
+    } else if (field === 'title' || field === 'imageUrl') {
         updatedSlide[field] = value as string;
+    } else if (field === 'imageStyle') {
+        updatedSlide[field] = value as 'contain' | 'cover';
     }
     
     newSlides[index] = updatedSlide;
@@ -532,7 +534,6 @@ const savePresentation = async (): Promise<GeneratedContent | null> => {
         const docRef = db.collection('generatedContent').doc();
         const docRefId = docRef.id;
 
-        // FIX: Reset upload progress ref before starting.
         uploadProgressRef.current = 0;
         setLoadingMessage(`Optimizing and uploading images... (0/${slidesToSave.length})`);
 
@@ -553,7 +554,6 @@ const savePresentation = async (): Promise<GeneratedContent | null> => {
 
                 return downloadURL;
             }
-            // If it's already a URL, just return it and increment progress as if it were uploaded.
             uploadProgressRef.current += 1;
             setLoadingMessage(`Optimizing and uploading images... (${uploadProgressRef.current}/${slidesToSave.length})`);
             return slide.imageUrl;
@@ -789,7 +789,12 @@ const handleGenerateQuiz = async () => {
   const activeSlide = presentation?.slides[currentSlide];
 
   const renderContent = () => {
-    if (loadingState !== 'idle' && (view === 'form' || loadingState === 'saving' || loadingState === 'saving_and_starting_live')) {
+    // FIX: Restructure the confusing `if` condition by creating boolean flags for clarity.
+    // This resolves the TypeScript error regarding type overlap by making the logic clearer.
+    const isGeneratingOnForm = loadingState !== 'idle' && view === 'form';
+    const isSavingContent = loadingState === 'saving' || loadingState === 'saving_and_starting_live';
+
+    if (isGeneratingOnForm || isSavingContent) {
         return <div className="flex flex-col items-center justify-center h-full"><Spinner /><p className="mt-4 text-gray-400">{loadingMessage}</p></div>;
     }
     
