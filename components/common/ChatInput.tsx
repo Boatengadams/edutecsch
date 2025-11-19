@@ -1,6 +1,8 @@
+
 import React, { useState, useRef } from 'react';
 import Button from './Button';
 import CameraModal from './CameraModal';
+import { GoogleGenAI } from '@google/genai';
 
 // Helper to convert dataURL to File object
 const dataURLtoFile = (dataurl: string, filename: string): File => {
@@ -44,6 +46,9 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isSending }) => {
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
 
+    // AI Fix State
+    const [isFixing, setIsFixing] = useState(false);
+
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         await onSendMessage({ text, image: imageToSend.file, audio: audioBlob });
@@ -64,6 +69,25 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isSending }) => {
         const file = dataURLtoFile(dataUrl, `capture-${Date.now()}.jpg`);
         setImageToSend({ file, preview: dataUrl });
         setShowCamera(false);
+    };
+
+    const handleAiFix = async () => {
+        if (!text.trim() || isFixing) return;
+        setIsFixing(true);
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: `Correct the grammar and spelling of the following text. Maintain the original meaning and tone. Return ONLY the corrected text.\n\nText: "${text}"`,
+            });
+            if (response.text) {
+                setText(response.text.trim());
+            }
+        } catch (err) {
+            console.error("Auto-fix failed:", err);
+        } finally {
+            setIsFixing(false);
+        }
     };
 
     const startRecording = async () => {
@@ -87,7 +111,6 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isSending }) => {
             setIsRecording(true);
         } catch (err) {
             console.error("Error accessing microphone:", err);
-            // You could add a toast notification here
         }
     };
 
@@ -102,41 +125,67 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isSending }) => {
         if (isRecording) {
             stopRecording();
         } else {
-            // Clear any previous recording
             setAudioBlob(null);
             startRecording();
         }
     };
     
-    const canSend = !isSending && (text.trim() || imageToSend.file || audioBlob);
+    const canSend = !isSending && !isFixing && (text.trim() || imageToSend.file || audioBlob);
 
     return (
         <>
-            <form onSubmit={handleSendMessage} className="p-2 border-t border-slate-700 flex flex-col gap-2 flex-shrink-0">
+            <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-700/50 flex flex-col gap-3 flex-shrink-0 bg-slate-900/30 backdrop-blur-md">
                 {(imageToSend.preview || audioBlob) && (
-                    <div className="p-2 bg-slate-800 rounded-lg">
+                    <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700">
                         {imageToSend.preview && (
                              <div className="relative w-24 h-24 p-1">
-                                <img src={imageToSend.preview} alt="Preview" className="w-full h-full object-cover rounded-md" />
-                                <button type="button" onClick={() => setImageToSend({ file: null, preview: null })} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center">&times;</button>
+                                <img src={imageToSend.preview} alt="Preview" className="w-full h-full object-cover rounded-lg" />
+                                <button type="button" onClick={() => setImageToSend({ file: null, preview: null })} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md hover:bg-red-600 transition-colors">&times;</button>
                             </div>
                         )}
                         {audioBlob && (
-                             <div className="relative flex items-center gap-2 p-2">
-                                <audio controls src={URL.createObjectURL(audioBlob)} className="w-full max-w-xs h-10" />
-                                <button type="button" onClick={() => setAudioBlob(null)} className="text-red-400 p-1 rounded-full hover:bg-slate-700">&times;</button>
+                             <div className="relative flex items-center gap-3 p-2">
+                                <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M7 4a3 3 0 016 0v6a3 3 0 11-6 0V4z" /><path d="M5.5 9.643a.75.75 0 00-1.5 0V10c0 3.06 2.29 5.585 5.25 5.954V17.5h-1.5a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5h-1.5v-1.546A6.001 6.001 0 0016 10v-.357a.75.75 0 00-1.5 0V10a4.5 4.5 0 01-9 0v-.357z" /></svg>
+                                </div>
+                                <audio controls src={URL.createObjectURL(audioBlob)} className="h-8" />
+                                <button type="button" onClick={() => setAudioBlob(null)} className="text-slate-400 hover:text-red-400 p-1 transition-colors">&times;</button>
                             </div>
                         )}
                     </div>
                 )}
-                <div className="flex gap-2 items-center">
-                    <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
-                    <button type="button" title="Take Photo" onClick={() => setShowCamera(true)} className="p-2 rounded-full text-gray-300 hover:bg-slate-700">📷</button>
-                    <button type="button" title="Upload Image" onClick={() => fileInputRef.current?.click()} className="p-2 rounded-full text-gray-300 hover:bg-slate-700">📎</button>
-                    <button type="button" title={isRecording ? "Stop Recording" : "Record Audio"} onClick={handleMicClick} className={`p-2 rounded-full text-gray-300 hover:bg-slate-700 ${isRecording ? 'bg-red-500 text-white animate-pulse' : ''}`}>🎙️</button>
+                <div className="flex gap-2 items-end">
+                    <div className="flex gap-1 pb-1">
+                        <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+                        <button type="button" title="Take Photo" onClick={() => setShowCamera(true)} className="p-2.5 rounded-full text-slate-400 hover:text-blue-400 hover:bg-slate-800 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" /></svg>
+                        </button>
+                        <button type="button" title="Upload Image" onClick={() => fileInputRef.current?.click()} className="p-2.5 rounded-full text-slate-400 hover:text-blue-400 hover:bg-slate-800 transition-colors">
+                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" /></svg>
+                        </button>
+                        <button type="button" title={isRecording ? "Stop Recording" : "Record Audio"} onClick={handleMicClick} className={`p-2.5 rounded-full transition-colors ${isRecording ? 'bg-red-500/20 text-red-500 animate-pulse ring-1 ring-red-500' : 'text-slate-400 hover:text-blue-400 hover:bg-slate-800'}`}>
+                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" /></svg>
+                        </button>
+                        <button type="button" title="Auto-Fix Grammar & Spelling" onClick={handleAiFix} disabled={!text.trim() || isFixing} className={`p-2.5 rounded-full transition-colors ${isFixing ? 'animate-pulse text-yellow-400' : 'text-slate-400 hover:text-yellow-400 hover:bg-slate-800'}`}>
+                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10.5 3A1.501 1.501 0 0 0 9 4.5h6A1.5 1.5 0 0 0 13.5 3h-3Zm-2.693.178A3 3 0 0 1 10.5 1.5h3a3 3 0 0 1 2.694 1.678c.497.042.992.092 1.486.15 1.495.173 2.57 1.46 2.57 2.929V19.5a3 3 0 0 1-3 3H6.75a3 3 0 0 1-3-3V6.257c0-1.47 1.075-2.756 2.57-2.93.493-.058.989-.108 1.487-.15Z" clipRule="evenodd" /><path d="M13.5 9a.75.75 0 0 0 0 1.5h1.5a.75.75 0 0 0 0-1.5h-1.5Zm-6.75 0a.75.75 0 0 0 0 1.5h3.75a.75.75 0 0 0 0-1.5H6.75Zm0 3.75a.75.75 0 0 0 0 1.5h1.5a.75.75 0 0 0 0-1.5h-1.5Zm3.75 0a.75.75 0 0 0 0 1.5h3.75a.75.75 0 0 0 0-1.5h-3.75Z" /></svg>
+                        </button>
+                    </div>
                     
-                    <input type="text" value={text} onChange={e => setText(e.target.value)} placeholder="Type a message..." className="flex-grow p-2 bg-slate-800 rounded-md border border-slate-600"/>
-                    <Button type="submit" disabled={!canSend}>{isSending ? '...' : 'Send'}</Button>
+                    <textarea 
+                        value={text} 
+                        onChange={e => setText(e.target.value)} 
+                        onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }}
+                        placeholder="Type a message..." 
+                        rows={1}
+                        autoCorrect="on"
+                        spellCheck={true}
+                        className="flex-grow px-4 py-3 bg-slate-800/50 rounded-2xl border border-slate-700 focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 outline-none resize-none text-slate-200 placeholder-slate-500 scrollbar-hide"
+                        style={{ minHeight: '46px', maxHeight: '120px' }}
+                    />
+                    
+                    <Button type="submit" disabled={!canSend} className={`rounded-xl px-4 h-[46px] transition-all ${!canSend ? 'opacity-50' : ''}`}>
+                        {isSending ? <span className="animate-spin">⟳</span> : <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 transform rotate-90"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" /></svg>}
+                    </Button>
                 </div>
             </form>
             {showCamera && <CameraModal onCapture={handleCameraCapture} onClose={() => setShowCamera(false)} />}

@@ -1,3 +1,4 @@
+
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 
@@ -114,9 +115,20 @@ export interface WellbeingEntry {
 
 // --- LIVE LESSON ---
 export interface Point { x: number; y: number; }
-export interface Stroke {
-    points: Point[];
+
+export type DrawingToolType = 'pen' | 'eraser' | 'rect' | 'circle' | 'text';
+
+export interface DrawingElement {
+    id?: string;
+    type: DrawingToolType;
     color: string;
+    points?: Point[]; // For pen and eraser
+    x?: number;       // For shapes/text (normalized 0-1)
+    y?: number;       // For shapes/text (normalized 0-1)
+    width?: number;   // For shapes (normalized 0-1)
+    height?: number;  // For shapes (normalized 0-1)
+    text?: string;    // For text tool
+    fontSize?: number;
 }
 
 export interface LiveLessonStep {
@@ -136,7 +148,8 @@ export interface LiveLesson {
   classId: string;
   subject: string;
   topic: string;
-  status: 'configuring' | 'active' | 'ended';
+  // 'starting' status is used for the dynamic pre-loading phase before a lesson begins.
+  status: 'configuring' | 'starting' | 'active' | 'ended';
   createdAt: firebase.firestore.Timestamp;
   currentStepIndex: number;
   lessonPlan: LiveLessonStep[];
@@ -145,7 +158,7 @@ export interface LiveLesson {
   currentQuestion: LiveLessonStep['question'] | null;
   sourcePresentationId?: string;
   
-  drawingData?: Stroke[];
+  drawingData?: DrawingElement[];
   pointerPosition?: { x: number; y: number } | null;
 
   // New collaborative features
@@ -162,7 +175,15 @@ export interface LiveLesson {
 
 export interface BreakoutWhiteboard {
     id: string; // roomId
-    drawingData?: Stroke[];
+    drawingData?: DrawingElement[];
+}
+
+export interface SavedWhiteboard {
+    id: string;
+    teacherId: string;
+    name: string;
+    data: DrawingElement[];
+    createdAt: firebase.firestore.Timestamp;
 }
 
 export interface LiveLessonResponse {
@@ -265,6 +286,13 @@ export interface Assignment {
     quiz?: Quiz | null; // For objective assignments
 }
 
+export interface Correction {
+    answers: Record<string, string>;
+    grade: string;
+    feedback: string;
+    submittedAt: firebase.firestore.Timestamp;
+}
+
 export interface Submission {
     id: string; assignmentId: string; studentId: string; studentName: string;
     teacherId: string; classId: string;
@@ -274,6 +302,7 @@ export interface Submission {
     attachmentName: string; submittedAt: firebase.firestore.Timestamp;
     status: 'Submitted' | 'Graded' | 'Pending'; grade?: string; feedback?: string;
     parentUids?: string[];
+    correction?: Correction; // Separate object for correction data
 }
 
 export interface TeachingMaterial {
@@ -322,6 +351,11 @@ export interface SchoolSettings {
     academicYear: string;
     currentTerm?: number;
     coAdminUids?: string[];
+    sleepModeConfig?: {
+        enabled: boolean;
+        sleepTime: string; // e.g. "21:00"
+        wakeTime: string; // e.g. "05:00"
+    };
 }
 
 export interface SubscriptionStatus {

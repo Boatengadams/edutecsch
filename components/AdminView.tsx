@@ -1,7 +1,6 @@
-// FIX: `useMemo` was not imported. Added it to the import statement.
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-// FIX: Switched from v9 modular imports to v8 compat syntax by adding 'firebase' to the import.
-import { db, functions, storage, firebase } from '../services/firebase';
+import { db, functions, storage, firebase, rtdb } from '../services/firebase';
 import { 
     UserProfile, UserRole, SchoolEvent, SchoolEventType, SchoolEventAudience, EVENT_TYPES, EVENT_AUDIENCE, GES_CLASSES, TeachingMaterial, Timetable, TimetableData, TimetablePeriod, SubjectsByClass, GES_STANDARD_CURRICULUM, AttendanceRecord, AttendanceStatus, SchoolSettings, GES_SUBJECTS, Presentation, Notification, TerminalReport, ReportSummary, TerminalReportMark, ActivationToken 
 } from '../types';
@@ -20,13 +19,139 @@ import PieChart from './common/charts/PieChart';
 import BarChart from './common/charts/BarChart';
 import { useCreateUser } from '../hooks/useCreateUser';
 import SnapToRegister from './SnapToRegister';
-// FIX: Changed import to a named import as AdminApprovalQueue is not a default export.
 import { AdminApprovalQueue } from './AdminApprovalQueue';
 import ConfirmationModal from './common/ConfirmationModal';
 import { useRejectUser } from '../hooks/useRejectUser';
 import AdminCreateUserForm from './AdminCreateUserForm';
 import AdminCreateParentForm from './AdminCreateParentForm';
 import AdminAttendanceDashboard from './AdminAttendanceDashboard';
+
+interface ActiveUserStatus {
+    uid: string;
+    state: 'online' | 'offline';
+    last_changed: number;
+    name: string;
+    role: string;
+    class: string;
+}
+
+const ActiveUsersTable: React.FC = () => {
+    const [users, setUsers] = useState<ActiveUserStatus[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        const statusRef = rtdb.ref('/status');
+        
+        const onValueChange = (snapshot: firebase.database.DataSnapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                const activeUsersArray = Object.keys(data).map(key => ({
+                    uid: key,
+                    ...data[key]
+                }));
+                // Sort by online first, then by last changed
+                activeUsersArray.sort((a, b) => {
+                    if (a.state === b.state) {
+                        return b.last_changed - a.last_changed;
+                    }
+                    return a.state === 'online' ? -1 : 1;
+                });
+                setUsers(activeUsersArray);
+            } else {
+                setUsers([]);
+            }
+            setLoading(false);
+        };
+
+        const onError = (err: Error) => {
+            console.error("RTDB Error:", err);
+            setError("Failed to load active users. Check your internet connection.");
+            setLoading(false);
+        };
+
+        statusRef.on('value', onValueChange, onError);
+
+        // Fallback timeout to prevent infinite spinner if DB is unreachable
+        const timeoutId = setTimeout(() => {
+            setLoading((isLoading) => {
+                if (isLoading) {
+                    setError("Connection timed out.");
+                    return false;
+                }
+                return isLoading;
+            });
+        }, 10000);
+
+        return () => {
+            statusRef.off('value', onValueChange);
+            clearTimeout(timeoutId);
+        };
+    }, []);
+
+    if (loading) return <div className="flex justify-center p-12"><Spinner /></div>;
+    
+    return (
+        <Card>
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-bold">Active Users Monitor</h3>
+                <div className="text-sm text-gray-400">
+                    <span className="font-bold text-green-400">{users.filter(u => u.state === 'online').length}</span> Online Now
+                </div>
+            </div>
+            {error && <div className="p-4 mb-4 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-center">{error}</div>}
+            <div className="overflow-x-auto">
+                <table className="min-w-full text-sm text-left text-gray-400">
+                    <thead className="text-xs text-gray-200 uppercase bg-slate-700">
+                        <tr>
+                            <th className="px-6 py-3">Status</th>
+                            <th className="px-6 py-3">Name</th>
+                            <th className="px-6 py-3">Role</th>
+                            <th className="px-6 py-3">Class/Context</th>
+                            <th className="px-6 py-3">Last Activity</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {users.map((user) => (
+                            <tr key={user.uid} className="bg-slate-800 border-b border-slate-700 hover:bg-slate-700 transition-colors">
+                                <td className="px-6 py-4">
+                                    <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                        user.state === 'online' 
+                                            ? 'bg-green-500/10 text-green-400 border border-green-500/20' 
+                                            : 'bg-gray-500/10 text-gray-400 border border-gray-500/20'
+                                    }`}>
+                                        <span className={`w-1.5 h-1.5 mr-1.5 rounded-full ${user.state === 'online' ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`}></span>
+                                        {user.state === 'online' ? 'Online' : 'Offline'}
+                                    </div>
+                                </td>
+                                <td className="px-6 py-4 font-medium text-white">
+                                    {user.name || 'Unknown'}
+                                </td>
+                                <td className="px-6 py-4 capitalize">
+                                    {user.role || 'N/A'}
+                                </td>
+                                <td className="px-6 py-4">
+                                    {user.class || 'N/A'}
+                                </td>
+                                <td className="px-6 py-4 text-xs">
+                                    {user.last_changed ? new Date(user.last_changed).toLocaleString() : 'Never'}
+                                </td>
+                            </tr>
+                        ))}
+                        {users.length === 0 && !error && (
+                            <tr>
+                                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                                    No user activity recorded yet.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        </Card>
+    );
+};
+
 
 const AdminTerminalReports: React.FC<{ allUsers: UserProfile[], schoolSettings: SchoolSettings | null, userProfile: UserProfile | null }> = ({ allUsers, schoolSettings, userProfile }) => {
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -67,13 +192,11 @@ const AdminTerminalReports: React.FC<{ allUsers: UserProfile[], schoolSettings: 
         const reportId = `${sanitizedAcademicYear}_${term}_${student.class}`;
         const summaryId = `${sanitizedAcademicYear}_${term}_${student.uid}`;
 
-        // FIX: Replaced v9 onSnapshot(doc(...)) with v8 compat syntax.
         const unsubReport = db.collection('terminalReports').doc(reportId).onSnapshot((doc) => {
             setReportData(doc.exists ? doc.data() as TerminalReport : null);
             setIsLoading(false);
         }, () => setIsLoading(false));
 
-        // FIX: Replaced v9 onSnapshot(doc(...)) with v8 compat syntax.
         const unsubSummary = db.collection('reportSummaries').doc(summaryId).onSnapshot((doc) => {
             setSummaryData(doc.exists ? doc.data() as ReportSummary : null);
         });
@@ -96,10 +219,8 @@ const AdminTerminalReports: React.FC<{ allUsers: UserProfile[], schoolSettings: 
         if (!selectedStudent || !userProfile) return;
         setIsSavingRemarks(true);
         const summaryId = `${sanitizedAcademicYear}_${term}_${selectedStudent.uid}`;
-        // FIX: Replaced v9 doc() with v8 compat syntax.
         const summaryRef = db.collection('reportSummaries').doc(summaryId);
         try {
-            // FIX: Replaced v9 setDoc() with v8 compat syntax.
             await summaryRef.set({
                 id: summaryId,
                 studentId: selectedStudent.uid,
@@ -241,18 +362,15 @@ const ClassManagerModal: React.FC<ClassManagerModalProps> = ({ classId, allUsers
 
     const teachers = useMemo(() => allUsers.filter(u => u.role === 'teacher' && u.status === 'approved'), [allUsers]);
     
-    // State for pending changes
     const [classTeacherUid, setClassTeacherUid] = useState<string>('');
     const [otherTeacherUids, setOtherTeacherUids] = useState<string[]>([]);
     const [studentsInClass, setStudentsInClass] = useState<UserProfile[]>([]);
     const [otherStudents, setOtherStudents] = useState<UserProfile[]>([]);
 
-    // State for transfer list selections
     const [selectedStudentsInClass, setSelectedStudentsInClass] = useState<string[]>([]);
     const [selectedOtherStudents, setSelectedOtherStudents] = useState<string[]>([]);
     
     useEffect(() => {
-        // Initialize state from props
         const currentClassTeacher = teachers.find(t => t.classTeacherOf === classId);
         setClassTeacherUid(currentClassTeacher?.uid || '');
 
@@ -269,55 +387,41 @@ const ClassManagerModal: React.FC<ClassManagerModalProps> = ({ classId, allUsers
         setLoading(true);
         setError('');
 
-        // FIX: Replaced v9 writeBatch() with v8 compat syntax.
         const batch = db.batch();
 
-        // 1. Update Class Teacher
         const originalTeacher = teachers.find(t => t.classTeacherOf === classId);
         if (originalTeacher && originalTeacher.uid !== classTeacherUid) {
-            // FIX: Replaced v9 doc() with v8 compat syntax.
             const ref = db.collection('users').doc(originalTeacher.uid);
-            // FIX: Replaced v9 deleteField() with v8 compat syntax.
             batch.update(ref, { classTeacherOf: firebase.firestore.FieldValue.delete() });
         }
         if (classTeacherUid && classTeacherUid !== originalTeacher?.uid) {
-            // FIX: Replaced v9 doc() with v8 compat syntax.
             const ref = db.collection('users').doc(classTeacherUid);
             batch.update(ref, { classTeacherOf: classId });
         }
 
-        // 2. Update Other Teachers' `classesTaught` array
         teachers.forEach(teacher => {
-            // FIX: Replaced v9 doc() with v8 compat syntax.
             const userDocRef = db.collection('users').doc(teacher.uid);
             const isAssigned = otherTeacherUids.includes(teacher.uid) || classTeacherUid === teacher.uid;
             const wasAssigned = teacher.classesTaught?.includes(classId) || teacher.classTeacherOf === classId;
 
             if (isAssigned && !wasAssigned) {
-                // FIX: Replaced v9 arrayUnion() with v8 compat syntax.
                 batch.update(userDocRef, { classesTaught: firebase.firestore.FieldValue.arrayUnion(classId) });
             } else if (!isAssigned && wasAssigned) {
-                // FIX: Replaced v9 arrayRemove() with v8 compat syntax.
                 batch.update(userDocRef, { classesTaught: firebase.firestore.FieldValue.arrayRemove(classId) });
             }
         });
 
-        // 3. Update students who are now in the class
         studentsInClass.forEach(student => {
             if (student.class !== classId) {
-                // FIX: Replaced v9 doc() with v8 compat syntax.
                 const ref = db.collection('users').doc(student.uid);
                 batch.update(ref, { class: classId });
             }
         });
         
-        // 4. Update students who were removed from the class
         otherStudents.forEach(student => {
             const wasInClass = allUsers.find(u => u.uid === student.uid)?.class === classId;
             if (wasInClass) {
-                 // FIX: Replaced v9 doc() with v8 compat syntax.
                  const ref = db.collection('users').doc(student.uid);
-                 // FIX: Replaced v9 deleteField() with v8 compat syntax.
                  batch.update(ref, { class: firebase.firestore.FieldValue.delete() });
             }
         });
@@ -356,7 +460,6 @@ const ClassManagerModal: React.FC<ClassManagerModalProps> = ({ classId, allUsers
                     <button onClick={onClose} className="text-gray-400 hover:text-white">&times;</button>
                  </div>
                  <div className="flex-grow overflow-y-auto pr-2 space-y-6">
-                    {/* Teacher Assignment */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <label className="block text-sm font-medium text-gray-300 mb-1">Class Teacher</label>
@@ -367,18 +470,15 @@ const ClassManagerModal: React.FC<ClassManagerModalProps> = ({ classId, allUsers
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-300 mb-1">Other Subject Teachers</label>
-                            {/* FIX: Explicitly cast `option` to `HTMLOptionElement` to resolve type error. */}
                             <select multiple value={otherTeacherUids} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setOtherTeacherUids(Array.from(e.target.selectedOptions).map(option => (option as HTMLOptionElement).value))} className="w-full p-2 bg-slate-700 rounded-md h-24">
                                 {teachers.filter(t => t.uid !== classTeacherUid).map(t => <option key={t.uid} value={t.uid}>{t.name}</option>)}
                             </select>
                         </div>
                     </div>
 
-                    {/* Student Transfer List */}
                     <div>
                         <h3 className="font-semibold text-lg mb-2">Manage Students</h3>
                         <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 items-center">
-                            {/* Other Students */}
                             <div className="flex flex-col h-64 border border-slate-700 rounded-md p-2">
                                 <h4 className="text-sm font-bold mb-2">Other Students ({otherStudents.length})</h4>
                                 <div className="flex-grow overflow-y-auto bg-slate-900/50 rounded-md">
@@ -390,12 +490,10 @@ const ClassManagerModal: React.FC<ClassManagerModalProps> = ({ classId, allUsers
                                     ))}
                                 </div>
                             </div>
-                            {/* Buttons */}
                             <div className="flex flex-col gap-2">
                                 <Button onClick={() => handleStudentMove('toClass')} disabled={selectedOtherStudents.length === 0}>>></Button>
                                 <Button onClick={() => handleStudentMove('fromClass')} disabled={selectedStudentsInClass.length === 0}>&lt;&lt;</Button>
                             </div>
-                            {/* Students in Class */}
                             <div className="flex flex-col h-64 border border-slate-700 rounded-md p-2">
                                 <h4 className="text-sm font-bold mb-2">Students in {classId} ({studentsInClass.length})</h4>
                                  <div className="flex-grow overflow-y-auto bg-slate-900/50 rounded-md">
@@ -426,7 +524,6 @@ interface AdminViewProps {
   setIsSidebarExpanded: (isExpanded: boolean) => void;
 }
 
-// Helper to convert file to base64 for Gemini API
 const fileToBase64 = (file: File): Promise<{ mimeType: string, data: string }> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -440,7 +537,7 @@ const fileToBase64 = (file: File): Promise<{ mimeType: string, data: string }> =
     });
 };
 
-const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
+export const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
     const { user, userProfile, schoolSettings, subscriptionStatus } = useAuthentication();
     const [activeTab, setActiveTab] = useState('dashboard');
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
@@ -454,14 +551,11 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
     const [activationTokens, setActivationTokens] = useState<ActivationToken[]>([]);
     const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
 
-    // Subject Management State
     const [editedSubjectsByClass, setEditedSubjectsByClass] = useState<SubjectsByClass | null>(null);
     const [isSavingSubjects, setIsSavingSubjects] = useState(false);
     
-    // Class Management
     const [managingClass, setManagingClass] = useState<string | null>(null);
 
-    // User & Content Management State
     const [userManagementSubTab, setUserManagementSubTab] = useState('view_users');
     const [userSearchTerm, setUserSearchTerm] = useState('');
     const [userRoleFilter, setUserRoleFilter] = useState('all');
@@ -472,28 +566,22 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
     const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
     const [selectedUserUids, setSelectedUserUids] = useState<string[]>([]);
     const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
-    const [rejectUsers, { loading: isDeletingUser, error: deleteError }] = useRejectUser();
+    const [rejectUsers, { loading: isDeletingUser }] = useRejectUser();
 
-
-    // Material Upload State
     const [teachingMaterials, setTeachingMaterials] = useState<TeachingMaterial[]>([]);
     const [materialTitle, setMaterialTitle] = useState('');
     const [materialFile, setMaterialFile] = useState<File | null>(null);
     const [materialTargetClasses, setMaterialTargetClasses] = useState<string[]>([]);
     const [isUploading, setIsUploading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0);
     const [materialToDelete, setMaterialToDelete] = useState<TeachingMaterial | null>(null);
     const [isDeletingMaterial, setIsDeletingMaterial] = useState(false);
     const [loadingMessage, setLoadingMessage] = useState('');
     const [viewingMaterial, setViewingMaterial] = useState<TeachingMaterial | null>(null);
-    const [previewMaterialContent, setPreviewMaterialContent] = useState<string | null>(null);
 
 
-    // Calendar State
     const [showEventForm, setShowEventForm] = useState(false);
     const [newEvent, setNewEvent] = useState<Omit<SchoolEvent, 'id' | 'createdAt'>>({ title: '', description: '', date: '', type: 'Event', audience: 'All', createdBy: '', createdByName: '' });
 
-    // Timetable State
     const [isGeneratingTimetable, setIsGeneratingTimetable] = useState(false);
     const [classesForGeneration, setClassesForGeneration] = useState<string[]>([]);
     const [timetableGenerationPrompt, setTimetableGenerationPrompt] = useState('');
@@ -514,7 +602,6 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
         lessonDuration: 45,
     });
 
-    // Communication State
     const [communicationMessage, setCommunicationMessage] = useState('');
     const [communicationClasses, setCommunicationClasses] = useState<string[]>([]);
     const [communicationFile, setCommunicationFile] = useState<File | null>(null);
@@ -523,7 +610,6 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
     const [previewAiMessage, setPreviewAiMessage] = useState<string | null>(null);
 
 
-    // AI Assistant State
     const [aiSystemInstruction, setAiSystemInstruction] = useState('');
     const [aiSuggestedPrompts, setAiSuggestedPrompts] = useState<string[]>([]);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -564,7 +650,6 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
     const fetchAllUsers = async () => {
         setLoadingUsers(true);
         try {
-            // FIX: Replaced v9 getDocs(collection(...)) with v8 compat syntax.
             const snapshot = await db.collection('users').get();
             const users = snapshot.docs.map(doc => doc.data() as UserProfile);
             setAllUsers(users);
@@ -580,39 +665,32 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
         
         const unsubscribers: (() => void)[] = [];
 
-        // FIX: Replaced v9 onSnapshot(doc(...)) with v8 compat syntax.
         unsubscribers.push(db.collection('schoolConfig').doc('subjects').onSnapshot((doc) => {
             const data = doc.exists ? doc.data() as SubjectsByClass : {};
             setSubjectsByClass(data);
-            setEditedSubjectsByClass(JSON.parse(JSON.stringify(data))); // Deep copy for editing
+            setEditedSubjectsByClass(JSON.parse(JSON.stringify(data))); 
         }));
         
-        // FIX: Replaced v9 onSnapshot(collection(...)) with v8 compat syntax.
         unsubscribers.push(db.collection('timetables').onSnapshot((snap) => {
             setTimetables(snap.docs.map(doc => doc.data() as Timetable));
         }));
         
-        // FIX: Replaced v9 onSnapshot(query(collection(...), orderBy(...))) with v8 compat syntax.
         unsubscribers.push(db.collection('calendarEvents').orderBy('date', 'desc').onSnapshot((snap) => {
             setEvents(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as SchoolEvent)));
         }));
         
-        // FIX: Replaced v9 onSnapshot(query(collection(...), orderBy(...))) with v8 compat syntax.
         unsubscribers.push(db.collection('teachingMaterials').orderBy('createdAt', 'desc').onSnapshot((snap) => {
             setTeachingMaterials(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeachingMaterial)));
         }));
         
-        // FIX: Replaced v9 onSnapshot(collection(...)) with v8 compat syntax.
         unsubscribers.push(db.collection('activationTokens').onSnapshot((snap) => {
             const tokens = snap.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data(),
             } as ActivationToken));
-            // FIX: Add fallback for planType to prevent crash if data is malformed.
             setActivationTokens(tokens.sort((a, b) => (a.planType || '').localeCompare(b.planType || '')));
         }));
         
-        // FIX: Replaced v9 onSnapshot(collection(...)) with v8 compat syntax.
         unsubscribers.push(db.collection('attendance').onSnapshot((snap) => {
             setAttendanceRecords(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceRecord)));
         }));
@@ -627,7 +705,6 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
     }, [schoolSettings]);
     
 
-    // AI Assistant Context
     useEffect(() => {
         const baseInstruction = "You are an AI assistant for the school administrator at UTOPIA INTERNATIONAL SCHOOL. Your role is to provide high-level summaries of school data, help draft announcements, and answer questions about managing users, classes, and school-wide settings. Maintain a professional and efficient tone. You can summarize the content on the admin's current page if asked. As a bilingual AI, you can also be 'Kofi AI'. If a user speaks Twi, respond as Kofi AI in fluent Asante Twi, using correct grammar and letters like 'ɛ' and 'ɔ'.";
         let context = '';
@@ -638,6 +715,10 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
                 context = `The admin is on the main Dashboard. There are ${allUsers.length} total users.`;
                 prompts.push("Draft an announcement about the upcoming PTA meeting.");
                 prompts.push("Give me a summary of school statistics.");
+                break;
+            case 'active_users':
+                context = "The admin is viewing the list of currently active (online) users.";
+                prompts.push("How many users are online right now?");
                 break;
             case 'user_management':
                 context = `The admin is on the 'User Management' page, viewing a list of all ${allUsers.length} users in the system.`;
@@ -653,6 +734,10 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
                 context = `The admin is on the 'AI Timetable Management' page. They can generate new timetables or review existing ones.`;
                 prompts.push("Give me an example of a good prompt for the timetable generator.");
                 prompts.push("Explain the constraints the AI uses for timetables.");
+                break;
+            case 'school_calendar':
+                context = `The admin is on the 'School Calendar' page. They can create or delete school-wide events.`;
+                prompts.push("Suggest some engaging school events for the term.");
                 break;
             case 'school_settings':
                 context = `The admin is on the 'School Settings' page, managing global configurations like school name and academic year.`;
@@ -675,7 +760,6 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
         if (!currentSettings) return;
         setIsSavingSettings(true);
         try {
-            // FIX: Replaced v9 setDoc(doc(...)) with v8 compat syntax.
             await db.collection('schoolConfig').doc('settings').set(currentSettings, { merge: true });
             setToast({ message: "Settings saved successfully!", type: 'success'});
         } catch (error) {
@@ -694,12 +778,10 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
             ...newEvent,
             createdBy: userProfile.uid,
             createdByName: userProfile.name || userProfile.email || 'Administrator',
-            // FIX: Replaced v9 serverTimestamp() with v8 compat syntax.
             createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
         };
 
         try {
-            // FIX: Replaced v9 addDoc(collection(...)) with v8 compat syntax.
             const eventDocRef = await db.collection('calendarEvents').add(dataToSave);
 
             setToast({ message: 'Event created. Sending notifications...', type: 'success' });
@@ -728,7 +810,6 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
     
     const handleDeleteEvent = async (eventId: string) => {
         if (window.confirm("Are you sure you want to delete this event?")) {
-            // FIX: Replaced v9 deleteDoc(doc(...)) with v8 compat syntax.
             await db.collection('calendarEvents').doc(eventId).delete();
         }
     };
@@ -777,9 +858,6 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
             const requestFromUser = timetableGenerationPrompt;
 
             const isCreation = existingTimetablesForSelectedClasses.length === 0;
-            const taskDescription = isCreation ?
-                "You are a school administrator creating a new weekly timetable from scratch." :
-                "You are a school administrator modifying an existing weekly timetable based on a user's request.";
             const requestLabel = isCreation ? "REQUEST" : "MODIFICATION REQUEST";
 
             const finalPrompt = `
@@ -864,7 +942,7 @@ ${requestFromUser}
 
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3-pro-preview',
                 contents: finalPrompt,
                 config: {
                     responseMimeType: 'application/json',
@@ -877,7 +955,6 @@ ${requestFromUser}
                 jsonString = jsonString.substring(7, jsonString.length - 3).trim();
             }
 
-            // FIX: Cast the result of JSON.parse to the expected type to resolve type errors.
             const generatedTimetables = JSON.parse(jsonString) as GeneratedTimetable[];
             
             if (!Array.isArray(generatedTimetables)) {
@@ -906,15 +983,12 @@ ${requestFromUser}
         if (!generatedTimetablesPreview || !userProfile) return;
         setIsSavingTimetables(true);
         try {
-            // FIX: Replaced v9 writeBatch() with v8 compat syntax.
             const batch = db.batch();
             generatedTimetablesPreview.forEach(({ classId, timetableData }) => {
-                // FIX: Replaced v9 doc() with v8 compat syntax.
                 const timetableRef = db.collection('timetables').doc(classId);
                 const timetable: Omit<Timetable, 'id'> = {
                     classId: classId,
                     timetableData: timetableData,
-                    // FIX: Replaced v9 serverTimestamp() with v8 compat syntax and casted type.
                     publishedAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
                     publishedBy: userProfile.name || 'Admin'
                 };
@@ -949,7 +1023,6 @@ ${requestFromUser}
         if (!editedSubjectsByClass) return;
         setIsSavingSubjects(true);
         try {
-            // FIX: Replaced v9 setDoc(doc(...)) with v8 compat syntax.
             await db.collection('schoolConfig').doc('subjects').set(editedSubjectsByClass);
             setToast({ message: "Subject configuration saved successfully!", type: 'success' });
         } catch (error) {
@@ -993,7 +1066,7 @@ ${requestFromUser}
             const prompt = `Based on the attached document (${communicationFile.name}), draft a professional and clear announcement for the teachers of the following classes: ${communicationClasses.join(', ')}. The message should summarize the key points of the document. Keep it concise and formatted for readability.`;
             
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3-pro-preview',
                 contents: { parts: [filePart, { text: prompt }] },
             });
             
@@ -1064,12 +1137,9 @@ ${requestFromUser}
     };
     
     const handleSaveUser = async (uid: string, data: Partial<UserProfile>) => {
-        // FIX: Replaced v9 writeBatch() with v8 compat syntax.
         const batch = db.batch();
-        // FIX: Replaced v9 doc() with v8 compat syntax.
         const userRef = db.collection('users').doc(uid);
 
-        // If a parent's child links changed, we need to update the children too.
         if (data.role === 'parent' && data.childUids) {
             const originalUser = allUsers.find(u => u.uid === uid);
             const originalChildren = originalUser?.childUids || [];
@@ -1079,15 +1149,11 @@ ${requestFromUser}
             const removedChildren = originalChildren.filter(id => !newChildren.includes(id));
 
             addedChildren.forEach(childId => {
-                // FIX: Replaced v9 doc() with v8 compat syntax.
                 const childRef = db.collection('users').doc(childId);
-                // FIX: Replaced v9 arrayUnion() with v8 compat syntax.
                 batch.update(childRef, { parentUids: firebase.firestore.FieldValue.arrayUnion(uid) });
             });
             removedChildren.forEach(childId => {
-                // FIX: Replaced v9 doc() with v8 compat syntax.
                 const childRef = db.collection('users').doc(childId);
-                // FIX: Replaced v9 arrayRemove() with v8 compat syntax.
                 batch.update(childRef, { parentUids: firebase.firestore.FieldValue.arrayRemove(uid) });
             });
         }
@@ -1142,13 +1208,12 @@ ${requestFromUser}
             const prompt = `You are an expert in educational content. Analyze the provided file (${materialFile.name}) and format its content into clean, well-structured HTML. Use headings (h3, h4), lists (ul, ol), bold text (strong), and paragraphs (p) appropriately to make it highly readable as a teaching material. If it's an image of text, perform OCR and then format it. If it's a diagram, describe it clearly within the HTML structure. Return only the HTML body content, without the <html> or <body> tags.`;
             
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3-pro-preview',
                 contents: { parts: [filePart, { text: prompt }] },
             });
             const aiFormattedContent = response.text;
             
             setLoadingMessage('Saving material to database...');
-            // FIX: Replaced v9 addDoc(collection(...)) with v8 compat syntax.
             await db.collection('teachingMaterials').add({
                 title: materialTitle,
                 targetClasses: materialTargetClasses,
@@ -1156,7 +1221,6 @@ ${requestFromUser}
                 uploaderName: userProfile.name,
                 originalFileName: materialFile.name,
                 aiFormattedContent: aiFormattedContent,
-                // FIX: Replaced v9 serverTimestamp() with v8 compat syntax.
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             });
             
@@ -1189,7 +1253,6 @@ ${requestFromUser}
         }
     };
     
-    // FIX: Changed event type to React.FormEvent<HTMLFormElement> to correctly type e.currentTarget.
      const handleGenerateTokens = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const count = parseInt((e.currentTarget.elements.namedItem('token-count') as HTMLInputElement).value, 10);
@@ -1211,7 +1274,6 @@ ${requestFromUser}
         if (!timetableToDelete) return;
         setIsDeletingTimetable(true);
         try {
-            // FIX: Replaced v9 deleteDoc(doc(...)) with v8 compat syntax.
             await db.collection('timetables').doc(timetableToDelete.id).delete();
             setToast({ message: `Timetable for ${timetableToDelete.classId} deleted.`, type: 'success' });
         } catch (err: any) {
@@ -1222,14 +1284,90 @@ ${requestFromUser}
         }
     };
 
+    const renderSchoolCalendar = () => (
+        <Card>
+            <h3 className="text-2xl font-bold mb-6">School Calendar & Events</h3>
+            
+            {/* Event Creation Form */}
+            <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 mb-8">
+                <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-400"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                    Create New Event
+                </h4>
+                <form onSubmit={handleCreateEvent} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                         <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-1">Event Title</label>
+                            <input type="text" value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} required placeholder="e.g., Mid-Term Break" className="w-full p-2 bg-slate-700 rounded-md border border-slate-600" spellCheck={true} autoCorrect="on"/>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-1">Date</label>
+                            <input type="date" value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} required className="w-full p-2 bg-slate-700 rounded-md border border-slate-600"/>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">Description</label>
+                        <textarea rows={2} value={newEvent.description} onChange={e => setNewEvent({...newEvent, description: e.target.value})} placeholder="Details about the event..." className="w-full p-2 bg-slate-700 rounded-md border border-slate-600" spellCheck={true} autoCorrect="on" />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                             <label className="block text-sm font-medium text-gray-300 mb-1">Event Type</label>
+                             <select value={newEvent.type} onChange={e => setNewEvent({...newEvent, type: e.target.value as SchoolEventType})} className="w-full p-2 bg-slate-700 rounded-md border border-slate-600">
+                                 {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                             </select>
+                        </div>
+                        <div>
+                             <label className="block text-sm font-medium text-gray-300 mb-1">Audience</label>
+                             <select value={newEvent.audience} onChange={e => setNewEvent({...newEvent, audience: e.target.value as SchoolEventAudience})} className="w-full p-2 bg-slate-700 rounded-md border border-slate-600">
+                                 {EVENT_AUDIENCE.map(a => <option key={a} value={a}>{a}</option>)}
+                             </select>
+                        </div>
+                    </div>
+                    <div className="flex justify-end pt-2">
+                        <Button type="submit">Create Event</Button>
+                    </div>
+                </form>
+            </div>
+
+            {/* Event List */}
+            <h4 className="text-lg font-semibold mb-4">Upcoming Events</h4>
+            <div className="space-y-3">
+                {events.length > 0 ? events.map(event => (
+                    <div key={event.id} className="p-4 bg-slate-800 rounded-lg border border-slate-700 flex justify-between items-start group">
+                        <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <h5 className="font-bold text-lg text-slate-200">{event.title}</h5>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                    event.type === 'Holiday' ? 'bg-green-900 text-green-300' :
+                                    event.type === 'Exam' ? 'bg-red-900 text-red-300' :
+                                    'bg-blue-900 text-blue-300'
+                                }`}>{event.type}</span>
+                            </div>
+                            <p className="text-sm text-gray-400 mb-2">{new Date(event.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                            <p className="text-sm text-slate-300">{event.description}</p>
+                            <p className="text-xs text-gray-500 mt-2">Visible to: {event.audience}</p>
+                        </div>
+                        <button onClick={() => handleDeleteEvent(event.id)} className="text-slate-500 hover:text-red-400 p-2 transition-colors opacity-0 group-hover:opacity-100" title="Delete Event">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                        </button>
+                    </div>
+                )) : (
+                    <p className="text-gray-500 text-center py-8">No events scheduled.</p>
+                )}
+            </div>
+        </Card>
+    );
+
 
     const navItems = [
       { key: 'dashboard', label: 'Dashboard', icon: '📈' },
+      { key: 'active_users', label: 'Active Users', icon: '🟢' },
       { key: 'approval_queue', label: 'Approval Queue', icon: '✅' },
       { key: 'user_management', label: 'User Management', icon: '👥' },
       { key: 'class_management', label: 'Class Management', icon: '🏫' },
       { key: 'attendance', label: 'Attendance', icon: '📅' },
       { key: 'timetable_management', label: 'Timetables', icon: '🗓️' },
+      { key: 'school_calendar', label: 'School Calendar', icon: '🗓️' },
       { key: 'teaching_materials', label: 'Teaching Materials', icon: '📚' },
       { key: 'terminal_reports', label: 'Terminal Reports', icon: '📄' },
       { key: 'communication', label: 'Communication', icon: '💬' },
@@ -1237,7 +1375,6 @@ ${requestFromUser}
       { key: 'school_settings', label: 'Settings', icon: '⚙️' },
     ];
     
-    // RENDER FUNCTIONS FOR EACH TAB
     const renderDashboard = () => (
         <div className="space-y-6">
             <h2 className="text-3xl font-bold">Admin Dashboard</h2>
@@ -1571,6 +1708,16 @@ ${requestFromUser}
     const renderSchoolSettings = () => (
         <div className="space-y-6">
             <Card>
+                 <h3 className="text-2xl font-bold mb-4">My Account</h3>
+                 <div className="flex items-center justify-between">
+                    <div>
+                        <p className="font-semibold">{userProfile?.name}</p>
+                        <p className="text-sm text-gray-400">{userProfile?.email}</p>
+                    </div>
+                    <Button onClick={() => setShowChangePassword(true)} variant="secondary">Change Password</Button>
+                 </div>
+            </Card>
+            <Card>
                 <h3 className="text-2xl font-bold mb-6">General School Settings</h3>
                 {currentSettings ? (
                     <form onSubmit={(e) => { e.preventDefault(); handleSettingsSave(); }} className="space-y-4 max-w-lg">
@@ -1594,56 +1741,65 @@ ${requestFromUser}
                                 <option value={3}>Term 3</option>
                             </select>
                         </div>
+                         {userProfile?.adminType === 'super' && (
+                             <div className="p-4 bg-red-900/20 border border-red-800 rounded-lg mt-4">
+                                 <h4 className="text-red-400 font-semibold mb-2">Admin Access Control</h4>
+                                 <p className="text-xs text-gray-400 mb-2">Only super admins can see this. Co-admins are managed via the Users tab.</p>
+                                 <div className="text-sm text-gray-300">
+                                     Current Co-Admins: {currentSettings.coAdminUids?.length || 0}
+                                 </div>
+                             </div>
+                         )}
                         <Button type="submit" disabled={isSavingSettings}>{isSavingSettings ? 'Saving...' : 'Save Settings'}</Button>
                     </form>
-                ) : <Spinner />}
+                ) : <div className="flex justify-center"><Spinner /></div>}
             </Card>
-            <Card>
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-2xl font-bold">Subject Management</h3>
-                    <Button onClick={handleSaveSubjects} disabled={isSavingSubjects}>{isSavingSubjects ? 'Saving...' : 'Save Subject Changes'}</Button>
-                </div>
-                <p className="text-sm text-gray-400 mb-4">Enable or disable subjects for each class. This affects which subjects teachers can be assigned to.</p>
+             <Card>
+                <h3 className="text-2xl font-bold mb-6">Subject Configuration</h3>
+                <p className="text-sm text-gray-400 mb-4">Select which subjects are offered for each class. These will appear in timetables and report cards.</p>
                 {editedSubjectsByClass ? (
-                    <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-                        {GES_CLASSES.map(classId => (
-                            <details key={classId} className="bg-slate-900/50 rounded-lg">
-                                <summary className="font-semibold p-3 cursor-pointer">{classId}</summary>
-                                <div className="p-4 border-t border-slate-700 grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div className="space-y-6">
+                        {GES_CLASSES.map(className => (
+                            <div key={className} className="p-4 bg-slate-800 rounded-lg border border-slate-700">
+                                <h4 className="font-bold text-lg mb-3 border-b border-slate-600 pb-1">{className}</h4>
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                                     {GES_SUBJECTS.map(subject => (
-                                        <label key={`${classId}-${subject}`} className="flex items-center space-x-2 cursor-pointer">
-                                            <input type="checkbox"
-                                                checked={(editedSubjectsByClass[classId] || []).includes(subject)}
-                                                onChange={() => handleSubjectChange(classId, subject)}
-                                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-500 rounded bg-slate-700"
+                                        <label key={`${className}-${subject}`} className="flex items-center space-x-2 cursor-pointer p-1 hover:bg-slate-700 rounded">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={(editedSubjectsByClass[className] || []).includes(subject)} 
+                                                onChange={() => handleSubjectChange(className, subject)}
+                                                className="h-4 w-4 rounded bg-slate-900 border-slate-500 text-blue-600 focus:ring-blue-500"
                                             />
-                                            <span className="text-gray-300 text-sm">{subject}</span>
+                                            <span className="text-sm text-gray-300">{subject}</span>
                                         </label>
                                     ))}
                                 </div>
-                            </details>
+                            </div>
                         ))}
+                        <Button onClick={handleSaveSubjects} disabled={isSavingSubjects}>{isSavingSubjects ? 'Saving Subjects...' : 'Save Subject Configuration'}</Button>
                     </div>
-                ) : <Spinner />}
+                ) : <div className="flex justify-center"><Spinner /></div>}
             </Card>
         </div>
     );
-    
+
     const renderContent = () => {
-        if (loadingUsers) return <div className="flex-1 flex justify-center items-center"><Spinner /></div>;
         switch(activeTab) {
             case 'dashboard': return renderDashboard();
-            case 'approval_queue': return <Card><AdminApprovalQueue allUsers={allUsers} /></Card>;
+            case 'active_users': return <ActiveUsersTable />;
             case 'user_management': return renderUserManagement();
             case 'class_management': return renderClassManagement();
-            case 'attendance': return <AdminAttendanceDashboard allUsers={allUsers} attendanceRecords={attendanceRecords} />;
             case 'timetable_management': return renderTimetableManagement();
+            case 'school_calendar': return renderSchoolCalendar();
             case 'teaching_materials': return renderTeachingMaterials();
-            case 'terminal_reports': return <AdminTerminalReports allUsers={allUsers} schoolSettings={schoolSettings} userProfile={userProfile} />;
             case 'communication': return renderCommunication();
             case 'system_activation': return renderSystemActivation();
             case 'school_settings': return renderSchoolSettings();
-            default: return renderDashboard();
+            case 'terminal_reports': return <AdminTerminalReports allUsers={allUsers} schoolSettings={schoolSettings} userProfile={userProfile} />;
+            case 'approval_queue': return <AdminApprovalQueue allUsers={allUsers} />;
+            case 'attendance': return <AdminAttendanceDashboard allUsers={allUsers} attendanceRecords={attendanceRecords} />;
+            default: return <div>Select a tab</div>;
         }
     };
 
@@ -1658,41 +1814,66 @@ ${requestFromUser}
                 title="Admin Portal"
             />
             <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
-                 {renderContent()}
+                {renderContent()}
             </main>
-
-            {/* Modals and other floating components */}
-            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
             <AIAssistant systemInstruction={aiSystemInstruction} suggestedPrompts={aiSuggestedPrompts} />
             {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
-            {editingUser && <UserEditModal isOpen={!!editingUser} onClose={() => setEditingUser(null)} onSave={handleSaveUser} user={editingUser} allUsers={allUsers} subjectsByClass={subjectsByClass} />}
-            {managingClass && <ClassManagerModal classId={managingClass} allUsers={allUsers} onClose={() => setManagingClass(null)} onSave={() => fetchAllUsers()} />}
-            {viewingMaterial && (
-                <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
-                    <Card className="w-full max-w-4xl h-[90vh] flex flex-col">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-bold">{viewingMaterial.title}</h3>
-                            <Button onClick={() => setViewingMaterial(null)}>Close</Button>
-                        </div>
-                        <div className="flex-grow overflow-y-auto bg-slate-900 p-6 rounded-md prose-styles prose-invert" dangerouslySetInnerHTML={{ __html: viewingMaterial.aiFormattedContent }} />
-                    </Card>
-                </div>
+            {editingUser && (
+                <UserEditModal 
+                    isOpen={!!editingUser} 
+                    onClose={() => setEditingUser(null)} 
+                    user={editingUser} 
+                    onSave={handleSaveUser}
+                    allUsers={allUsers}
+                    subjectsByClass={subjectsByClass}
+                />
             )}
-            {viewingTimetable && (
-                <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50" onClick={() => setViewingTimetable(null)}>
-                    <div className="w-full max-w-5xl" onClick={e => e.stopPropagation()}>
-                        <NotebookTimetable classId={viewingTimetable.classId} timetableData={viewingTimetable.timetableData} />
-                        <Button onClick={() => setViewingTimetable(null)} className="mt-4">Close</Button>
-                    </div>
-                </div>
-            )}
-            <ConfirmationModal isOpen={!!userToDelete} onClose={() => setUserToDelete(null)} onConfirm={() => { if(userToDelete) rejectUsers([{uid: userToDelete.uid, role: userToDelete.role}]).then(() => { setUserToDelete(null); fetchAllUsers(); }); }} title="Delete User?" message={<>Are you sure you want to permanently delete <strong>{userToDelete?.name}</strong>? This will permanently delete their account and all associated data (submissions, etc). This action cannot be undone.</>} isLoading={isDeletingUser} confirmButtonText="Yes, Delete User" />
-            <ConfirmationModal isOpen={isBulkDeleteConfirmOpen} onClose={() => setIsBulkDeleteConfirmOpen(false)} onConfirm={handleBulkDelete} title={`Delete ${selectedUserUids.length} Users?`} message={<>Are you sure you want to permanently delete these <strong>{selectedUserUids.length}</strong> users and all their associated data? This action cannot be undone.</>} isLoading={isDeletingUser} confirmButtonText="Yes, Delete All" />
-            <ConfirmationModal isOpen={!!materialToDelete} onClose={() => setMaterialToDelete(null)} onConfirm={handleDeleteMaterial} title="Delete Material?" message={<>Are you sure you want to delete <strong>{materialToDelete?.title}</strong>? This action cannot be undone.</>} isLoading={isDeletingMaterial} confirmButtonText="Yes, Delete" />
-            <ConfirmationModal isOpen={!!timetableToDelete} onClose={() => setTimetableToDelete(null)} onConfirm={handleDeleteTimetable} title="Delete Timetable?" message={<>Are you sure you want to delete the timetable for <strong>{timetableToDelete?.classId}</strong>?</>} isLoading={isDeletingTimetable} confirmButtonText="Yes, Delete" />
-            {showSnapToRegister && <SnapToRegister onClose={() => setShowSnapToRegister(false)} roleToRegister={snapToRegisterRole} />}
+             {managingClass && (
+                <ClassManagerModal
+                    classId={managingClass}
+                    allUsers={allUsers}
+                    onClose={() => setManagingClass(null)}
+                    onSave={fetchAllUsers}
+                />
+             )}
+             {snapToRegisterRole && showSnapToRegister && (
+                <SnapToRegister 
+                    roleToRegister={snapToRegisterRole}
+                    onClose={() => setShowSnapToRegister(false)}
+                />
+             )}
+             {viewingMaterial && (
+                 <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
+                     <Card className="w-full max-w-3xl h-[80vh] flex flex-col">
+                         <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-700">
+                             <h3 className="text-xl font-bold">{viewingMaterial.title}</h3>
+                             <button onClick={() => setViewingMaterial(null)} className="text-gray-400 hover:text-white">&times;</button>
+                         </div>
+                         <div className="flex-grow overflow-y-auto prose-styles prose-invert p-4 bg-slate-900/50 rounded-lg" dangerouslySetInnerHTML={{ __html: viewingMaterial.aiFormattedContent }}></div>
+                     </Card>
+                 </div>
+             )}
+             {viewingTimetable && (
+                 <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
+                     <Card className="w-full max-w-5xl overflow-auto max-h-[90vh]">
+                         <div className="flex justify-between items-center mb-4">
+                             <h3 className="text-xl font-bold">Timetable: {viewingTimetable.classId}</h3>
+                             <Button variant="secondary" onClick={() => setViewingTimetable(null)}>Close</Button>
+                         </div>
+                         <NotebookTimetable classId={viewingTimetable.classId} timetableData={viewingTimetable.timetableData} />
+                     </Card>
+                 </div>
+             )}
+             <ConfirmationModal
+                isOpen={isBulkDeleteConfirmOpen}
+                onClose={() => setIsBulkDeleteConfirmOpen(false)}
+                onConfirm={handleBulkDelete}
+                title="Bulk Delete Users"
+                message={`Are you sure you want to delete ${selectedUserUids.length} users? This action cannot be undone and will remove all associated data.`}
+                isLoading={isDeletingUser}
+                confirmButtonText="Yes, Delete"
+            />
+            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         </div>
     );
 };
-
-export default AdminView;

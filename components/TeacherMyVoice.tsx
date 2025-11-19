@@ -150,8 +150,13 @@ const TeacherMyVoice: React.FC<TeacherMyVoiceProps> = ({ userProfile, setToast }
 
     const stopPlayback = () => {
         if (audioSourceRef.current) {
+            audioSourceRef.current.onended = null;
             audioSourceRef.current.stop();
         }
+        if (window.speechSynthesis.speaking) {
+            window.speechSynthesis.cancel();
+        }
+        setIsPlayingPreview(null);
     };
 
     const handlePreviewVoice = async (voiceIdentifier: string, text: string) => {
@@ -182,10 +187,21 @@ const TeacherMyVoice: React.FC<TeacherMyVoiceProps> = ({ userProfile, setToast }
             source.onended = () => setIsPlayingPreview(null);
             source.start();
             audioSourceRef.current = source;
-        } catch (err) {
-            console.error("TTS preview failed:", err);
-            setToast({ message: "Could not play audio preview.", type: 'error' });
-            setIsPlayingPreview(null);
+        } catch (err: any) {
+            console.warn("TTS preview failed, falling back to browser synthesis:", err.message);
+            // Fallback to browser's native SpeechSynthesis
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.onend = () => setIsPlayingPreview(null);
+                utterance.onerror = () => {
+                    setToast({ message: "Could not play audio preview.", type: 'error' });
+                    setIsPlayingPreview(null);
+                };
+                window.speechSynthesis.speak(utterance);
+            } else {
+                setToast({ message: "Audio playback not supported on this browser.", type: 'error' });
+                setIsPlayingPreview(null);
+            }
         }
     };
 

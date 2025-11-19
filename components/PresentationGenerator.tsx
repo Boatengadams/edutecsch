@@ -1,6 +1,6 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-// FIX: Import firebase for compat services like firestore.FieldValue
 import { db, firebase, storage } from '../services/firebase';
 import { Presentation, Quiz, GeneratedContent, SubjectsByClass, Collaborator, UserProfile, Slide, AssignmentType } from '../types';
 import Card from './common/Card';
@@ -197,7 +197,6 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
   );
   
   // Loading/Error state
-  // FIX: Added 'saving' to the type union to match its usage in the component and resolve the type overlap error.
   const [loadingState, setLoadingState] = useState<'idle' | 'generating_presentation' | 'generating_quiz' | 'saving_assignment' | 'saving'>('idle');
   const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState('');
@@ -440,7 +439,7 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
         Do not include image URLs. Return ONLY the valid JSON object with a root "slides" key.`;
 
         const textResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-pro-preview',
             contents: textPrompt,
             config: {
                 responseMimeType: 'application/json',
@@ -659,7 +658,7 @@ const handleGenerateQuiz = async () => {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-pro-preview',
             contents: prompt,
             config: {
                 responseMimeType: 'application/json',
@@ -790,8 +789,6 @@ const handleGenerateQuiz = async () => {
   const activeSlide = presentation?.slides[currentSlide];
 
   const renderContent = () => {
-    // FIX: Restructure the confusing `if` condition by creating boolean flags for clarity.
-    // This resolves the TypeScript error regarding type overlap by making the logic clearer.
     const isGeneratingOnForm = loadingState !== 'idle' && view === 'form';
     const isSavingContent = loadingState === 'saving';
 
@@ -834,6 +831,7 @@ const handleGenerateQuiz = async () => {
         );
     case 'preview':
     case 'presentation':
+    case 'quiz': // Add 'quiz' case to share the layout
         return (
           <div className="flex flex-col h-full">
              <header className="flex-shrink-0 flex flex-wrap justify-between items-center gap-4 mb-4 pb-4 border-b border-slate-700">
@@ -848,6 +846,8 @@ const handleGenerateQuiz = async () => {
                 {view === 'preview' ? <Button variant="secondary" onClick={handleDiscardPreview}>Discard</Button> : <Button variant="danger" onClick={onClose}>Close</Button>}
               </div>
             </header>
+
+            {error && <p className="text-red-400 text-sm mb-2 p-2 bg-red-900/20 rounded">{error}</p>}
 
             {view === 'presentation' || view === 'preview' ? (
               <div className="flex-grow flex flex-col overflow-hidden">
@@ -912,7 +912,7 @@ const handleGenerateQuiz = async () => {
             {view === 'preview' && (
                  <div className="flex-shrink-0 pt-4 flex gap-2">
                     <Button onClick={handleSaveToLibrary} disabled={loadingState !== 'idle'}>
-                        {loadingState === 'saving' ? 'Saving...' : 'Save to Library'}
+                        Save to Library
                     </Button>
                     <Button onClick={handleStartOptimistically} disabled={loadingState !== 'idle'}>
                         Start Live Lesson
@@ -921,9 +921,6 @@ const handleGenerateQuiz = async () => {
             )}
           </div>
         );
-      case 'quiz':
-        // This is now handled within the 'presentation' case to allow toggling
-        return null;
       default:
         return null;
     }

@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { UserProfile, Assignment, Submission } from '../types';
 import Card from './common/Card';
@@ -49,20 +50,21 @@ const TeacherProgressDashboard: React.FC<TeacherProgressDashboardProps> = ({ stu
             ? (relevantSubmissions.length / (relevantAssignments.length * relevantStudents.length)) * 100
             : 0;
 
-        // FIX: Explicitly typed the accumulator in the reduce function to ensure correct type inference downstream.
-        const performanceBySubject = relevantAssignments.reduce<Record<string, { grades: number[] }>>((acc, assignment) => {
+        const performanceBySubject = relevantAssignments.reduce((acc, assignment) => {
             if (!acc[assignment.subject]) {
                 acc[assignment.subject] = { grades: [] };
             }
             const subjectSubmissions = gradedSubmissions.filter(s => s.assignmentId === assignment.id);
             subjectSubmissions.forEach(sub => {
                 const grade = gradeToNumeric(sub.grade);
-                if (grade !== null) acc[assignment.subject].grades.push(grade);
+                if (grade !== null) {
+                    acc[assignment.subject].grades.push(grade);
+                }
             });
             return acc;
-        }, {});
+        }, {} as Record<string, { grades: number[] }>);
 
-        const subjectChartData = Object.entries(performanceBySubject).map(([subject, data]) => ({
+        const subjectChartData = Object.entries(performanceBySubject).map(([subject, data]: [string, { grades: number[] }]) => ({
             label: subject,
             value: data.grades.length > 0 ? data.grades.reduce((a, b) => a + b, 0) / data.grades.length : 0,
         })).filter(d => d.value > 0);

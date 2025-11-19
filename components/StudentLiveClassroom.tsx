@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { db, firebase } from '../services/firebase';
-import { LiveLesson, LiveLessonResponse, UserProfile, BreakoutWhiteboard, Stroke, Point } from '../types';
+import { LiveLesson, LiveLessonResponse, UserProfile, BreakoutWhiteboard, DrawingElement, Point, DrawingToolType } from '../types';
 import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
@@ -21,11 +22,15 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [breakoutWhiteboard, setBreakoutWhiteboard] = useState<BreakoutWhiteboard | null>(null);
   
+  // Drawing State
+  const [toolMode, setToolMode] = useState<DrawingToolType | 'none'>('pen');
   const [drawColor, setDrawColor] = useState('#3B82F6'); // blue-500
+  const [textInput, setTextInput] = useState<{ x: number, y: number, text: string } | null>(null);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const isDrawing = useRef(false);
-  const currentStroke = useRef<Stroke | null>(null);
+  const currentElement = useRef<DrawingElement | null>(null);
   const [teacherProfile, setTeacherProfile] = useState<UserProfile | null>(null);
   
   const reconstructedLesson = useMemo(() => {
@@ -58,7 +63,6 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
   const studentRoomId = useMemo(() => {
     if (!lesson?.breakoutRoomsActive || !lesson.breakoutRooms) return null;
     for (const [roomId, roomData] of Object.entries(lesson.breakoutRooms)) {
-        // FIX: Cast roomData to its expected type to resolve 'students' property does not exist error.
         if ((roomData as { students: {uid: string, name: string}[] }).students.some(s => s.uid === userProfile.uid)) {
             return roomId;
         }
@@ -68,18 +72,20 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
 
   const isDrawingAllowed = !!(lesson?.whiteboardActive || studentRoomId);
 
-  useLiveLessonAudio(reconstructedLesson, reconstructedLesson?.currentStepIndex ?? 0, teacherProfile);
+  const htmlContent = reconstructedLesson?.lessonPlan[reconstructedLesson.currentStepIndex]?.boardContent;
+  useLiveLessonAudio(htmlContent, teacherProfile);
 
   useEffect(() => {
     const lessonRef = db.collection('liveLessons').doc(lessonId);
     const unsubscribeLesson = lessonRef.onSnapshot(doc => {
       if (doc.exists) {
         const lessonData = { id: doc.id, ...doc.data() } as LiveLesson;
-        if (lessonData.status !== 'active') { onClose(); }
+        if (lessonData.status !== 'active' && lessonData.status !== 'starting') { 
+            onClose(); 
+        }
         setLesson(lessonData);
         setLoading(false);
 
-        // Fetch teacher profile if not already fetched
         if (!teacherProfile && lessonData.teacherId) {
             db.collection('users').doc(lessonData.teacherId).get().then(teacherDoc => {
                 if (teacherDoc.exists) {
@@ -127,7 +133,7 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
   }, [studentRoomId, lessonId]);
   
   
-  const redrawCanvas = useCallback((history: Stroke[] | undefined) => {
+  const redrawCanvas = useCallback((history: DrawingElement[] | undefined) => {
     const canvas = canvasRef.current;
     const board = boardRef.current;
     if (!canvas || !board) return;
@@ -136,25 +142,60 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
 
     canvas.width = board.clientWidth;
     canvas.height = board.clientHeight;
+    const width = canvas.width;
+    const height = canvas.height;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, width, height);
     ctx.lineCap = 'round';
     ctx.lineWidth = 4;
 
-    if (!Array.isArray(history)) {
-        return;
-    }
+    const elementsToDraw = history || [];
 
-    history.forEach(stroke => {
-        if (stroke.points.length < 2) return;
-        ctx.strokeStyle = stroke.color;
-        ctx.beginPath();
-        ctx.moveTo(stroke.points[0].x * canvas.width, stroke.points[0].y * canvas.height);
-        for (let i = 1; i < stroke.points.length; i++) {
-            ctx.lineTo(stroke.points[i].x * canvas.width, stroke.points[i].y * canvas.height);
+    const renderElement = (el: DrawingElement) => {
+        ctx.strokeStyle = el.color;
+        ctx.fillStyle = el.color;
+        ctx.lineWidth = el.type === 'eraser' ? 20 : 4;
+        
+        if (el.type === 'eraser') {
+            ctx.globalCompositeOperation = 'destination-out';
+        } else {
+            ctx.globalCompositeOperation = 'source-over';
         }
-        ctx.stroke();
-    });
+
+        if (el.type === 'pen' || el.type === 'eraser') {
+            if (!el.points || el.points.length < 2) return;
+            ctx.beginPath();
+            ctx.moveTo(el.points[0].x * width, el.points[0].y * height);
+            for (let i = 1; i < el.points.length; i++) {
+                ctx.lineTo(el.points[i].x * width, el.points[i].y * height);
+            }
+            ctx.stroke();
+        } else if (el.type === 'rect') {
+            if (el.x !== undefined && el.y !== undefined && el.width !== undefined && el.height !== undefined) {
+                ctx.strokeRect(el.x * width, el.y * height, el.width * width, el.height * height);
+            }
+        } else if (el.type === 'circle') {
+             if (el.x !== undefined && el.y !== undefined && el.width !== undefined) {
+                ctx.beginPath();
+                const r = Math.abs(el.width * width) / 2;
+                const cx = (el.x * width) + (el.width * width) / 2;
+                const cy = (el.y * height) + (el.height * height) / 2;
+                ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+                ctx.stroke();
+             }
+        } else if (el.type === 'text') {
+             if (el.x !== undefined && el.y !== undefined && el.text) {
+                 ctx.font = 'bold 20px sans-serif';
+                 ctx.fillText(el.text, el.x * width, el.y * height);
+             }
+        }
+        ctx.globalCompositeOperation = 'source-over';
+    };
+
+    elementsToDraw.forEach(renderElement);
+    if (isDrawing.current && currentElement.current) {
+        renderElement(currentElement.current);
+    }
   }, []);
 
   useEffect(() => {
@@ -183,27 +224,48 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!isDrawingAllowed) return;
-    isDrawing.current = true;
     const pos = getCoords(e);
     if (!pos) return;
-    currentStroke.current = { points: [pos], color: drawColor };
+
+    if (toolMode === 'text') {
+        setTextInput({ x: pos.x, y: pos.y, text: '' });
+        return;
+    }
+
+    isDrawing.current = true;
+    if (toolMode === 'pen' || toolMode === 'eraser') {
+        currentElement.current = { type: toolMode, points: [pos], color: drawColor, id: Date.now().toString() };
+    } else if (toolMode === 'rect' || toolMode === 'circle') {
+        currentElement.current = { type: toolMode, x: pos.x, y: pos.y, width: 0, height: 0, color: drawColor, id: Date.now().toString() };
+    }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDrawingAllowed || !isDrawing.current || !currentStroke.current) return;
+    if (!isDrawingAllowed || !isDrawing.current || !currentElement.current) return;
     const pos = getCoords(e);
     if (!pos) return;
-    currentStroke.current.points.push(pos);
+    
+    if (toolMode === 'pen' || toolMode === 'eraser') {
+         currentElement.current.points?.push(pos);
+    } else if (toolMode === 'rect' || toolMode === 'circle') {
+         currentElement.current.width = pos.x - (currentElement.current.x || 0);
+         currentElement.current.height = pos.y - (currentElement.current.y || 0);
+    }
+    
     const history = (studentRoomId ? breakoutWhiteboard?.drawingData : lesson?.drawingData);
-    const currentHistory = Array.isArray(history) ? history : [];
-    redrawCanvas([...currentHistory, currentStroke.current]);
+    redrawCanvas(history);
   };
 
   const handleMouseUp = async () => {
-    if (!isDrawingAllowed || !isDrawing.current) return;
+    if (!isDrawingAllowed || !isDrawing.current || !currentElement.current) return;
     isDrawing.current = false;
     
-    if (currentStroke.current && currentStroke.current.points.length > 1) {
+    // Basic validation
+    let isValid = false;
+    if ((toolMode === 'pen' || toolMode === 'eraser') && (currentElement.current.points?.length || 0) > 1) isValid = true;
+    if ((toolMode === 'rect' || toolMode === 'circle') && (Math.abs(currentElement.current.width || 0) > 0.01)) isValid = true;
+    
+    if (isValid) {
         let docRef;
         if (studentRoomId) {
             docRef = db.collection('liveLessons').doc(lessonId).collection('breakoutWhiteboards').doc(studentRoomId);
@@ -211,11 +273,54 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
             docRef = db.collection('liveLessons').doc(lessonId);
         }
         await docRef.update({
-            drawingData: firebase.firestore.FieldValue.arrayUnion(currentStroke.current)
+            drawingData: firebase.firestore.FieldValue.arrayUnion(currentElement.current)
         });
     }
-    currentStroke.current = null;
+    currentElement.current = null;
   };
+  
+  const handleTextSubmit = async () => {
+      if (!textInput || !textInput.text.trim()) {
+          setTextInput(null);
+          return;
+      }
+      const textElement: DrawingElement = {
+          id: Date.now().toString(),
+          type: 'text',
+          x: textInput.x,
+          y: textInput.y,
+          text: textInput.text,
+          color: drawColor,
+          height: 0.05
+      };
+      
+      let docRef;
+      if (studentRoomId) {
+          docRef = db.collection('liveLessons').doc(lessonId).collection('breakoutWhiteboards').doc(studentRoomId);
+      } else {
+          // Students typically can't draw on main board unless explicitly allowed, but here we assume logic holds
+          docRef = db.collection('liveLessons').doc(lessonId);
+      }
+      await docRef.update({
+          drawingData: firebase.firestore.FieldValue.arrayUnion(textElement)
+      });
+      setTextInput(null);
+  };
+  
+  const handleUndo = async () => {
+      const currentData = studentRoomId ? breakoutWhiteboard?.drawingData : lesson?.drawingData;
+      if (!currentData || currentData.length === 0) return;
+      
+      const newData = currentData.slice(0, -1);
+      let docRef;
+      if (studentRoomId) {
+          docRef = db.collection('liveLessons').doc(lessonId).collection('breakoutWhiteboards').doc(studentRoomId);
+      } else {
+          docRef = db.collection('liveLessons').doc(lessonId);
+      }
+      await docRef.update({ drawingData: newData });
+  };
+
   
   const handleAnswerSubmit = async (answer: string) => {
     if (!lesson || !lesson.currentQuestion || isSubmitting) return;
@@ -246,6 +351,16 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
   if (loading || !reconstructedLesson) {
     return <div className="flex justify-center items-center h-full"><Spinner /><p className="ml-4">Joining Classroom...</p></div>;
   }
+  
+    if (reconstructedLesson.status === 'starting') {
+        return (
+            <div className="absolute inset-0 bg-slate-900 z-50 flex flex-col justify-center items-center">
+                <Spinner />
+                <h2 className="text-2xl font-bold mt-4">Lesson is starting...</h2>
+                <p className="mt-2 text-gray-400">Loading lesson content, please wait.</p>
+            </div>
+        );
+    }
 
   const currentQuestion = reconstructedLesson.currentQuestion;
   const hasAnsweredCurrent = currentQuestion ? answeredQuestionIds.has(currentQuestion.id) : true;
@@ -283,18 +398,36 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
   
   const DrawingToolbar = () => {
     if (!isDrawingAllowed) return null;
+    // Only show tools if in breakout room, usually students only watch the main board.
+    if (!studentRoomId) return null;
+
     const colors = ['#3B82F6', '#EF4444', '#FACC15', '#4ADE80', '#FFFFFF'];
+    const canUndo = (breakoutWhiteboard?.drawingData?.length || 0) > 0;
+
     return (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-800 p-2 rounded-lg shadow-lg flex items-center gap-1.5 z-20">
-            {colors.map(color => (
-                <button key={color} onClick={() => setDrawColor(color)} className={`w-6 h-6 rounded-full border-2 ${drawColor === color ? 'border-white' : 'border-transparent'}`} style={{ backgroundColor: color }} />
-            ))}
+            {toolMode !== 'eraser' && (
+                <>
+                    {colors.map(color => (
+                        <button key={color} onClick={() => setDrawColor(color)} className={`w-6 h-6 rounded-full border-2 ${drawColor === color ? 'border-white' : 'border-transparent'}`} style={{ backgroundColor: color }} />
+                    ))}
+                    <div className="w-px h-6 bg-slate-600 mx-1"></div>
+                </>
+            )}
+             <Button size="sm" variant="secondary" onClick={() => setToolMode(toolMode === 'pen' ? 'none' : 'pen')} className={toolMode === 'pen' ? '!bg-blue-600' : ''} title="Pen">✏️</Button>
+             <Button size="sm" variant="secondary" onClick={() => setToolMode(toolMode === 'eraser' ? 'none' : 'eraser')} className={toolMode === 'eraser' ? '!bg-blue-600' : ''} title="Eraser">🧹</Button>
+             <Button size="sm" variant="secondary" onClick={() => setToolMode(toolMode === 'rect' ? 'none' : 'rect')} className={toolMode === 'rect' ? '!bg-blue-600' : ''} title="Rectangle">⬜</Button>
+             <Button size="sm" variant="secondary" onClick={() => setToolMode(toolMode === 'circle' ? 'none' : 'circle')} className={toolMode === 'circle' ? '!bg-blue-600' : ''} title="Circle">⚪</Button>
+             <Button size="sm" variant="secondary" onClick={() => setToolMode(toolMode === 'text' ? 'none' : 'text')} className={toolMode === 'text' ? '!bg-blue-600' : ''} title="Text">T</Button>
+             <div className="w-px h-6 bg-slate-600 mx-1"></div>
+             <Button size="sm" variant="secondary" onClick={handleUndo} disabled={!canUndo}>Undo</Button>
         </div>
     );
   };
+  
 
   return (
-    <div className="h-full flex flex-col p-4 bg-slate-900/50 rounded-lg">
+    <div className="h-full flex flex-col p-4 bg-slate-900/50 rounded-lg relative">
       <header className="flex-shrink-0 pb-4 mb-4 border-b border-slate-700 flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold">{reconstructedLesson.topic}</h2>
@@ -305,6 +438,19 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
       <div className="flex-grow grid grid-cols-1 md:grid-cols-3 gap-4 overflow-hidden">
         <div className="md:col-span-2 relative h-full">
           <DrawingToolbar />
+          {textInput && (
+                <div className="absolute z-30" style={{ top: textInput.y * (boardRef.current?.clientHeight || 0), left: textInput.x * (boardRef.current?.clientWidth || 0) }}>
+                    <input 
+                        autoFocus
+                        value={textInput.text} 
+                        onChange={e => setTextInput({ ...textInput, text: e.target.value })}
+                        onKeyDown={e => { if (e.key === 'Enter') handleTextSubmit(); }}
+                        onBlur={handleTextSubmit}
+                        className="bg-transparent border-b border-blue-500 text-white focus:outline-none"
+                        style={{ color: drawColor, fontSize: '20px', fontWeight: 'bold' }}
+                    />
+                </div>
+            )}
           <Card className="h-full flex flex-col" fullHeight={false} ref={boardRef} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
              <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full pointer-events-none z-10" />
              {renderMainContent()}

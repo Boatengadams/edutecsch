@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { UserProfile } from '../types';
 import Button from './common/Button';
@@ -58,7 +59,7 @@ const LessonPlanGenerator: React.FC<LessonPlanGeneratorProps> = ({ userProfile }
 
                 Ensure the content is appropriate for the specified class level in the Ghanaian educational context.
             `;
-            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+            const response = await ai.models.generateContent({ model: 'gemini-3-pro-preview', contents: prompt });
             setGeneratedPlan(response.text);
         } catch (err: any) {
             setError('Failed to generate lesson plan. Please try again.');

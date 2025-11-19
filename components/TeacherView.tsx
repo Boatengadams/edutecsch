@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuthentication } from '../hooks/useAuth';
 import { db, storage, functions, firebase } from '../services/firebase';
@@ -23,15 +24,15 @@ import VideoGenerator from './VideoGenerator';
 import TeacherCreateStudentForm from './TeacherCreateStudentForm';
 import TeacherCreateParentForm from './TeacherCreateParentForm';
 import SnapToRegister from './SnapToRegister';
-// FIX: Changed import of TeacherLiveClassroom to be a default import as it is now a default export.
+// FIX: Changed import of TeacherLiveClassroom to default import.
 import TeacherLiveClassroom from './TeacherLiveClassroom';
 import BECEPastQuestionsView from './common/BECEPastQuestionsView';
 import MessagingView from './MessagingView';
 import html2canvas from 'html2canvas';
 import { ProgressDashboard } from './ProgressDashboard';
 import TeacherMyVoice from './TeacherMyVoice';
-import TeacherProgressDashboard from './TeacherProgressDashboard';
 import TeacherAITools from './TeacherAITools';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 
 const getGrade = (score: number) => {
     if (score >= 80) return 'A';
@@ -408,7 +409,7 @@ interface TeacherViewProps {
   setIsSidebarExpanded: (isExpanded: boolean) => void;
 }
 
-export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
+const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
     const { user, userProfile, schoolSettings } = useAuthentication();
     const [activeTab, setActiveTab] = useState('dashboard');
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
@@ -439,6 +440,11 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
     const [isDeletingContent, setIsDeletingContent] = useState(false);
     const [gradeInput, setGradeInput] = useState('');
     const [feedbackInput, setFeedbackInput] = useState('');
+    
+    // Batch Actions UI State
+    const [selectedAssignmentIds, setSelectedAssignmentIds] = useState<string[]>([]);
+    const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
 
     // My Students state
     const [showCreateStudentModal, setShowCreateStudentModal] = useState(false);
@@ -474,6 +480,10 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
     // FIX: Add missing state for AI Assistant
     const [aiSystemInstruction, setAiSystemInstruction] = useState('');
     const [aiSuggestedPrompts, setAiSuggestedPrompts] = useState<string[]>([]);
+    
+    // Online Status
+    const studentUids = useMemo(() => students.map(s => s.uid), [students]);
+    const studentOnlineStatus = useOnlineStatus(studentUids);
   
     // FIX: Add explicit type to useMemo to help with type inference.
     const teacherClasses = useMemo<string[]>(() => {
@@ -578,9 +588,30 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
             .onSnapshot(snap => setSubmissions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Submission)))));
 
         // Fetch students in those classes
-        unsubscribers.push(db.collection('users').where('class', 'in', teacherClasses)
-            .where('role', '==', 'student')
-            .onSnapshot(snap => setStudents(snap.docs.map(doc => doc.data() as UserProfile).filter(u => u && u.uid))));
+        // Chunk the query because 'in' only supports 10 values max
+        const classChunks = [];
+        for (let i = 0; i < teacherClasses.length; i += 10) {
+            classChunks.push(teacherClasses.slice(i, i + 10));
+        }
+
+        if (classChunks.length > 0) {
+             classChunks.forEach(chunk => {
+                 unsubscribers.push(db.collection('users')
+                    .where('class', 'in', chunk)
+                    .where('role', '==', 'student')
+                    .onSnapshot(snap => {
+                        setStudents(prev => {
+                            const newStudents = snap.docs.map(doc => doc.data() as UserProfile).filter(u => u && u.uid);
+                            // Merge and remove duplicates
+                            const studentMap = new Map(prev.map(s => [s.uid, s]));
+                            newStudents.forEach(s => studentMap.set(s.uid, s));
+                            return Array.from(studentMap.values());
+                        });
+                    }));
+             });
+        } else {
+             setStudents([]);
+        }
         
         // Fetch generated content
         unsubscribers.push(db.collection('generatedContent').where('collaboratorUids', 'array-contains', user.uid)
@@ -601,7 +632,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
         if (teacherClasses.length > 0 && teacherSubjects.length > 0) {
             unsubscribers.push(
                 db.collection('terminalReports')
-                    .where('classId', 'in', teacherClasses)
+                    .where('classId', 'in', teacherClasses.slice(0, 10)) // Limit to 10 for now to avoid query issues
                     .onSnapshot(snap => {
                         const reports = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TerminalReport));
                         const relevantReports = reports.filter(report => 
@@ -750,10 +781,39 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
     };
 
     const handleDeleteAssignment = async (assignmentId: string) => {
-        if (window.confirm('Are you sure you want to delete this assignment and all its submissions?')) {
-            // It's safer to use a Cloud Function for this to ensure all related data is deleted.
-            // For now, we'll just delete the assignment doc.
+        if (window.confirm('Are you sure you want to delete this assignment? Submissions will remain orphan but hidden.')) {
             await db.collection('assignments').doc(assignmentId).delete();
+             setToast({ message: 'Assignment deleted.', type: 'success' });
+        }
+    };
+
+    // --- BATCH ACTIONS ---
+    const handleSelectAssignment = (id: string) => {
+        setSelectedAssignmentIds(prev => prev.includes(id) ? prev.filter(pid => pid !== id) : [...prev, id]);
+    };
+
+    const handleSelectAllAssignments = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.checked) {
+            setSelectedAssignmentIds(filteredAssignments.map(a => a.id));
+        } else {
+            setSelectedAssignmentIds([]);
+        }
+    };
+
+    const handleBulkDeleteAssignments = async () => {
+        if (selectedAssignmentIds.length === 0) return;
+        if (window.confirm(`Are you sure you want to delete ${selectedAssignmentIds.length} assignments?`)) {
+            setIsBulkDeleting(true);
+            try {
+                const batchDeletePromises = selectedAssignmentIds.map(id => db.collection('assignments').doc(id).delete());
+                await Promise.all(batchDeletePromises);
+                setToast({ message: 'Assignments deleted successfully.', type: 'success' });
+                setSelectedAssignmentIds([]);
+            } catch (err: any) {
+                 setToast({ message: `Failed to delete assignments: ${err.message}`, type: 'error' });
+            } finally {
+                setIsBulkDeleting(false);
+            }
         }
     };
     
@@ -1085,26 +1145,34 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
 
 
     const navItems = [
-        { key: 'dashboard', label: 'Dashboard', icon: '📊' },
-        { key: 'progress_dashboard', label: 'Progress Dashboard', icon: '📈' },
-        { key: 'my_students', label: 'My Students', icon: '👥' },
-        { key: 'assignments', label: 'Assignments', icon: '📝' },
-        { key: 'live_lesson', label: <span className="flex items-center">Live Lesson {activeLiveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: '▶️' },
-        { key: 'group_work', label: 'Group Work', icon: '👥' },
-        { key: 'messages', label: <span className="flex items-center justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: '✉️' },
-        { key: 'my_library', label: 'My Library', icon: '📚' },
-        { key: 'ai_tools', label: 'AI Tools', icon: '✨' },
-        { key: 'my_voice', label: 'My Voice', icon: '🔊' },
-        { key: 'attendance', label: 'Attendance', icon: '🕒' },
-        { key: 'terminal_reports', label: 'Terminal Reports', icon: '📊' },
-        { key: 'past_questions', label: 'BECE Questions', icon: '❓' },
+        { key: 'dashboard', label: 'Dashboard', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h12A2.25 2.25 0 0 0 20.25 14.25V3M3.75 21h16.5M16.5 3.75h.008v.008H16.5V3.75Z" /></svg> },
+        { key: 'my_students', label: 'My Students', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-7.962a9.348 9.348 0 0 0-1.25-4.433-9.338 9.338 0 0 0-4.088-3.952m-13.5 7.962a9.348 9.348 0 0 0 1.25 4.433m11-4.433c0 1.631-1.314 2.945-2.945 2.945-1.631 0-2.945-1.314-2.945-2.945s1.314-2.945 2.945-2.945 2.945 1.314 2.945 2.945Z" /></svg> },
+        { key: 'assignments', label: 'Assignments', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg> },
+        { key: 'live_lesson', label: <span className="flex items-center">Live Lesson {activeLiveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0-2.51 2.225.515-3.572-3.108-3.108l4.286-1.071L12 3l2.225 4.515 4.286 1.07L15.215 11.7l.515 3.572Z" /></svg> },
+        { key: 'group_work', label: 'Group Work', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" /></svg> },
+        { key: 'messages', label: <span className="flex items-center justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm1.707 2.293a1 1 0 00-1.414 1.414l5 5a1 1 0 001.414 0l5-5a1 1 0 10-1.414-1.414L10 10.586 3.707 7.293z" /></svg> },
+        { key: 'my_library', label: 'My Library', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg> },
+        { key: 'attendance', label: 'Attendance', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
+        { key: 'terminal_reports', label: 'Terminal Reports', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg> },
+        { key: 'past_questions', label: 'BECE Questions', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg> },
+        { key: 'my_voice', label: 'My Voice', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" /></svg> },
+        { key: 'ai_tools', label: 'AI Tools', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" /></svg> },
+        { key: 'settings', label: 'Settings', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-1.007 1.11-.95.542.057 1.007.56 1.066 1.11.06.541-.218 1.14-.644 1.527a4.953 4.953 0 0 1-2.072.827c-.541.06-.95.542-.95 1.11 0 .542.409 1.007.95 1.11a4.953 4.953 0 0 1 2.072.827c.426.387.704.986.644 1.527-.06.542-.524 1.053-1.066 1.11-.541.057-1.02-.352-1.11-.95a4.953 4.953 0 0 1-.95-2.072c-.057-.542-.56-1.007-1.11-.95-.542-.057-1.007-.56-1.066-1.11-.06-.541.218-1.14.644-1.527a4.953 4.953 0 0 1 2.072-.827c.541-.06.95-.542-.95-1.11 0 .542-.409-1.007-.95-1.11a4.953 4.953 0 0 1-2.072-.827c-.426-.387-.704-.986-.644-1.527.06-.542.524-1.053 1.066 1.11.541-.057 1.02.352 1.11-.95Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15.98 3.94c.09-.542.56-1.007 1.11-.95.542.057 1.007.56 1.066 1.11.06.541-.218 1.14-.644 1.527a4.953 4.953 0 0 1-2.072.827c-.541.06-.95.542-.95 1.11 0 .542.409 1.007.95 1.11a4.953 4.953 0 0 1 2.072.827c.426.387.704.986.644 1.527-.06.542-.524 1.053-1.066 1.11-.541.057 1.02.352 1.11-.95Z" /></svg> },
     ];
     
-    if (!user || !userProfile) {
-        return <div className="flex justify-center items-center h-screen"><Spinner /></div>;
-    }
-    
-    const contactsForMessaging = [...students, ...allParents, ...allTeachers.filter(t => t.uid !== user.uid)];
+    const contactsForMessaging = useMemo(() => [...students, ...allParents, ...allTeachers.filter(t => t.uid !== user.uid)], [students, allParents, allTeachers, user.uid]);
+
+    const renderSettings = () => (
+        <Card>
+            <h3 className="text-xl font-bold mb-4">Account Settings</h3>
+            <div className="max-w-md">
+                <h4 className="font-semibold text-gray-300 mb-2">Security</h4>
+                <Button onClick={() => setShowChangePassword(true)} variant="secondary">
+                    Change Password
+                </Button>
+            </div>
+        </Card>
+    );
 
     const renderContent = () => {
         if (loading) return <div className="flex-1 flex justify-center items-center"><Spinner /></div>;
@@ -1112,10 +1180,6 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
         switch (activeTab) {
             case 'dashboard':
                 return <TeacherDashboard userProfile={userProfile} students={students} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} />;
-            case 'progress_dashboard':
-                return <TeacherProgressDashboard students={students} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} />;
-            case 'ai_tools':
-                return <TeacherAITools students={students} userProfile={userProfile} />;
             case 'my_students':
                 const studentsByClass = students.reduce((acc: Record<string, UserProfile[]>, student) => {
                     const classKey = student.class || 'Unassigned';
@@ -1141,8 +1205,10 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                                     </div>
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                         {classStudents.map(student => (
-                                            <button key={student.uid} onClick={() => setViewingStudentProgress(student)} className="p-3 bg-slate-700 rounded-lg text-left hover:bg-slate-600 transition-colors">
-                                                {student.name}
+                                            <button key={student.uid} onClick={() => setViewingStudentProgress(student)} className="p-3 bg-slate-700 rounded-lg text-left hover:bg-slate-600 transition-colors flex items-center justify-between">
+                                                <span>{student.name}</span>
+                                                {/* Online Status Indicator */}
+                                                <span className={`inline-block w-2.5 h-2.5 rounded-full ${studentOnlineStatus[student.uid] === 'online' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-gray-500'}`} title={studentOnlineStatus[student.uid] === 'online' ? 'Online' : 'Offline'}></span>
                                             </button>
                                         ))}
                                     </div>
@@ -1153,57 +1219,116 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                  );
             case 'assignments':
                 return (
-                    <div className="space-y-6">
-                        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                            <h2 className="text-3xl font-bold">Assignments</h2>
-                            <div className="flex items-center gap-4">
+                    <Card className="h-full flex flex-col p-0 overflow-hidden">
+                         <div className="p-4 border-b border-slate-700 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-800/30">
+                            <h2 className="text-2xl font-bold">Assignments Manager</h2>
+                            <div className="flex flex-wrap items-center gap-3">
                                 <div className="flex items-center gap-2">
-                                    <label htmlFor="class-filter" className="text-sm text-gray-400">Class:</label>
-                                    <select id="class-filter" value={classFilter} onChange={e => setClassFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm">
+                                    <select id="class-filter" value={classFilter} onChange={e => setClassFilter(e.target.value)} className="px-3 py-1.5 bg-slate-900 rounded-md border border-slate-700 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                                         <option value="all">All Classes</option>
                                         {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
                                     </select>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                     <label htmlFor="subject-filter" className="text-sm text-gray-400">Subject:</label>
-                                    <select id="subject-filter" value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm">
+                                    <select id="subject-filter" value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} className="px-3 py-1.5 bg-slate-900 rounded-md border border-slate-700 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                                         <option value="all">All Subjects</option>
                                         {subjectsForFilter.map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
                                 </div>
-                                <Button onClick={handleCreateNewAssignment}>+ Create</Button>
+                                <Button size="sm" onClick={handleCreateNewAssignment} className="flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" /></svg>
+                                    Create
+                                </Button>
                             </div>
                         </div>
+                        
+                        {/* Batch Action Bar */}
+                        {selectedAssignmentIds.length > 0 && (
+                             <div className="bg-blue-900/20 border-b border-blue-800/50 p-2 px-4 flex items-center gap-4 animate-fade-in-short">
+                                 <span className="text-sm font-semibold text-blue-200">{selectedAssignmentIds.length} selected</span>
+                                 <Button size="sm" variant="danger" onClick={handleBulkDeleteAssignments} disabled={isBulkDeleting}>
+                                     {isBulkDeleting ? 'Deleting...' : `Delete Selected (${selectedAssignmentIds.length})`}
+                                 </Button>
+                                 <button onClick={() => setSelectedAssignmentIds([])} className="text-xs text-slate-400 hover:text-white underline">Cancel Selection</button>
+                             </div>
+                        )}
 
-                        {filteredAssignments.map(assignment => (
-                            <Card key={assignment.id}>
-                                <div className="flex justify-between items-start gap-4">
-                                    <div>
-                                        <h3 className="text-xl font-bold">{assignment.title}</h3>
-                                        <p className="text-sm text-gray-400">{assignment.classId} &bull; {assignment.subject}</p>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <Button size="sm" variant="secondary" onClick={() => handleEditAssignment(assignment)}>Edit</Button>
-                                        <Button size="sm" variant="danger" onClick={() => handleDeleteAssignment(assignment.id)}>Delete</Button>
-                                    </div>
+                        <div className="flex-1 overflow-y-auto">
+                            {filteredAssignments.length > 0 ? (
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="bg-slate-900/50 text-xs uppercase text-gray-400 sticky top-0 z-10">
+                                        <tr>
+                                            <th className="p-4 w-10">
+                                                <input type="checkbox" onChange={handleSelectAllAssignments} checked={selectedAssignmentIds.length === filteredAssignments.length && filteredAssignments.length > 0} className="rounded bg-slate-700 border-slate-600 text-blue-600 focus:ring-blue-500" />
+                                            </th>
+                                            <th className="p-4 font-semibold border-b border-slate-700">Title</th>
+                                            <th className="p-4 font-semibold border-b border-slate-700">Class & Subject</th>
+                                            <th className="p-4 font-semibold border-b border-slate-700">Due Date</th>
+                                            <th className="p-4 font-semibold border-b border-slate-700 text-center">Submissions</th>
+                                            <th className="p-4 font-semibold border-b border-slate-700 text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-700/50">
+                                        {filteredAssignments.map(assignment => {
+                                            const subCount = submissions.filter(s => s.assignmentId === assignment.id).length;
+                                            const isOverdue = assignment.dueDate && new Date(assignment.dueDate) < new Date();
+                                            const isSelected = selectedAssignmentIds.includes(assignment.id);
+                                            
+                                            return (
+                                            <tr key={assignment.id} className={`hover:bg-slate-700/30 transition-colors group ${isSelected ? 'bg-blue-900/10' : ''}`}>
+                                                <td className="p-4">
+                                                    <input type="checkbox" checked={isSelected} onChange={() => handleSelectAssignment(assignment.id)} className="rounded bg-slate-700 border-slate-600 text-blue-600 focus:ring-blue-500" />
+                                                </td>
+                                                <td className="p-4">
+                                                    <p className="font-bold text-slate-200">{assignment.title}</p>
+                                                    <p className="text-xs text-gray-500 mt-0.5 truncate max-w-xs">{assignment.description.substring(0, 60)}...</p>
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-900/30 text-blue-300 w-fit">{assignment.classId}</span>
+                                                        <span className="text-xs text-gray-400">{assignment.subject}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-4 text-sm">
+                                                    <span className={isOverdue ? 'text-red-400' : 'text-gray-300'}>
+                                                        {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'No Due Date'}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${subCount > 0 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                                        {subCount}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-right">
+                                                    <div className="flex items-center justify-end gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                                        <button onClick={() => setViewingSubmissionsFor(assignment)} className="p-2 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-full transition-colors" title="View Submissions">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" /><path fillRule="evenodd" d="M.664 10.59a1.651 1.651 0 0 1 0-1.186A10.004 10.004 0 0 1 10 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0 1 10 17c-4.257 0-7.893-2.66-9.336-6.41ZM14 10a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" clipRule="evenodd" /></svg>
+                                                        </button>
+                                                        <button onClick={() => handleEditAssignment(assignment)} className="p-2 text-slate-400 hover:text-yellow-400 hover:bg-yellow-400/10 rounded-full transition-colors" title="Edit">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" /><path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" /></svg>
+                                                        </button>
+                                                        <button onClick={() => handleDeleteAssignment(assignment.id)} className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-full transition-colors" title="Delete">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" /></svg>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )})}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full text-gray-500 space-y-4">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-16 h-16 opacity-20"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+                                    <p>No assignments found matching your filters.</p>
+                                    <Button size="sm" variant="secondary" onClick={handleCreateNewAssignment}>Create First Assignment</Button>
                                 </div>
-                                <div className="mt-4 pt-4 border-t border-slate-700">
-                                    <h4 className="font-semibold text-gray-300">Description</h4>
-                                    <p className="text-sm text-gray-400 whitespace-pre-wrap">{assignment.description.substring(0, 150)}{assignment.description.length > 150 && '...'}</p>
-                                </div>
-                                 <div className="mt-4 flex justify-between items-center">
-                                    <p className="text-sm text-yellow-400">Due: {assignment.dueDate || 'Not set'}</p>
-                                    <Button onClick={() => setViewingSubmissionsFor(assignment)}>
-                                        View Submissions ({submissions.filter(s => s.assignmentId === assignment.id).length})
-                                    </Button>
-                                 </div>
-                            </Card>
-                        ))}
-                    </div>
+                            )}
+                        </div>
+                    </Card>
                 );
             case 'live_lesson':
                 return activeLiveLesson ? 
-                        <TeacherLiveClassroom lessonId={activeLiveLesson.id} userProfile={userProfile} onClose={() => {}} setToast={setToast} />
+                        <TeacherLiveClassroom lessonId={activeLiveLesson.id} userProfile={userProfile} onClose={() => {}} />
                         :
                         <div className="text-center p-8">
                             <h2 className="text-3xl font-bold">Live Lesson</h2>
@@ -1274,8 +1399,6 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                         </div>
                     </div>
                 );
-            case 'my_voice':
-                return <TeacherMyVoice userProfile={userProfile} setToast={setToast} />;
             case 'attendance':
                 if (!userProfile.classTeacherOf) {
                     return <Card><p className="text-center">You are not a designated class teacher. Only class teachers can take attendance.</p></Card>;
@@ -1390,6 +1513,12 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                 );
             case 'past_questions':
                 return <BECEPastQuestionsView />;
+            case 'my_voice':
+                return <TeacherMyVoice userProfile={userProfile} setToast={setToast} />;
+            case 'ai_tools':
+                return <TeacherAITools students={students} userProfile={userProfile} />;
+            case 'settings':
+                return renderSettings();
             default:
                 return <div>Select a tab</div>;
         }
@@ -1572,3 +1701,5 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
         </div>
     );
 };
+
+export default TeacherView;

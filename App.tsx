@@ -1,17 +1,15 @@
 import React, { useState, useEffect, ReactNode } from 'react';
+import { createRoot } from 'react-dom/client';
 import { useAuthentication, AuthenticationContext } from './hooks/useAuth';
 import { firebaseAuth, db } from './services/firebase';
 import type { UserProfile, SchoolSettings, SubscriptionStatus, UserRole } from './types';
-// FIX: Use firebase from compat/app to get the User type
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
 import AuthForm from './components/AuthForm';
 import RoleSelector from './components/RoleSelector';
-// FIX: Changed import to a named import to match the export in TeacherView.tsx.
-import { TeacherView } from './components/TeacherView';
-// FIX: Changed to a default import as StudentView is now default exported.
+import TeacherView from './components/TeacherView';
 import StudentView from './components/StudentView';
-import AdminView from './components/AdminView';
+import { AdminView } from './components/AdminView';
 import ParentView from './components/ParentView';
 import Spinner from './components/common/Spinner';
 import Card from './components/common/Card';
@@ -22,14 +20,17 @@ import GlobalSearch from './components/common/GlobalSearch';
 import PendingApproval from './components/PendingApproval';
 import SystemActivation from './components/SystemActivation';
 import SystemLocked from './components/SystemLocked';
+import { usePresence } from './hooks/usePresence';
 
-// Renamed from AuthProvider
 const AuthenticationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<firebase.User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [schoolSettings, setSchoolSettings] = useState<SchoolSettings | null>(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Initialize Presence System
+  usePresence(userProfile);
 
   useEffect(() => {
     const settingsDocRef = db.collection('schoolConfig').doc('settings');
@@ -54,10 +55,7 @@ const AuthenticationProvider: React.FC<{ children: ReactNode }> = ({ children })
             const subscriptionExpired = data.subscriptionEndsAt && data.subscriptionEndsAt.toDate().getTime() < now;
 
             if (data.isActive && (trialExpired && data.planType === 'trial') || subscriptionExpired) {
-                 // Subscription has expired, deactivate the system client-side while waiting for server function
                  setSubscriptionStatus({ ...data, isActive: false });
-                 // Also trigger a write to make it permanent if we have permissions (for admins)
-                 // This is a fallback for a dedicated server-side cron job.
                  subDocRef.update({ isActive: false });
             } else {
                 setSubscriptionStatus(data);
@@ -74,7 +72,6 @@ const AuthenticationProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, []);
 
   useEffect(() => {
-    // FIX: Changed onAuthStateChanged to be a method on firebaseAuth for v8 compat.
     const unsubscribe = firebaseAuth.onAuthStateChanged(async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
@@ -97,7 +94,7 @@ const AuthenticationProvider: React.FC<{ children: ReactNode }> = ({ children })
       } else {
         setUserProfile(null);
         setLoading(false);
-        return () => {}; // Return an empty function for cleanup
+        return () => {};
       }
     });
     return () => unsubscribe();
@@ -116,9 +113,8 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
     const { user, userProfile, loading, schoolSettings, subscriptionStatus } = useAuthentication();
     const [showGlobalSearch, setShowGlobalSearch] = useState(false);
     const [activeRoleOverride, setActiveRoleOverride] = useState<UserRole | null>(null);
-    const SUPER_ADMIN_UID = "WsDstQ5ufSW49i0Pc5sJWWyDVk22"; // Hardcoded Super Admin UID for recovery
+    const SUPER_ADMIN_UID = "WsDstQ5ufSW49i0Pc5sJWWyDVk22";
     
-    // Reset role override if user profile changes (e.g., on logout/login)
     useEffect(() => {
         setActiveRoleOverride(null);
     }, [userProfile?.uid]);
@@ -136,33 +132,24 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
 
     if (loading) {
         return (
-            <div className="min-h-screen flex flex-col justify-center items-center">
+            <div className="min-h-screen flex flex-col justify-center items-center bg-slate-950 text-blue-400">
                 <Spinner />
-                <p className="mt-4 text-lg">Loading EduTec Platform...</p>
+                <p className="mt-6 font-medium text-slate-400 tracking-wide animate-pulse">INITIALIZING EDUTEC...</p>
             </div>
         );
     }
 
-    if (!user) {
-        return <AuthForm />;
-    }
+    if (!user) return <AuthForm />;
     
-    // Check for system activation status first
     if (!subscriptionStatus?.isActive) {
-        // If system is NOT active, only admin can see the activation screen
         if (userProfile?.role === 'admin') {
             return <SystemActivation subscriptionStatus={subscriptionStatus} />;
         }
-        // All other users see a locked screen
         return <SystemLocked />;
     }
 
-
-    if (!userProfile) {
-        return <RoleSelector />;
-    }
+    if (!userProfile) return <RoleSelector />;
     
-    // Allow the super admin to bypass the pending screen to access recovery tools.
     if (userProfile.status === 'pending' && userProfile.uid !== SUPER_ADMIN_UID) {
         return <PendingApproval />;
     }
@@ -173,7 +160,7 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
 
     const handleRoleSwitch = () => {
         if (activeRoleOverride) {
-            setActiveRoleOverride(null); // Switch back to primary
+            setActiveRoleOverride(null);
         } else if (primaryRole === 'admin') {
             setActiveRoleOverride('teacher');
         } else if (primaryRole === 'teacher') {
@@ -182,48 +169,54 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
     };
 
     const Header = () => (
-        <header className="flex items-center justify-between p-4 border-b border-slate-700 bg-slate-800/80 backdrop-blur-sm h-[65px] flex-shrink-0 no-print">
+        <header className="sticky top-0 z-20 flex items-center justify-between p-4 bg-slate-900/70 backdrop-blur-md border-b border-slate-800/50 h-[70px] flex-shrink-0 no-print">
             <div className="flex items-center gap-4">
-                <button onClick={() => setIsSidebarExpanded(!isSidebarExpanded)} className="p-2 rounded-md hover:bg-slate-700 transition-colors">
+                <button 
+                    onClick={() => setIsSidebarExpanded(!isSidebarExpanded)} 
+                    className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
                 </button>
-                <h1 className="text-xl font-bold hidden sm:block">{schoolSettings?.schoolName}</h1>
+                <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 hidden sm:block tracking-tight">
+                    {schoolSettings?.schoolName}
+                </h1>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 md:gap-4">
                 {canSwitch && (
-                    <Button size="sm" onClick={handleRoleSwitch} variant="secondary">
-                        Switch to {activeRoleOverride ? primaryRole : (primaryRole === 'admin' ? 'Teacher' : 'Admin')} View
+                    <Button size="sm" onClick={handleRoleSwitch} variant="ghost" className="hidden sm:flex text-xs uppercase tracking-wider font-semibold">
+                        Switch View
                     </Button>
                 )}
-                 <button onClick={() => setShowGlobalSearch(true)} className="hidden md:flex items-center gap-2 p-2 rounded-md hover:bg-slate-700 transition-colors text-sm text-gray-400 border border-slate-600">
-                    Search... <kbd className="px-2 py-1 text-xs font-semibold text-gray-400 bg-slate-900 rounded-md border border-slate-700">⌘ K</kbd>
+                 <button onClick={() => setShowGlobalSearch(true)} className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 hover:bg-slate-800 hover:border-slate-600 transition-all text-sm text-slate-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+                    <span className="hidden lg:inline">Search</span>
+                    <kbd className="hidden lg:inline px-1.5 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-900 rounded border border-slate-700 ml-2">⌘K</kbd>
                 </button>
                 <NotificationsBell />
-                <Button size="sm" variant="secondary" onClick={() => firebaseAuth.signOut()}>Sign Out</Button>
+                <div className="h-8 w-px bg-slate-700 mx-1 hidden sm:block"></div>
+                <Button size="sm" variant="ghost" onClick={() => firebaseAuth.signOut()} className="text-red-400 hover:text-red-300 hover:bg-red-400/10">
+                    <span className="hidden sm:inline">Sign Out</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 sm:hidden"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>
+                </Button>
             </div>
         </header>
     );
     
     const renderView = () => {
         switch (roleToRender) {
-            case 'teacher':
-                return <TeacherView isSidebarExpanded={isSidebarExpanded} setIsSidebarExpanded={setIsSidebarExpanded} />;
-            case 'student':
-                return <StudentView isSidebarExpanded={isSidebarExpanded} setIsSidebarExpanded={setIsSidebarExpanded} />;
-            case 'admin':
-                return <AdminView isSidebarExpanded={isSidebarExpanded} setIsSidebarExpanded={setIsSidebarExpanded} />;
-            case 'parent':
-                return <ParentView isSidebarExpanded={isSidebarExpanded} setIsSidebarExpanded={setIsSidebarExpanded} />;
-            default:
-                return <p>Unknown role.</p>;
+            case 'teacher': return <TeacherView isSidebarExpanded={isSidebarExpanded} setIsSidebarExpanded={setIsSidebarExpanded} />;
+            case 'student': return <StudentView isSidebarExpanded={isSidebarExpanded} setIsSidebarExpanded={setIsSidebarExpanded} />;
+            case 'admin': return <AdminView isSidebarExpanded={isSidebarExpanded} setIsSidebarExpanded={setIsSidebarExpanded} />;
+            case 'parent': return <ParentView isSidebarExpanded={isSidebarExpanded} setIsSidebarExpanded={setIsSidebarExpanded} />;
+            default: return <div className="flex items-center justify-center h-full text-slate-500">Role not recognized</div>;
         }
     }
 
     return (
-        <div className="min-h-screen bg-slate-900 text-gray-100 flex flex-col">
+        <div className="min-h-screen flex flex-col font-sans text-slate-200">
             <CursorFollower />
             <Header />
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex overflow-hidden relative z-10">
                 {renderView()}
             </div>
             {showGlobalSearch && <GlobalSearch onClose={() => setShowGlobalSearch(false)} />}
@@ -231,15 +224,13 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
     );
 }
 
-
 export const App: React.FC = () => {
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(window.innerWidth >= 1024);
     
     useEffect(() => {
         const handleResize = () => {
-            if (window.innerWidth < 1024) {
-                setIsSidebarExpanded(false);
-            }
+            if (window.innerWidth < 1024) setIsSidebarExpanded(false);
+            else setIsSidebarExpanded(true);
         };
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);

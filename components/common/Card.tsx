@@ -6,21 +6,30 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   fullHeight?: boolean;
 }
 
-// FIX: Wrapped component in React.forwardRef to allow refs to be passed down.
 const Card = React.forwardRef<HTMLDivElement, CardProps>(
   ({ children, className, fullHeight = true, ...props }, ref) => {
     return (
-      // The outer div is the animated gradient border
-      <div {...props} ref={ref} className={`p-[1px] rounded-lg shadow-lg animated-glow-border-bg ${className}`}>
-          {/* The inner div provides the solid background color */}
-          <div className={`bg-slate-800/80 backdrop-blur-sm rounded-[7px] p-4 sm:p-6 w-full flex flex-col ${fullHeight ? 'h-full' : ''}`}>
-              {children}
-          </div>
+      <div 
+        {...props} 
+        ref={ref} 
+        className={`
+          relative group rounded-2xl 
+          bg-slate-800/50 backdrop-blur-md 
+          border border-slate-700/50
+          shadow-lg hover:shadow-xl hover:border-slate-600/50
+          transition-all duration-300 ease-in-out
+          ${fullHeight ? 'h-full' : ''} 
+          ${className}
+        `}
+      >
+        {/* Inner content wrapper */}
+        <div className={`relative p-5 sm:p-6 h-full flex flex-col z-10`}>
+            {children}
+        </div>
       </div>
     );
   }
 );
 Card.displayName = 'Card';
-
 
 export default Card;

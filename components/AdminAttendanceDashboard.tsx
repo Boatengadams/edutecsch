@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { GoogleGenAI } from '@google/genai';
 import { UserProfile, AttendanceRecord, GES_CLASSES } from '../types';
@@ -121,7 +122,7 @@ const AdminAttendanceDashboard: React.FC<AdminAttendanceDashboardProps> = ({ all
                 
                 Format your response using Markdown.
             `;
-            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+            const response = await ai.models.generateContent({ model: 'gemini-3-pro-preview', contents: prompt });
             setAiInsight(response.text);
         } catch (err) {
             setAiInsight("An error occurred while generating insights. Please try again.");

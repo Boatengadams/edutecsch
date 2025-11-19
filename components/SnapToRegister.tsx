@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
 
@@ -195,7 +196,7 @@ const SnapToRegister: React.FC<SnapToRegisterProps> = ({ onClose, roleToRegister
                     const prompt = "Analyze the image, which contains a list of user names. Extract each full name. Return ONLY a valid JSON object with a single root key 'users', which is an array of objects, where each object has a single 'name' key. Omit any rows that do not look like a name.";
 
                     const response = await ai.models.generateContent({
-                        model: 'gemini-2.5-flash',
+                        model: 'gemini-3-pro-preview',
                         contents: { parts: [imagePart, { text: prompt }] },
                         config: {
                             responseMimeType: 'application/json',

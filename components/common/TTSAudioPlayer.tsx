@@ -49,9 +49,13 @@ const TTSAudioPlayer: React.FC<TTSAudioPlayerProps> = ({ textToSpeak }) => {
 
   const stopPlayback = () => {
     if (audioSourceRef.current) {
+      audioSourceRef.current.onended = null;
       audioSourceRef.current.stop();
       audioSourceRef.current.disconnect();
       audioSourceRef.current = null;
+    }
+    if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
     }
     setIsPlaying(false);
   };
@@ -87,7 +91,7 @@ const TTSAudioPlayer: React.FC<TTSAudioPlayerProps> = ({ textToSpeak }) => {
         throw new Error("No audio data received from API.");
       }
 
-      if (!audioContextRef.current) {
+      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       }
       const audioCtx = audioContextRef.current;
@@ -113,8 +117,22 @@ const TTSAudioPlayer: React.FC<TTSAudioPlayerProps> = ({ textToSpeak }) => {
       setIsPlaying(true);
 
     } catch (err: any) {
-      console.error("TTS Error:", err);
-      setError("Could not play audio.");
+      console.warn("TTS Error, falling back to browser synthesis:", err.message);
+      // Fallback to browser's native SpeechSynthesis
+      if ('speechSynthesis' in window) {
+          const utterance = new SpeechSynthesisUtterance(textToSpeak);
+          utterance.onstart = () => setIsPlaying(true);
+          utterance.onend = () => setIsPlaying(false);
+          utterance.onerror = (e) => {
+              console.error("Browser TTS Error:", e);
+              setError('Could not play audio'); 
+              setIsPlaying(false);
+          };
+          window.speechSynthesis.speak(utterance);
+      } else {
+          console.error("Audio playback not supported.");
+          setError('Not supported');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -141,17 +159,19 @@ const TTSAudioPlayer: React.FC<TTSAudioPlayerProps> = ({ textToSpeak }) => {
   };
 
   return (
-    <button
-      onClick={handleToggleAudio}
-      disabled={isLoading || !textToSpeak || !textToSpeak.trim()}
-      className="p-1.5 rounded-full bg-slate-600 text-gray-200 hover:bg-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-      title={isPlaying ? 'Stop' : 'Read aloud'}
-    >
-      <div className="w-5 h-5 flex items-center justify-center">
-        {buttonContent()}
-      </div>
-      {error && <span className="text-red-400 text-xs ml-2">{error}</span>}
-    </button>
+    <div className="flex items-center gap-2">
+        <button
+          onClick={handleToggleAudio}
+          disabled={isLoading || !textToSpeak || !textToSpeak.trim()}
+          className="p-1.5 rounded-full bg-slate-600 text-gray-200 hover:bg-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+          title={isPlaying ? 'Stop' : 'Read aloud'}
+        >
+          <div className="w-5 h-5 flex items-center justify-center">
+            {buttonContent()}
+          </div>
+        </button>
+        {error && <span className="text-red-400 text-xs">{error}</span>}
+    </div>
   );
 };
 

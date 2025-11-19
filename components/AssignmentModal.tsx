@@ -143,7 +143,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
       Your response MUST be a valid JSON object matching the provided schema.`;
   
       const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3-pro-preview',
           contents: prompt,
           config: {
               responseMimeType: 'application/json',

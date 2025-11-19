@@ -3,6 +3,7 @@ import 'firebase/compat/auth';
 import 'firebase/compat/firestore';
 import 'firebase/compat/storage';
 import 'firebase/compat/functions';
+import 'firebase/compat/database'; // Added for Realtime Database (Presence)
 
 // REPLACE with your Firebase config from your project settings
 export const firebaseConfig = {
@@ -28,6 +29,7 @@ if (!firebase.apps.length) {
 
 const firebaseAuth = firebase.auth();
 const db = firebase.firestore();
+const rtdb = firebase.database(); // Initialize RTDB
 
 // Enable offline persistence for a better offline experience.
 // This allows the app to work seamlessly even with intermittent connectivity.
@@ -60,4 +62,4 @@ if (existingSecondaryApp) {
 const secondaryAuth = secondaryApp.auth();
 
 
-export { firebaseAuth, db, storage, functions, secondaryAuth, firebase };
+export { firebaseAuth, db, storage, functions, secondaryAuth, firebase, rtdb };

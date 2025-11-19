@@ -38,19 +38,28 @@ const stripHtml = (html: string) => {
     return doc.body.textContent || "";
 };
 
-export const useLiveLessonAudio = (lesson: LiveLesson | null, currentStepIndex: number, teacherProfile: UserProfile | null) => {
+export const useLiveLessonAudio = (
+    htmlContent: string | undefined, 
+    teacherProfile: UserProfile | null
+) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState('');
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const stopPlayback = () => {
+    // Stop Gemini playback
     if (audioSourceRef.current) {
       audioSourceRef.current.onended = null;
       audioSourceRef.current.stop();
       audioSourceRef.current.disconnect();
       audioSourceRef.current = null;
+    }
+    // Stop browser fallback playback
+    if (window.speechSynthesis && window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
     }
     setIsPlaying(false);
   };
@@ -58,20 +67,48 @@ export const useLiveLessonAudio = (lesson: LiveLesson | null, currentStepIndex: 
   useEffect(() => {
     stopPlayback();
 
-    if (!lesson || !teacherProfile) {
+    if (!htmlContent || !teacherProfile) {
       return;
     }
-
-    const htmlContent = lesson.lessonPlan[currentStepIndex]?.boardContent;
-    if (!htmlContent) return;
 
     const plainText = stripHtml(htmlContent);
     if (!plainText.trim()) return;
     
+    const playWithBrowserTTS = (text: string) => {
+        console.warn("Falling back to browser's native TTS.");
+        if ('speechSynthesis' in window) {
+            stopPlayback();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utteranceRef.current = utterance;
+            utterance.onstart = () => setIsPlaying(true);
+            utterance.onend = () => {
+                setIsPlaying(false);
+                utteranceRef.current = null;
+            };
+            utterance.onerror = (e) => {
+                const errorEvent = e as SpeechSynthesisErrorEvent;
+                console.error("Browser TTS Error in live lesson:", errorEvent.error);
+                // Fail silently
+                setIsPlaying(false);
+                utteranceRef.current = null;
+            };
+            window.speechSynthesis.speak(utterance);
+        } else {
+            console.error("Browser TTS not supported.");
+            // Fail silently
+            setIsPlaying(false);
+        }
+    };
+
+
     const playAudio = async () => {
         setIsPlaying(true); // Optimistically set to true
         setError('');
         try {
+            const preferredVoice = teacherProfile.preferredVoice || 'Kore';
+            const isCustomVoice = /^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(preferredVoice);
+            const voiceToUse = isCustomVoice ? 'Kore' : preferredVoice;
+
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const response = await ai.models.generateContent({
                 model: "gemini-2.5-flash-preview-tts",
@@ -80,7 +117,7 @@ export const useLiveLessonAudio = (lesson: LiveLesson | null, currentStepIndex: 
                     responseModalities: [Modality.AUDIO],
                     speechConfig: {
                         voiceConfig: {
-                            prebuiltVoiceConfig: { voiceName: teacherProfile.preferredVoice || 'Kore' },
+                            prebuiltVoiceConfig: { voiceName: voiceToUse },
                         },
                     },
                 },
@@ -106,11 +143,9 @@ export const useLiveLessonAudio = (lesson: LiveLesson | null, currentStepIndex: 
             
             source.start();
             audioSourceRef.current = source;
-            // isPlaying is already true
         } catch (err: any) {
-            console.error("TTS Error:", err);
-            setError(`Audio Error: ${err.message}`);
-            setIsPlaying(false);
+            console.error("TTS Error, falling back to browser synthesis:", err);
+            playWithBrowserTTS(plainText);
         }
     };
     
@@ -119,7 +154,7 @@ export const useLiveLessonAudio = (lesson: LiveLesson | null, currentStepIndex: 
     return () => {
       stopPlayback();
     };
-  }, [lesson, currentStepIndex, teacherProfile]);
+  }, [htmlContent, teacherProfile]);
   
    useEffect(() => {
     // Cleanup audio context on component unmount

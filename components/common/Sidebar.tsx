@@ -15,15 +15,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isExpanded, navItems, activeTab, setA
 
   useEffect(() => {
     if (isExpanded) {
-      // Store the element that had focus before the sidebar opened
       triggerRef.current = document.activeElement as HTMLElement;
-
       const focusableElements = sidebarRef.current?.querySelectorAll<HTMLElement>(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       );
 
       if (focusableElements && focusableElements.length > 0) {
-        // Focus the first focusable element (e.g., the close button on mobile)
         focusableElements[0].focus();
       }
 
@@ -32,97 +29,76 @@ const Sidebar: React.FC<SidebarProps> = ({ isExpanded, navItems, activeTab, setA
             onClose();
             return;
         }
-        
-        if (event.key === 'Tab' && focusableElements) {
-          const firstElement = focusableElements[0];
-          const lastElement = focusableElements[focusableElements.length - 1];
-          const currentActiveElement = document.activeElement as HTMLElement;
-          const currentIndex = Array.from(focusableElements).indexOf(currentActiveElement);
-
-          if (event.shiftKey) { // Shift+Tab
-            if (currentActiveElement === firstElement) {
-              event.preventDefault();
-              lastElement.focus();
-            }
-          } else { // Tab
-            if (currentActiveElement === lastElement) {
-              event.preventDefault();
-              firstElement.focus();
-            }
-          }
-        }
       };
-
       document.addEventListener('keydown', handleKeyDown);
-
-      return () => {
-        document.removeEventListener('keydown', handleKeyDown);
-        // Return focus to the element that opened the sidebar
-        if (triggerRef.current) {
-          triggerRef.current.focus();
-        }
-      };
+      return () => document.removeEventListener('keydown', handleKeyDown);
     }
   }, [isExpanded, onClose]);
 
-
   return (
     <>
-      {/* Overlay for all screen sizes when expanded */}
+      {/* Overlay */}
       <div
-        className={`fixed inset-0 bg-black bg-opacity-60 z-30 transition-opacity duration-300 no-print ${isExpanded ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-30 transition-opacity duration-300 no-print ${isExpanded ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         onClick={onClose}
         aria-hidden="true"
       ></div>
 
-      {/* Main Sidebar Panel */}
+      {/* Sidebar */}
       <div
         ref={sidebarRef}
-        className={`fixed top-0 left-0 h-full w-64 bg-slate-800/90 backdrop-blur-sm border-r border-slate-700 z-40 transition-transform duration-300 ease-in-out flex flex-col no-print
+        className={`fixed top-0 left-0 h-full w-72 bg-slate-900 border-r border-slate-800 z-40 transition-transform duration-300 ease-in-out flex flex-col no-print shadow-2xl
                   ${isExpanded ? 'translate-x-0' : '-translate-x-full'}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-700 flex-shrink-0 h-[65px]">
-          <h2 className="text-xl font-bold text-white">{title}</h2>
-          {/* Close button for mobile */}
+        <div className="flex items-center justify-between p-6 border-b border-slate-800/50 flex-shrink-0">
+          <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">{title}</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white text-3xl font-light leading-none lg:hidden"
+            className="text-slate-400 hover:text-white transition-colors lg:hidden p-2 rounded-full hover:bg-slate-800"
             aria-label="Close"
           >
-            &times;
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
         {/* Nav Items */}
-        <nav className="flex-grow overflow-y-auto p-4">
-            <ul className="flex flex-col space-y-2">
-              {navItems.map(item => (
+        <nav className="flex-grow overflow-y-auto p-4 custom-scrollbar">
+            <ul className="flex flex-col space-y-1">
+              {navItems.map(item => {
+                const isActive = activeTab === item.key;
+                return (
                 <li key={item.key}>
                   <button
                     onClick={() => {
                       setActiveTab(item.key);
-                      // On smaller screens, close the sidebar after selection
-                      if (window.innerWidth < 1024) {
-                        onClose();
-                      }
+                      if (window.innerWidth < 1024) onClose();
                     }}
-                    className={`w-full flex items-center gap-3 p-3 rounded-md text-left transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-sky-500
-                    ${activeTab === item.key
-                      ? 'bg-sky-600 text-white font-semibold shadow-md'
-                      : 'bg-transparent text-gray-300 hover:bg-slate-700 hover:text-white'
+                    className={`group w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-left transition-all duration-200 outline-none
+                    ${isActive
+                      ? 'bg-blue-600/10 text-blue-400 font-semibold shadow-sm ring-1 ring-blue-500/20'
+                      : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'
                     }`}
                   >
-                    <div className="w-5 h-5 flex-shrink-0">{item.icon}</div>
-                    <span>{item.label}</span>
+                    <div className={`flex-shrink-0 w-5 h-5 transition-transform group-hover:scale-110 ${isActive ? 'text-blue-400' : 'text-slate-500 group-hover:text-slate-300'}`}>
+                        {item.icon}
+                    </div>
+                    <span className="truncate">{item.label}</span>
+                    {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)]"></div>}
                   </button>
                 </li>
-              ))}
+              )})}
             </ul>
         </nav>
+        
+        <div className="p-4 text-xs text-slate-600 text-center border-t border-slate-800/50">
+            EduTec Platform v2.0
+        </div>
       </div>
     </>
   );

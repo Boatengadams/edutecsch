@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI, Modality, LiveServerMessage, Blob as GenAIBlob, Session } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 import type { Chat } from '@google/genai';
 import html2canvas from 'html2canvas';
 
@@ -8,27 +8,35 @@ import Button from './common/Button';
 import Spinner from './common/Spinner';
 import CameraModal from './common/CameraModal';
 
-// Helper functions for Gemini Live audio streaming
-function encode(bytes: Uint8Array): string {
-    let binary = '';
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
+// FIX: Add type definitions for the Web Speech API to resolve TypeScript errors.
+// These types are not included in standard DOM typings.
+interface SpeechRecognitionAlternative {
+  transcript: string;
 }
-function createBlob(data: Float32Array): GenAIBlob {
-  const l = data.length;
-  const int16 = new Int16Array(l);
-  for (let i = 0; i < l; i++) {
-    int16[i] = data[i] * 32768;
-  }
-  return {
-    data: encode(new Uint8Array(int16.buffer)),
-    mimeType: 'audio/pcm;rate=16000',
-  };
+interface SpeechRecognitionResult {
+  [index: number]: SpeechRecognitionAlternative;
+  length: number;
 }
-
+interface SpeechRecognitionResultList {
+  [index: number]: SpeechRecognitionResult;
+  length: number;
+}
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+}
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+}
+interface SpeechRecognition {
+  continuous: boolean;
+  lang: string;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  onresult: (event: SpeechRecognitionEvent) => void;
+  onend: () => void;
+  onerror: (event: SpeechRecognitionErrorEvent) => void;
+}
 
 interface WebSearchResult {
   uri: string;
@@ -108,15 +116,10 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ systemInstruction, suggestedP
 
   const chatRef = useRef<Chat | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  
   const hasInitialized = useRef(false);
 
-  // Refs for Gemini Live speech recognition
-  const sessionPromiseRef = useRef<Promise<Session> | null>(null);
-  const liveAudioContextRef = useRef<AudioContext | null>(null);
-  const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
-  const mediaStreamSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const micStreamRef = useRef<MediaStream | null>(null);
-  
   // Initialize or re-initialize the chat session when system instruction changes
   useEffect(() => {
     try {
@@ -125,7 +128,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ systemInstruction, suggestedP
       }
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const newChat = ai.chats.create({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3-pro-preview',
         config: {
           systemInstruction: systemInstruction,
           tools: [{googleSearch: {}}],
@@ -147,6 +150,45 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ systemInstruction, suggestedP
       setError("Could not initialize the AI Assistant. Please check your configuration.");
     }
   }, [systemInstruction, isEmbedded]);
+
+  // Setup Speech Recognition
+  useEffect(() => {
+    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognitionAPI) {
+        const recognition: SpeechRecognition = new SpeechRecognitionAPI();
+        recognition.continuous = false;
+        recognition.lang = 'en-US';
+        recognition.interimResults = true;
+        
+        recognition.onresult = (event: SpeechRecognitionEvent) => {
+            const transcript = Array.from(event.results)
+                .map(result => result[0])
+                .map(result => result.transcript)
+                .join('');
+            setInput(transcript);
+        };
+
+        recognition.onend = () => {
+            setIsListening(false);
+        };
+        
+        recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+            console.error("Speech recognition error", event.error);
+            let errorMessage = `Speech recognition error: ${event.error}.`;
+            if (event.error === 'not-allowed') {
+                errorMessage = "Microphone access was denied. Please allow microphone access in your browser's site settings to use voice input.";
+            } else if (event.error === 'no-speech') {
+                errorMessage = "No speech was detected. Please try again.";
+            }
+            setError(errorMessage);
+            setIsListening(false);
+        };
+
+        recognitionRef.current = recognition;
+    } else {
+        console.warn("Speech Recognition not supported in this browser.");
+    }
+  }, []);
   
     // Audio Player Cleanup
     useEffect(() => {
@@ -258,8 +300,23 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ systemInstruction, suggestedP
             audioBufferRef.current = audioBuffer;
             startPlayback(0);
         } catch (err) {
-            console.error("TTS failed:", err);
-            setAudioState({ status: 'error', text });
+            console.warn("TTS failed, falling back to browser synthesis:", err);
+            // Fallback to browser's native SpeechSynthesis
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.onstart = () => setAudioState(prev => ({ ...prev!, status: 'playing' }));
+                utterance.onend = () => {
+                    stopAudio(true); // use our own stop function
+                };
+                utterance.onerror = (e) => {
+                    console.error("Browser TTS error in AI Assistant:", e);
+                    setAudioState({ status: 'error', text });
+                };
+                window.speechSynthesis.speak(utterance);
+            } else {
+                console.error("Browser TTS not supported.");
+                setAudioState({ status: 'error', text });
+            }
         }
     };
     // -- End Audio Playback Functions --
@@ -341,113 +398,21 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ systemInstruction, suggestedP
       sendMessage(prompt, null);
   };
 
-  const stopListening = async () => {
-    setIsListening(false);
-    if (micStreamRef.current) {
-        micStreamRef.current.getTracks().forEach(track => track.stop());
-        micStreamRef.current = null;
-    }
-    if (mediaStreamSourceRef.current) {
-        mediaStreamSourceRef.current.disconnect();
-        mediaStreamSourceRef.current = null;
-    }
-    if (scriptProcessorRef.current) {
-        scriptProcessorRef.current.disconnect();
-        scriptProcessorRef.current = null;
-    }
-    if (liveAudioContextRef.current && liveAudioContextRef.current.state !== 'closed') {
-        await liveAudioContextRef.current.close();
-        liveAudioContextRef.current = null;
-    }
-    if (sessionPromiseRef.current) {
-        try {
-            const session = await sessionPromiseRef.current;
-            session.close();
-        } catch (e) {
-            console.error("Error closing session:", e);
-        } finally {
-            sessionPromiseRef.current = null;
-        }
-    }
-  };
-
-  const startListening = async () => {
-    setIsListening(true);
-    setError('');
-    const baseTranscript = input.trim() ? input.trim() + ' ' : '';
-    let currentTranscription = baseTranscript;
-
-    try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        sessionPromiseRef.current = ai.live.connect({
-            model: 'gemini-2.5-flash-native-audio-preview-09-2025',
-            callbacks: {
-                onopen: async () => {
-                    try {
-                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                        micStreamRef.current = stream;
-                        liveAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-                        const audioCtx = liveAudioContextRef.current;
-                        mediaStreamSourceRef.current = audioCtx.createMediaStreamSource(stream);
-                        scriptProcessorRef.current = audioCtx.createScriptProcessor(4096, 1, 1);
-                        scriptProcessorRef.current.onaudioprocess = (event) => {
-                            const inputData = event.inputBuffer.getChannelData(0);
-                            const pcmBlob = createBlob(inputData);
-                            if (sessionPromiseRef.current) {
-                                sessionPromiseRef.current.then((session) => {
-                                    session.sendRealtimeInput({ media: pcmBlob });
-                                });
-                            }
-                        };
-                        mediaStreamSourceRef.current.connect(scriptProcessorRef.current);
-                        scriptProcessorRef.current.connect(audioCtx.destination);
-                    } catch (err) {
-                        setError("Could not access microphone. Please check permissions.");
-                        stopListening();
-                    }
-                },
-                onmessage: (message: LiveServerMessage) => {
-                    const transcription = message.serverContent?.inputTranscription;
-                    if (transcription) {
-                        if (transcription.isFinal) {
-                            currentTranscription += transcription.text + ' ';
-                            setInput(currentTranscription);
-                        } else {
-                            setInput(currentTranscription + transcription.text);
-                        }
-                    }
-                },
-                onerror: (e: ErrorEvent) => {
-                    setError('A connection error occurred with the voice service.');
-                    stopListening();
-                },
-                onclose: () => {
-                    setIsListening(false);
-                },
-            },
-            config: { inputAudioTranscription: {} },
-        });
-        await sessionPromiseRef.current;
-    } catch (e) {
-        setError('Failed to start voice recognition service.');
-        stopListening();
-    }
-  };
-
   const handleToggleListening = () => {
     if (isLoading) return;
+    if (!recognitionRef.current) {
+        setError("Voice recognition is not supported by your browser.");
+        return;
+    }
     if (isListening) {
-        stopListening();
+        recognitionRef.current.stop();
     } else {
-        startListening();
+        recognitionRef.current.start();
+        setIsListening(true);
+        setInput('');
+        setError('');
     }
   };
-
-  useEffect(() => {
-    return () => {
-      stopListening();
-    };
-  }, []);
 
     const handlePlayPause = () => {
         if (!audioBufferRef.current) return;
