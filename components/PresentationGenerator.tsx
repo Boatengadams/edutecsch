@@ -7,6 +7,7 @@ import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
 import type firebase_app from 'firebase/compat/app';
+import { useToast } from './common/Toast';
 
 const useDebounce = (callback: (...args: any[]) => void, delay: number) => {
     const timeoutIdRef = useRef<number | null>(null);
@@ -142,7 +143,6 @@ interface PresentationGeneratorProps {
   userProfile: UserProfile | null;
   initialContent?: GeneratedContent | null;
   onStartLiveLesson: (content: GeneratedContent) => void;
-  setToast: (toast: { message: string, type: 'success' | 'error' } | null) => void;
 }
 
 const compressImage = (file: Blob, quality = 0.85): Promise<Blob> => {
@@ -176,7 +176,8 @@ const compressImage = (file: Blob, quality = 0.85): Promise<Blob> => {
 };
 
 
-export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ onClose, classes, subjectsByClass, user, userProfile, initialContent = null, onStartLiveLesson, setToast }) => {
+export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ onClose, classes, subjectsByClass, user, userProfile, initialContent = null, onStartLiveLesson }) => {
+  const { showToast } = useToast();
   // Form state
   const [targetClasses, setTargetClasses] = useState<string[]>(initialContent?.classes || (classes.length > 0 ? [classes[0]] : []));
   const [subject, setSubject] = useState(initialContent?.subject || '');
@@ -405,10 +406,10 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
 
         setIsAssigningQuiz(false);
         setAssignmentDetails({ title: '', classId: targetClasses[0], dueDate: '' });
-        setToast({ message: 'Quiz assigned successfully!', type: 'success' });
+        showToast('Quiz assigned successfully!', 'success');
     } catch (err: any) {
         setError(`Failed to create assignment: ${err.message}`);
-        setToast({ message: `Failed to create assignment: ${err.message}`, type: 'error' });
+        showToast(`Failed to create assignment: ${err.message}`, 'error');
     } finally {
         setLoadingState('idle');
     }
@@ -598,7 +599,7 @@ const savePresentation = async (): Promise<GeneratedContent | null> => {
         console.error("Error saving presentation:", err);
         const errorMessage = `Failed to save presentation: ${err.message}.`;
         setError(errorMessage);
-        setToast({ message: errorMessage, type: 'error' });
+        showToast(errorMessage, 'error');
         return null;
     }
 };
@@ -612,7 +613,7 @@ const handleSaveToLibrary = async () => {
     const savedContent = await savePresentation();
     setLoadingState('idle');
     if (savedContent) {
-        setToast({ message: "Presentation saved to your library!", type: 'success' });
+        showToast("Presentation saved to your library!", 'success');
         onClose();
     }
 };

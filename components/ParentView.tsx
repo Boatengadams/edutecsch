@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuthentication } from '../hooks/useAuth';
 // FIX: Import firebase for compat services like firestore.FieldValue
 import { db, firebase } from '../services/firebase';
-import { UserProfile, Assignment, Submission, Notification, SchoolEvent, SchoolEventType, Timetable, AttendanceRecord, Group, Conversation } from '../types';
+import { UserProfile, Assignment, Submission, Notification, SchoolEvent, SchoolEventType, Timetable, AttendanceRecord, Group, Conversation, PublishedFlyer } from '../types';
 import Card from './common/Card';
 import Spinner from './common/Spinner';
 import Button from './common/Button';
@@ -11,10 +12,11 @@ import { ProgressDashboard } from './ProgressDashboard';
 import Sidebar from './common/Sidebar';
 import NotebookTimetable from './common/NotebookTimetable';
 import ChangePasswordModal from './common/ChangePasswordModal';
-import Toast from './common/Toast';
+import { useToast } from './common/Toast';
 import PieChart from './common/charts/PieChart';
 import LineChart from './common/charts/LineChart';
 import MessagingView from './MessagingView';
+import StudentProfile from './StudentProfile';
 
 interface ParentViewProps {
   isSidebarExpanded: boolean;
@@ -35,8 +37,9 @@ const gradeToNumeric = (grade?: string): number | null => {
     return null;
 }
 
-const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
+export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
   const { user, userProfile } = useAuthentication();
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('overview');
   
   // State for multi-child support
@@ -50,6 +53,9 @@ const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIsSidebar
   const [timetable, setTimetable] = useState<Timetable | null>(null);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [childsGroup, setChildsGroup] = useState<Group | null>(null);
+  const [publishedFlyers, setPublishedFlyers] = useState<PublishedFlyer[]>([]);
+  const [selectedFlyer, setSelectedFlyer] = useState<PublishedFlyer | null>(null);
+  
   const [loading, setLoading] = useState(true);
   const [loadingTimetable, setLoadingTimetable] = useState(true);
   const [aiSystemInstruction, setAiSystemInstruction] = useState('');
@@ -82,15 +88,16 @@ const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIsSidebar
             setLoading(false);
         }).catch(err => {
             console.error("Error fetching children profiles:", err);
+            showToast("Failed to load children profiles.", "error");
             setLoading(false);
         });
     } else {
         setLoading(false);
     }
-  }, [userProfile]);
+  }, [userProfile, showToast]);
 
   
-  // Effect for parent-specific data (notifications, events, all submissions)
+  // Effect for parent-specific data (notifications, events, all submissions, flyers)
   useEffect(() => {
     if (!user || !userProfile) return;
 
@@ -117,6 +124,23 @@ const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIsSidebar
         const fetchedSubmissions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Submission));
         setAllSubmissions(fetchedSubmissions);
     }, err => console.error("Error fetching submissions:", err)));
+
+     // Published Flyers - REMOVED orderBy to fix index error
+     const flyerQueries = [
+        db.collection('publishedFlyers').where('targetAudience', '==', 'all'),
+        db.collection('publishedFlyers').where('targetRoles', 'array-contains', 'parent'),
+        db.collection('publishedFlyers').where('targetAudience', '==', 'selected').where('targetUids', 'array-contains', user.uid)
+    ];
+    const unsubFlyers = flyerQueries.map(q => q.limit(10).onSnapshot(snap => {
+        const flyers = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublishedFlyer));
+        setPublishedFlyers(prev => {
+            const all = [...prev, ...flyers];
+            const unique = Array.from(new Map(all.map(item => [item.id, item])).values());
+            return unique.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()).slice(0, 20);
+        });
+    }));
+    unsubscribers.push(...unsubFlyers);
+
 
     return () => unsubscribers.forEach(unsub => unsub());
   }, [user, userProfile]);
@@ -326,6 +350,33 @@ const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIsSidebar
                 <Card><div className="text-center"><p className="text-sm text-gray-400">On-Time Rate</p><p className="text-3xl font-bold text-green-400">{dashboardStats.onTimeRate}{dashboardStats.onTimeRate !== 'N/A' && '%'}</p></div></Card>
                 <Card><div className="text-center"><p className="text-sm text-gray-400">Pending Assignments</p><p className="text-3xl font-bold text-yellow-400">{dashboardStats.pendingCount}</p></div></Card>
             </div>
+
+            {publishedFlyers.length > 0 && (
+                <Card>
+                    <h3 className="text-xl font-semibold mb-4">School Notice Board</h3>
+                    <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
+                        {publishedFlyers.map(flyer => (
+                            <button 
+                                key={flyer.id} 
+                                onClick={() => setSelectedFlyer(flyer)}
+                                className="flex-shrink-0 w-48 group relative rounded-lg overflow-hidden border border-slate-700 hover:border-blue-500 transition-all"
+                            >
+                                <div className="aspect-[3/4] relative">
+                                    <img src={flyer.imageUrl} alt={flyer.title} className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <span className="text-white text-sm font-bold">View Flyer</span>
+                                    </div>
+                                </div>
+                                <div className="p-2 bg-slate-800 text-left">
+                                    <p className="font-bold text-sm truncate text-slate-200">{flyer.title}</p>
+                                    <p className="text-xs text-gray-500">{flyer.createdAt?.toDate().toLocaleDateString()}</p>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </Card>
+            )}
+
             {childsGroup && (
                 <Card fullHeight={false}>
                     <h3 className="text-xl font-semibold mb-2">Group Project</h3>
@@ -382,104 +433,110 @@ const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIsSidebar
     const renderTimetable = () => (
          <Card>
             <h3 className="text-xl font-semibold mb-4">Timetable for {selectedChildProfile?.class}</h3>
-            {loadingTimetable ? <Spinner /> : timetable && selectedChildProfile?.class ? (
-                <NotebookTimetable classId={selectedChildProfile.class} timetableData={timetable.timetableData} />
-            ) : <p className="text-gray-400 text-center py-8">Timetable not available.</p>}
+            {loadingTimetable ? (
+                <div className="flex justify-center items-center h-40"><Spinner /></div>
+            ) : timetable ? (
+                <NotebookTimetable classId={selectedChildProfile?.class || ''} timetableData={timetable.timetableData} />
+            ) : (
+                <p className="text-gray-400 text-center py-12">No timetable available for this class.</p>
+            )}
         </Card>
     );
-    
-    const renderProgress = () => selectedChildProfile ? <ProgressDashboard student={selectedChildProfile} isModal={false} /> : null;
-    
+
     const renderAttendance = () => (
         <Card>
-            <h3 className="text-xl font-semibold mb-4">Attendance Log for {selectedChildProfile?.name}</h3>
-            <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2">
-                {attendanceRecords.length > 0 ? attendanceRecords.map(rec => {
-                    const status = rec.records[selectedChildProfile!.uid];
-                    const statusColor = status === 'Present' ? 'text-green-400' : status === 'Late' ? 'text-yellow-400' : 'text-red-400';
-                    return (
-                        <div key={rec.id} className={`p-3 bg-slate-700 rounded-md flex justify-between items-center`}>
-                            <p className="font-semibold">{new Date(rec.date + 'T00:00:00').toLocaleDateString()}</p>
-                            <p className={`font-bold ${statusColor}`}>{status}</p>
-                        </div>
-                    );
-                }) : <p className="text-gray-400 text-center py-8">No attendance records found.</p>}
+            <h3 className="text-xl font-semibold mb-4">Attendance Record</h3>
+            <div className="space-y-2 max-h-[70vh] overflow-y-auto">
+                {attendanceRecords.length > 0 ? attendanceRecords.map(rec => (
+                    <div key={rec.id} className="flex justify-between items-center p-3 bg-slate-800 rounded border-l-4 border-slate-600">
+                        <span>{new Date(rec.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                        <span className={`font-bold ${rec.records[selectedChildId!] === 'Present' ? 'text-green-400' : 'text-red-400'}`}>
+                            {rec.records[selectedChildId!]}
+                        </span>
+                    </div>
+                )) : <p className="text-gray-500 text-center py-8">No attendance records found.</p>}
             </div>
         </Card>
     );
     
-    const renderSettings = () => {
-        // Omitting profile name change for parents to avoid complexity, focus on security.
-        return (
-            <Card>
-                <h3 className="text-xl font-semibold mb-6">Settings</h3>
-                <div className="space-y-8 max-w-md">
-                    <div>
-                        <h4 className="font-semibold text-lg">Account Security</h4>
-                        <Button onClick={() => setShowChangePassword(true)} variant="secondary" className="mt-2">
-                            Change Your Password
-                        </Button>
-                    </div>
-                </div>
-            </Card>
-        );
-    };
-
-
-    const navItems = [
-        { key: 'overview', label: "Child's Overview", icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h12A2.25 2.25 0 0 0 20.25 14.25V3M3.75 21h16.5M16.5 3.75h.008v.008H16.5V3.75Z" /></svg> },
-        { key: 'messages', label: <span className="flex items-center justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm1.707 2.293a1 1 0 00-1.414 1.414l5 5a1 1 0 001.414 0l5-5a1 1 0 10-1.414-1.414L10 10.586 3.707 7.293z" /></svg> },
-        { key: 'notifications', label: 'Notifications', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 2a6 6 0 00-6 6c0 1.233.323 2.385.88 3.39V17a1 1 0 001.447.894L10 15.118l3.673 2.776A1 1 0 0015 17v-4.61c.557-1.005.88-2.214.88-3.39a6 6 0 00-6-6zM8 8a1 1 0 112 0v1a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg> },
-        { key: 'progress', label: 'Academic Progress', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" /></svg> },
-        { key: 'attendance', label: 'Attendance', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
-        { key: 'timetable', label: 'Timetable', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0h18" /></svg> },
-        { key: 'settings', label: 'Settings', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-1.007 1.11-.95.542.057 1.007.56 1.066 1.11.06.541-.218 1.14-.644 1.527a4.953 4.953 0 0 1-2.072.827c-.541.06-.95.542-.95 1.11 0 .542.409 1.007.95 1.11a4.953 4.953 0 0 1 2.072.827c.426.387.704.986.644 1.527-.06.542-.524 1.053-1.066 1.11-.541.057-1.02-.352-1.11-.95a4.953 4.953 0 0 1-.95-2.072c-.057-.542-.56-1.007-1.11-.95-.542-.057-1.007-.56-1.066-1.11-.06-.541.218-1.14.644-1.527a4.953 4.953 0 0 1 2.072-.827c.541-.06.95-.542-.95-1.11 0 .542-.409-1.007-.95-1.11a4.953 4.953 0 0 1-2.072-.827c-.426-.387-.704-.986-.644-1.527.06-.542.524-1.053 1.066 1.11.541-.057 1.02.352 1.11-.95Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15.98 3.94c.09-.542.56-1.007 1.11-.95.542.057 1.007.56 1.066 1.11.06.541-.218 1.14-.644 1.527a4.953 4.953 0 0 1-2.072.827c-.541.06-.95.542-.95 1.11 0 .542.409 1.007.95 1.11a4.953 4.953 0 0 1 2.072.827c.426.387.704.986.644 1.527-.06.542-.524 1.053-1.066 1.11-.541.057-1.02-.352-1.11-.95a4.953 4.953 0 0 1-.95-2.072c-.057-.542-.56-1.007-1.11-.95-.542-.057-1.007-.56-1.066-1.11-.06-.541.218-1.14.644-1.527a4.953 4.953 0 0 1 2.072-.827c.541-.06.95-.542-.95-1.11 0 .542-.409-1.007-.95-1.11a4.953 4.953 0 0 1-2.072-.827c-.426-.387-.704-.986-.644-1.527.06-.542.524-1.053 1.066 1.11.541-.057 1.02.352 1.11-.95Z" /></svg> }
-    ];
-
     const renderContent = () => {
-        if (loading) {
-            return <div className="flex justify-center items-center h-full"><Spinner /></div>;
-        }
-        if (childrenProfiles.length === 0) {
+        if (loading) return <div className="flex-1 flex justify-center items-center"><Spinner /></div>;
+        
+        if (!selectedChildProfile) {
             return (
-                <Card>
-                    <div className="text-center p-8">
-                        <h2 className="text-xl font-bold mb-4">No Children Linked</h2>
-                        <p className="text-gray-400">Your account is not yet linked to any students. Please contact the school administration to have your child's account linked to yours.</p>
-                    </div>
-                </Card>
+                <div className="flex-1 flex flex-col justify-center items-center p-8 text-center">
+                    <h2 className="text-2xl font-bold mb-2">No Student Linked</h2>
+                    <p className="text-gray-400 mb-4">Your account is not currently linked to any student profiles. Please contact the school administration.</p>
+                </div>
             );
         }
-        
-        switch(activeTab) {
+
+        switch (activeTab) {
             case 'overview': return renderDashboard();
-            case 'messages': return userProfile ? <MessagingView userProfile={userProfile} contacts={relevantTeachers} /> : null;
             case 'notifications': return renderNotifications();
-            case 'progress': return renderProgress();
-            case 'attendance': return renderAttendance();
             case 'timetable': return renderTimetable();
-            case 'settings': return renderSettings();
-            default: return renderDashboard();
+            case 'attendance': return renderAttendance();
+            case 'progress': return <ProgressDashboard student={selectedChildProfile} isModal={false} onClose={() => {}} />;
+            case 'messages': return <MessagingView userProfile={userProfile} contacts={relevantTeachers} />;
+            case 'profile': return <StudentProfile userProfile={selectedChildProfile} assignments={assignments} submissions={allSubmissions.filter(s => s.studentId === selectedChildId)} />;
+            default: return <div>Select a tab</div>;
         }
     };
 
     return (
         <div className="flex flex-1 overflow-hidden">
-            <Sidebar 
+             <Sidebar 
                 isExpanded={isSidebarExpanded}
-                navItems={navItems}
+                navItems={[
+                    { key: 'overview', label: 'Overview', icon: <span className="text-xl">📊</span> },
+                    { key: 'notifications', label: 'Notifications', icon: <span className="text-xl">🔔</span> },
+                    { key: 'timetable', label: 'Timetable', icon: <span className="text-xl">🗓️</span> },
+                    { key: 'attendance', label: 'Attendance', icon: <span className="text-xl">📅</span> },
+                    { key: 'progress', label: 'Progress', icon: <span className="text-xl">📈</span> },
+                    { key: 'messages', label: <span className="flex justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full px-1.5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: <span className="text-xl">💬</span> },
+                    { key: 'profile', label: 'Student Profile', icon: <span className="text-xl">👤</span> },
+                ]}
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
                 onClose={() => setIsSidebarExpanded(false)}
                 title="Parent Portal"
             />
-            <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
-                 {renderContent()}
+            <main className="flex-1 flex flex-col overflow-hidden relative">
+                {/* Child Selector Header if multiple children */}
+                {childrenProfiles.length > 1 && (
+                    <div className="flex-shrink-0 bg-slate-900 border-b border-slate-800 p-2 flex gap-2 overflow-x-auto">
+                        {childrenProfiles.map(child => (
+                            <button
+                                key={child.uid}
+                                onClick={() => setSelectedChildId(child.uid)}
+                                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${selectedChildId === child.uid ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:bg-slate-700'}`}
+                            >
+                                {child.name}
+                            </button>
+                        ))}
+                    </div>
+                )}
+                
+                <div className="flex-1 p-4 sm:p-6 overflow-y-auto">
+                    {renderContent()}
+                </div>
+                
+                <AIAssistant systemInstruction={aiSystemInstruction} suggestedPrompts={aiSuggestedPrompts} />
+                {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
+                
+                {selectedFlyer && (
+                    <div className="fixed inset-0 bg-black bg-opacity-90 flex justify-center items-center p-4 z-50" onClick={() => setSelectedFlyer(null)}>
+                        <div className="max-w-4xl w-full max-h-full overflow-auto relative bg-slate-900 rounded-xl" onClick={e => e.stopPropagation()}>
+                            <button onClick={() => setSelectedFlyer(null)} className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full hover:bg-black/70">&times;</button>
+                            <img src={selectedFlyer.imageUrl} alt={selectedFlyer.title} className="w-full h-auto" />
+                            <div className="p-4 bg-slate-800 border-t border-slate-700">
+                                <h2 className="text-2xl font-bold">{selectedFlyer.title}</h2>
+                                <p className="text-sm text-gray-400">Posted by {selectedFlyer.publisherName} on {selectedFlyer.createdAt?.toDate().toLocaleDateString()}</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </main>
-            <AIAssistant systemInstruction={aiSystemInstruction} suggestedPrompts={aiSuggestedPrompts} />
-            {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
         </div>
     );
 };
-
-export default ParentView;

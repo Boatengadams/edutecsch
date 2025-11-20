@@ -4,7 +4,7 @@ import { useAuthentication } from '../hooks/useAuth';
 import { db, storage, functions, firebase } from '../services/firebase';
 // FIX: GES_STANDARD_CURRICULUM is a value, so it's imported separately from the types.
 import { GES_STANDARD_CURRICULUM } from '../types';
-import type { Assignment, Submission, UserProfile, TeachingMaterial, GeneratedContent, SubjectsByClass, GES_CLASSES, Timetable, Quiz, Presentation, LiveTutoringSession, AttendanceRecord, AttendanceStatus, Notification, GES_SUBJECTS, TerminalReport, TerminalReportMark, ReportSummary, SchoolSettings, VideoContent, SchoolEvent, TimetableData, TimetablePeriod, LiveLesson, LiveLessonStep, Group, GroupMember, GroupMessage, Conversation, Slide } from '../types';
+import type { Assignment, Submission, UserProfile, TeachingMaterial, GeneratedContent, SubjectsByClass, GES_CLASSES, Timetable, Quiz, Presentation, LiveTutoringSession, AttendanceRecord, AttendanceStatus, Notification, GES_SUBJECTS, TerminalReport, TerminalReportMark, ReportSummary, SchoolSettings, VideoContent, SchoolEvent, TimetableData, TimetablePeriod, LiveLesson, LiveLessonStep, Group, GroupMember, GroupMessage, Conversation, Slide, PublishedFlyer, UserActivityLog } from '../types';
 import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
@@ -17,22 +17,21 @@ import { GoogleGenAI, Type, Modality } from '@google/genai';
 import TTSAudioPlayer from './common/TTSAudioPlayer';
 import NotebookTimetable from './common/NotebookTimetable';
 import AssignmentModal from './AssignmentModal';
-import Toast from './common/Toast';
+import { useToast } from './common/Toast';
 import Histogram from './common/charts/Histogram';
 import PieChart from './common/charts/PieChart';
 import VideoGenerator from './VideoGenerator';
 import TeacherCreateStudentForm from './TeacherCreateStudentForm';
 import TeacherCreateParentForm from './TeacherCreateParentForm';
 import SnapToRegister from './SnapToRegister';
-// FIX: Changed import of TeacherLiveClassroom to default import.
-import TeacherLiveClassroom from './TeacherLiveClassroom';
+// FIX: Changed import of TeacherLiveClassroom to be a named import as it is not a default export.
+import { TeacherLiveClassroom } from './TeacherLiveClassroom';
 import BECEPastQuestionsView from './common/BECEPastQuestionsView';
 import MessagingView from './MessagingView';
 import html2canvas from 'html2canvas';
 import { ProgressDashboard } from './ProgressDashboard';
 import TeacherMyVoice from './TeacherMyVoice';
 import TeacherAITools from './TeacherAITools';
-import { useOnlineStatus } from '../hooks/useOnlineStatus';
 
 const getGrade = (score: number) => {
     if (score >= 80) return 'A';
@@ -123,8 +122,8 @@ const TeacherGroupChatView: React.FC<{ group: Group }> = ({ group }) => {
 const GroupDetailsModal: React.FC<{
     group: Group;
     onClose: () => void;
-    setToast: (toast: { message: string, type: 'success' | 'error' } | null) => void;
-}> = ({ group, onClose, setToast }) => {
+}> = ({ group, onClose }) => {
+    const { showToast } = useToast();
     const [grade, setGrade] = useState(group.grade || '');
     const [feedback, setFeedback] = useState(group.feedback || '');
     const [isSaving, setIsSaving] = useState(false);
@@ -133,10 +132,10 @@ const GroupDetailsModal: React.FC<{
         setIsSaving(true);
         try {
             await db.collection('groups').doc(group.id).update({ grade, feedback });
-            setToast({ message: 'Grade and feedback saved.', type: 'success' });
+            showToast('Grade and feedback saved.', 'success');
             onClose();
         } catch (err: any) {
-            setToast({ message: `Error saving grade: ${err.message}`, type: 'error' });
+            showToast(`Error saving grade: ${err.message}`, 'error');
         } finally {
             setIsSaving(false);
         }
@@ -200,9 +199,9 @@ const CreateGroupModal: React.FC<{
     subjectsByClass: Record<string, string[]>;
     teacherId: string;
     onClose: () => void;
-    setToast: (toast: { message: string, type: 'success' | 'error' } | null) => void;
     editingGroup: Group | null;
-}> = ({ students, classes, subjectsByClass, teacherId, onClose, setToast, editingGroup }) => {
+}> = ({ students, classes, subjectsByClass, teacherId, onClose, editingGroup }) => {
+    const { showToast } = useToast();
     const isEditing = !!editingGroup;
     const isSubmitted = isEditing && editingGroup.isSubmitted;
 
@@ -257,7 +256,7 @@ const CreateGroupModal: React.FC<{
 
     const handleSubmit = async () => {
         if (!groupName.trim() || !assignmentTitle.trim() || selectedStudentUids.length < 2 || !selectedClass || !selectedSubject) {
-            setToast({ message: 'Please fill all fields and select at least 2 students.', type: 'error' });
+            showToast('Please fill all fields and select at least 2 students.', 'error');
             return;
         }
         setIsProcessing(true);
@@ -274,7 +273,7 @@ const CreateGroupModal: React.FC<{
                     dueDate: dueDate || null,
                 };
                 await db.collection('groups').doc(editingGroup.id).update(groupUpdateData);
-                setToast({ message: 'Group updated successfully.', type: 'success' });
+                showToast('Group updated successfully.', 'success');
 
             } else {
                 const groupData: Omit<Group, 'id'> = {
@@ -291,11 +290,11 @@ const CreateGroupModal: React.FC<{
                     isSubmitted: false,
                 };
                 await db.collection('groups').add(groupData);
-                setToast({ message: 'Group created successfully.', type: 'success' });
+                showToast('Group created successfully.', 'success');
             }
             onClose();
         } catch (err: any) {
-             setToast({ message: `Failed to ${isEditing ? 'update' : 'create'} group: ${err.message}`, type: 'error' });
+             showToast(`Failed to ${isEditing ? 'update' : 'create'} group: ${err.message}`, 'error');
         } finally {
             setIsProcessing(false);
         }
@@ -348,7 +347,9 @@ const TeacherDashboard: React.FC<{
     assignments: Assignment[];
     submissions: Submission[];
     teacherClasses: string[];
-}> = ({ userProfile, students, assignments, submissions, teacherClasses }) => {
+    publishedFlyers: PublishedFlyer[];
+    onSelectFlyer: (flyer: PublishedFlyer) => void;
+}> = ({ userProfile, students, assignments, submissions, teacherClasses, publishedFlyers, onSelectFlyer }) => {
     
     const pendingSubmissions = submissions.filter(s => s.status === 'Submitted').length;
     
@@ -371,6 +372,32 @@ const TeacherDashboard: React.FC<{
                 <Card><div className="text-center"><p className="text-sm text-gray-400">Classes Taught</p><p className="text-3xl font-bold">{teacherClasses.length || 0}</p></div></Card>
                 <Card><div className="text-center"><p className="text-sm text-gray-400">Submissions to Grade</p><p className="text-3xl font-bold text-yellow-400">{pendingSubmissions}</p></div></Card>
             </div>
+
+             {publishedFlyers.length > 0 && (
+                <Card>
+                    <h3 className="text-xl font-semibold mb-4">School Notice Board</h3>
+                    <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
+                        {publishedFlyers.map(flyer => (
+                            <button 
+                                key={flyer.id} 
+                                onClick={() => onSelectFlyer(flyer)}
+                                className="flex-shrink-0 w-48 group relative rounded-lg overflow-hidden border border-slate-700 hover:border-blue-500 transition-all"
+                            >
+                                <div className="aspect-[3/4] relative">
+                                    <img src={flyer.imageUrl} alt={flyer.title} className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <span className="text-white text-sm font-bold">View Flyer</span>
+                                    </div>
+                                </div>
+                                <div className="p-2 bg-slate-800 text-left">
+                                    <p className="font-bold text-sm truncate text-slate-200">{flyer.title}</p>
+                                    <p className="text-xs text-gray-500">{flyer.createdAt?.toDate().toLocaleDateString()}</p>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </Card>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card>
@@ -404,6 +431,86 @@ const TeacherDashboard: React.FC<{
 };
 
 
+const StudentActivityTable: React.FC<{ teacherClasses: string[] }> = ({ teacherClasses }) => {
+    const [logs, setLogs] = useState<UserActivityLog[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (teacherClasses.length === 0) {
+            setLoading(false);
+            return;
+        }
+        
+        // Fetch recent activity for students. 
+        // Note: Firestore filtering by 'class IN [...]' combined with orderBy requires composite index.
+        // To simplify and avoid index creation requirements for the user, we fetch recent student logs and filter in client.
+        const unsubscribe = db.collection('userActivity')
+            .where('userRole', '==', 'student')
+            // Removed .orderBy('timestamp', 'desc') to avoid index requirement error. 
+            // We will sort client-side.
+            .limit(200)
+            .onSnapshot(snapshot => {
+                const allLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserActivityLog));
+                // Client-side filter by class and sort by timestamp desc
+                const filteredLogs = allLogs
+                    .filter(log => teacherClasses.includes(log.userClass || ''))
+                    .sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+                
+                setLogs(filteredLogs);
+                setLoading(false);
+            });
+        
+        return () => unsubscribe();
+    }, [teacherClasses]);
+
+    if (loading) return <div className="flex justify-center p-12"><Spinner /></div>;
+
+    return (
+        <Card>
+            <h3 className="text-2xl font-bold mb-6">Student Activity Log</h3>
+            <div className="overflow-x-auto">
+                <table className="min-w-full text-sm text-left text-gray-400">
+                    <thead className="text-xs text-gray-200 uppercase bg-slate-700">
+                        <tr>
+                            <th className="px-6 py-3">Time</th>
+                            <th className="px-6 py-3">Student Name</th>
+                            <th className="px-6 py-3">Class</th>
+                            <th className="px-6 py-3">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {logs.map((log) => (
+                            <tr key={log.id} className="bg-slate-800 border-b border-slate-700 hover:bg-slate-700 transition-colors">
+                                <td className="px-6 py-4 whitespace-nowrap text-xs">
+                                    {log.timestamp?.toDate().toLocaleString()}
+                                </td>
+                                <td className="px-6 py-4 font-medium text-white">
+                                    {log.userName}
+                                </td>
+                                <td className="px-6 py-4">
+                                    {log.userClass}
+                                </td>
+                                <td className="px-6 py-4">
+                                    <span className={`px-2 py-1 rounded text-xs font-bold ${log.action === 'login' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                        {log.action.toUpperCase()}
+                                    </span>
+                                </td>
+                            </tr>
+                        ))}
+                        {logs.length === 0 && (
+                             <tr>
+                                <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
+                                    No recent activity from your students.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        </Card>
+    );
+};
+
 interface TeacherViewProps {
   isSidebarExpanded: boolean;
   setIsSidebarExpanded: (isExpanded: boolean) => void;
@@ -411,8 +518,8 @@ interface TeacherViewProps {
 
 const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
     const { user, userProfile, schoolSettings } = useAuthentication();
+    const { showToast } = useToast();
     const [activeTab, setActiveTab] = useState('dashboard');
-    const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
     const [showChangePassword, setShowChangePassword] = useState(false);
     const [showVideoGenerator, setShowVideoGenerator] = useState(false);
   
@@ -427,6 +534,8 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     const [allTeachers, setAllTeachers] = useState<UserProfile[]>([]);
     const [groups, setGroups] = useState<Group[]>([]);
     const [terminalReports, setTerminalReports] = useState<TerminalReport[]>([]);
+    const [publishedFlyers, setPublishedFlyers] = useState<PublishedFlyer[]>([]);
+    const [selectedFlyer, setSelectedFlyer] = useState<PublishedFlyer | null>(null);
     
     // UI states
     const [loading, setLoading] = useState(true);
@@ -480,10 +589,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     // FIX: Add missing state for AI Assistant
     const [aiSystemInstruction, setAiSystemInstruction] = useState('');
     const [aiSuggestedPrompts, setAiSuggestedPrompts] = useState<string[]>([]);
-    
-    // Online Status
-    const studentUids = useMemo(() => students.map(s => s.uid), [students]);
-    const studentOnlineStatus = useOnlineStatus(studentUids);
   
     // FIX: Add explicit type to useMemo to help with type inference.
     const teacherClasses = useMemo<string[]>(() => {
@@ -628,6 +733,23 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         
         // Fetch groups
         unsubscribers.push(db.collection('groups').where('teacherId', '==', user.uid).onSnapshot(snap => setGroups(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group)))));
+
+        // Fetch Published Flyers - REMOVED orderBy to fix index error
+        const flyerQueries = [
+            db.collection('publishedFlyers').where('targetAudience', '==', 'all'),
+            db.collection('publishedFlyers').where('targetRoles', 'array-contains', 'teacher'),
+            db.collection('publishedFlyers').where('targetAudience', '==', 'selected').where('targetUids', 'array-contains', user.uid)
+        ];
+        const unsubFlyers = flyerQueries.map(q => q.limit(10).onSnapshot(snap => {
+            const flyers = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublishedFlyer));
+            setPublishedFlyers(prev => {
+                const all = [...prev, ...flyers];
+                const unique = Array.from(new Map(all.map(item => [item.id, item])).values());
+                return unique.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()).slice(0, 20);
+            });
+        }));
+        unsubscribers.push(...unsubFlyers);
+
             
         if (teacherClasses.length > 0 && teacherSubjects.length > 0) {
             unsubscribers.push(
@@ -763,10 +885,10 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 feedback: feedbackInput,
                 status: 'Graded'
             });
-            setToast({ message: 'Grade saved successfully.', type: 'success' });
+            showToast('Grade saved successfully.', 'success');
             handleCancelGrading(); // This will reset state and close the form
         } catch (err: any) {
-            setToast({ message: `Error saving grade: ${err.message}`, type: 'error' });
+            showToast(`Error saving grade: ${err.message}`, 'error');
         }
     };
 
@@ -781,39 +903,10 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     };
 
     const handleDeleteAssignment = async (assignmentId: string) => {
-        if (window.confirm('Are you sure you want to delete this assignment? Submissions will remain orphan but hidden.')) {
+        if (window.confirm('Are you sure you want to delete this assignment and all its submissions?')) {
+            // It's safer to use a Cloud Function for this to ensure all related data is deleted.
+            // For now, we'll just delete the assignment doc.
             await db.collection('assignments').doc(assignmentId).delete();
-             setToast({ message: 'Assignment deleted.', type: 'success' });
-        }
-    };
-
-    // --- BATCH ACTIONS ---
-    const handleSelectAssignment = (id: string) => {
-        setSelectedAssignmentIds(prev => prev.includes(id) ? prev.filter(pid => pid !== id) : [...prev, id]);
-    };
-
-    const handleSelectAllAssignments = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.checked) {
-            setSelectedAssignmentIds(filteredAssignments.map(a => a.id));
-        } else {
-            setSelectedAssignmentIds([]);
-        }
-    };
-
-    const handleBulkDeleteAssignments = async () => {
-        if (selectedAssignmentIds.length === 0) return;
-        if (window.confirm(`Are you sure you want to delete ${selectedAssignmentIds.length} assignments?`)) {
-            setIsBulkDeleting(true);
-            try {
-                const batchDeletePromises = selectedAssignmentIds.map(id => db.collection('assignments').doc(id).delete());
-                await Promise.all(batchDeletePromises);
-                setToast({ message: 'Assignments deleted successfully.', type: 'success' });
-                setSelectedAssignmentIds([]);
-            } catch (err: any) {
-                 setToast({ message: `Failed to delete assignments: ${err.message}`, type: 'error' });
-            } finally {
-                setIsBulkDeleting(false);
-            }
         }
     };
     
@@ -884,7 +977,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 // We don't await these promises, letting them run in the background
                 Promise.all(imagePromises).catch(err => {
                     console.error("Background image upload failed:", err);
-                    setToast({ message: "Some lesson images failed to upload.", type: 'error' });
+                    showToast("Some lesson images failed to upload.", 'error');
                 });
             } else { // This is a saved presentation with permanent URLs
                 const imagePromises = content.presentation.slides.map((slide, index) => {
@@ -899,7 +992,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             setActiveTab('live_lesson');
         } catch(error) {
             console.error("Error starting live lesson:", error);
-            setToast({ message: `Error starting live lesson`, type: 'error' });
+            showToast(`Error starting live lesson`, 'error');
         }
     }, [user, userProfile]);
 
@@ -910,9 +1003,9 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         try {
             const deleteResource = functions.httpsCallable('deleteResource');
             await deleteResource({ resourceType: 'generatedContent', resourceId: contentToDelete.id });
-            setToast({ message: 'Content deleted successfully.', type: 'success' });
+            showToast('Content deleted successfully.', 'success');
         } catch(err: any) {
-            setToast({ message: `Failed to delete content: ${err.message}`, type: 'error'});
+            showToast(`Failed to delete content: ${err.message}`, 'error');
         } finally {
             setIsDeletingContent(false);
             setContentToDelete(null);
@@ -926,7 +1019,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
 
     const handleSaveAttendance = async () => {
         if (!userProfile?.classTeacherOf || Object.keys(attendanceData).length === 0) {
-            setToast({ message: "No attendance data to save.", type: 'error' });
+            showToast("No attendance data to save.", 'error');
             return;
         }
 
@@ -958,10 +1051,10 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                      senderName: userProfile.name,
                  });
             }
-            setToast({ message: "Attendance saved successfully.", type: 'success' });
+            showToast("Attendance saved successfully.", 'success');
         } catch(err: any) {
             console.error(err);
-            setToast({ message: `Failed to save attendance: ${err.message}`, type: 'error' });
+            showToast(`Failed to save attendance: ${err.message}`, 'error');
         } finally {
             setIsSavingAttendance(false);
         }
@@ -1050,12 +1143,12 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             }
         });
         setMarks(newMarks);
-        setToast({message: "Scores from assignments and group work have been filled in.", type: "success"});
+        showToast("Scores from assignments and group work have been filled in.", "success");
     };
 
     const calculateTotalsAndSave = async () => {
         if (!reportClass || !reportSubject || !schoolSettings || !user) {
-            setToast({ message: "Missing required report information.", type: 'error' });
+            showToast("Missing required report information.", 'error');
             return;
         }
         setIsSavingMarks(true);
@@ -1120,9 +1213,9 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             }, { merge: true });
 
             setMarks(calculatedMarks);
-            setToast({ message: 'Marks saved successfully!', type: 'success' });
+            showToast('Marks saved successfully!', 'success');
         } catch (err: any) {
-            setToast({ message: `Failed to save marks: ${err.message}`, type: 'error' });
+            showToast(`Failed to save marks: ${err.message}`, 'error');
         } finally {
             setIsSavingMarks(false);
         }
@@ -1134,9 +1227,9 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         try {
             const deleteResource = functions.httpsCallable('deleteResource');
             await deleteResource({ resourceType: 'group', resourceId: groupToDelete.id });
-            setToast({ message: `Group '${groupToDelete.name}' has been deleted.`, type: 'success' });
+            showToast(`Group '${groupToDelete.name}' has been deleted.`, 'success');
         } catch (err: any) {
-            setToast({ message: `Failed to delete group: ${err.message}`, type: 'error' });
+            showToast(`Failed to delete group: ${err.message}`, 'error');
         } finally {
             setIsDeletingGroup(false);
             setGroupToDelete(null);
@@ -1155,31 +1248,21 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         { key: 'attendance', label: 'Attendance', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
         { key: 'terminal_reports', label: 'Terminal Reports', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg> },
         { key: 'past_questions', label: 'BECE Questions', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg> },
-        { key: 'my_voice', label: 'My Voice', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" /></svg> },
-        { key: 'ai_tools', label: 'AI Tools', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" /></svg> },
-        { key: 'settings', label: 'Settings', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-1.007 1.11-.95.542.057 1.007.56 1.066 1.11.06.541-.218 1.14-.644 1.527a4.953 4.953 0 0 1-2.072.827c-.541.06-.95.542-.95 1.11 0 .542.409 1.007.95 1.11a4.953 4.953 0 0 1 2.072.827c.426.387.704.986.644 1.527-.06.542-.524 1.053-1.066 1.11-.541.057-1.02-.352-1.11-.95a4.953 4.953 0 0 1-.95-2.072c-.057-.542-.56-1.007-1.11-.95-.542-.057-1.007-.56-1.066-1.11-.06-.541.218-1.14.644-1.527a4.953 4.953 0 0 1 2.072-.827c.541-.06.95-.542-.95-1.11 0 .542-.409-1.007-.95-1.11a4.953 4.953 0 0 1-2.072-.827c-.426-.387-.704-.986-.644-1.527.06-.542.524-1.053 1.066 1.11.541-.057 1.02.352 1.11-.95Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15.98 3.94c.09-.542.56-1.007 1.11-.95.542.057 1.007.56 1.066 1.11.06.541-.218 1.14-.644 1.527a4.953 4.953 0 0 1-2.072.827c-.541.06-.95.542-.95 1.11 0 .542.409 1.007.95 1.11a4.953 4.953 0 0 1 2.072.827c.426.387.704.986.644 1.527-.06.542-.524 1.053-1.066 1.11-.541.057 1.02.352 1.11-.95Z" /></svg> },
+        { key: 'student_activity', label: 'Student Activity', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
     ];
     
-    const contactsForMessaging = useMemo(() => [...students, ...allParents, ...allTeachers.filter(t => t.uid !== user.uid)], [students, allParents, allTeachers, user.uid]);
-
-    const renderSettings = () => (
-        <Card>
-            <h3 className="text-xl font-bold mb-4">Account Settings</h3>
-            <div className="max-w-md">
-                <h4 className="font-semibold text-gray-300 mb-2">Security</h4>
-                <Button onClick={() => setShowChangePassword(true)} variant="secondary">
-                    Change Password
-                </Button>
-            </div>
-        </Card>
-    );
+    if (!user || !userProfile) {
+        return <div className="flex justify-center items-center h-screen"><Spinner /></div>;
+    }
+    
+    const contactsForMessaging = [...students, ...allParents, ...allTeachers.filter(t => t.uid !== user.uid)];
 
     const renderContent = () => {
         if (loading) return <div className="flex-1 flex justify-center items-center"><Spinner /></div>;
 
         switch (activeTab) {
             case 'dashboard':
-                return <TeacherDashboard userProfile={userProfile} students={students} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} />;
+                return <TeacherDashboard userProfile={userProfile} students={students} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} publishedFlyers={publishedFlyers} onSelectFlyer={setSelectedFlyer} />;
             case 'my_students':
                 const studentsByClass = students.reduce((acc: Record<string, UserProfile[]>, student) => {
                     const classKey = student.class || 'Unassigned';
@@ -1205,10 +1288,8 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                                     </div>
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                         {classStudents.map(student => (
-                                            <button key={student.uid} onClick={() => setViewingStudentProgress(student)} className="p-3 bg-slate-700 rounded-lg text-left hover:bg-slate-600 transition-colors flex items-center justify-between">
-                                                <span>{student.name}</span>
-                                                {/* Online Status Indicator */}
-                                                <span className={`inline-block w-2.5 h-2.5 rounded-full ${studentOnlineStatus[student.uid] === 'online' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-gray-500'}`} title={studentOnlineStatus[student.uid] === 'online' ? 'Online' : 'Offline'}></span>
+                                            <button key={student.uid} onClick={() => setViewingStudentProgress(student)} className="p-3 bg-slate-700 rounded-lg text-left hover:bg-slate-600 transition-colors">
+                                                {student.name}
                                             </button>
                                         ))}
                                     </div>
@@ -1219,112 +1300,68 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                  );
             case 'assignments':
                 return (
-                    <Card className="h-full flex flex-col p-0 overflow-hidden">
-                         <div className="p-4 border-b border-slate-700 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-800/30">
-                            <h2 className="text-2xl font-bold">Assignments Manager</h2>
-                            <div className="flex flex-wrap items-center gap-3">
+                    <div className="space-y-6">
+                        {/* Header Section */}
+                        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <h2 className="text-3xl font-bold">Assignments</h2>
+                            <div className="flex items-center gap-4">
                                 <div className="flex items-center gap-2">
-                                    <select id="class-filter" value={classFilter} onChange={e => setClassFilter(e.target.value)} className="px-3 py-1.5 bg-slate-900 rounded-md border border-slate-700 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                    <label htmlFor="class-filter" className="text-sm text-gray-400">Class:</label>
+                                    <select id="class-filter" value={classFilter} onChange={e => setClassFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm">
                                         <option value="all">All Classes</option>
                                         {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
                                     </select>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <select id="subject-filter" value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} className="px-3 py-1.5 bg-slate-900 rounded-md border border-slate-700 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                     <label htmlFor="subject-filter" className="text-sm text-gray-400">Subject:</label>
+                                    <select id="subject-filter" value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm">
                                         <option value="all">All Subjects</option>
                                         {subjectsForFilter.map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
                                 </div>
-                                <Button size="sm" onClick={handleCreateNewAssignment} className="flex items-center gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" /></svg>
-                                    Create
-                                </Button>
+                                <Button onClick={handleCreateNewAssignment}>+ Create</Button>
                             </div>
                         </div>
-                        
-                        {/* Batch Action Bar */}
-                        {selectedAssignmentIds.length > 0 && (
-                             <div className="bg-blue-900/20 border-b border-blue-800/50 p-2 px-4 flex items-center gap-4 animate-fade-in-short">
-                                 <span className="text-sm font-semibold text-blue-200">{selectedAssignmentIds.length} selected</span>
-                                 <Button size="sm" variant="danger" onClick={handleBulkDeleteAssignments} disabled={isBulkDeleting}>
-                                     {isBulkDeleting ? 'Deleting...' : `Delete Selected (${selectedAssignmentIds.length})`}
-                                 </Button>
-                                 <button onClick={() => setSelectedAssignmentIds([])} className="text-xs text-slate-400 hover:text-white underline">Cancel Selection</button>
-                             </div>
-                        )}
 
-                        <div className="flex-1 overflow-y-auto">
-                            {filteredAssignments.length > 0 ? (
-                                <table className="w-full text-left border-collapse">
-                                    <thead className="bg-slate-900/50 text-xs uppercase text-gray-400 sticky top-0 z-10">
-                                        <tr>
-                                            <th className="p-4 w-10">
-                                                <input type="checkbox" onChange={handleSelectAllAssignments} checked={selectedAssignmentIds.length === filteredAssignments.length && filteredAssignments.length > 0} className="rounded bg-slate-700 border-slate-600 text-blue-600 focus:ring-blue-500" />
-                                            </th>
-                                            <th className="p-4 font-semibold border-b border-slate-700">Title</th>
-                                            <th className="p-4 font-semibold border-b border-slate-700">Class & Subject</th>
-                                            <th className="p-4 font-semibold border-b border-slate-700">Due Date</th>
-                                            <th className="p-4 font-semibold border-b border-slate-700 text-center">Submissions</th>
-                                            <th className="p-4 font-semibold border-b border-slate-700 text-right">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-700/50">
-                                        {filteredAssignments.map(assignment => {
-                                            const subCount = submissions.filter(s => s.assignmentId === assignment.id).length;
-                                            const isOverdue = assignment.dueDate && new Date(assignment.dueDate) < new Date();
-                                            const isSelected = selectedAssignmentIds.includes(assignment.id);
-                                            
-                                            return (
-                                            <tr key={assignment.id} className={`hover:bg-slate-700/30 transition-colors group ${isSelected ? 'bg-blue-900/10' : ''}`}>
-                                                <td className="p-4">
-                                                    <input type="checkbox" checked={isSelected} onChange={() => handleSelectAssignment(assignment.id)} className="rounded bg-slate-700 border-slate-600 text-blue-600 focus:ring-blue-500" />
-                                                </td>
-                                                <td className="p-4">
-                                                    <p className="font-bold text-slate-200">{assignment.title}</p>
-                                                    <p className="text-xs text-gray-500 mt-0.5 truncate max-w-xs">{assignment.description.substring(0, 60)}...</p>
-                                                </td>
-                                                <td className="p-4">
-                                                    <div className="flex flex-col gap-1">
-                                                        <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-900/30 text-blue-300 w-fit">{assignment.classId}</span>
-                                                        <span className="text-xs text-gray-400">{assignment.subject}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="p-4 text-sm">
-                                                    <span className={isOverdue ? 'text-red-400' : 'text-gray-300'}>
-                                                        {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'No Due Date'}
-                                                    </span>
-                                                </td>
-                                                <td className="p-4 text-center">
-                                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${subCount > 0 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                                                        {subCount}
-                                                    </span>
-                                                </td>
-                                                <td className="p-4 text-right">
-                                                    <div className="flex items-center justify-end gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                                        <button onClick={() => setViewingSubmissionsFor(assignment)} className="p-2 text-slate-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-full transition-colors" title="View Submissions">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" /><path fillRule="evenodd" d="M.664 10.59a1.651 1.651 0 0 1 0-1.186A10.004 10.004 0 0 1 10 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0 1 10 17c-4.257 0-7.893-2.66-9.336-6.41ZM14 10a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" clipRule="evenodd" /></svg>
-                                                        </button>
-                                                        <button onClick={() => handleEditAssignment(assignment)} className="p-2 text-slate-400 hover:text-yellow-400 hover:bg-yellow-400/10 rounded-full transition-colors" title="Edit">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" /><path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" /></svg>
-                                                        </button>
-                                                        <button onClick={() => handleDeleteAssignment(assignment.id)} className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-full transition-colors" title="Delete">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" /></svg>
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        )})}
-                                    </tbody>
-                                </table>
-                            ) : (
-                                <div className="flex flex-col items-center justify-center h-full text-gray-500 space-y-4">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-16 h-16 opacity-20"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
-                                    <p>No assignments found matching your filters.</p>
-                                    <Button size="sm" variant="secondary" onClick={handleCreateNewAssignment}>Create First Assignment</Button>
-                                </div>
-                            )}
+                        {/* Grid Section */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                            {filteredAssignments.map(assignment => (
+                                <Card key={assignment.id} className="flex flex-col" fullHeight={false}>
+                                    <div className="flex justify-between items-start gap-2 mb-3">
+                                        <div>
+                                            <h3 className="font-bold text-lg line-clamp-1" title={assignment.title}>{assignment.title}</h3>
+                                            <div className="flex gap-2 mt-1 flex-wrap">
+                                                <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-gray-300">{assignment.classId}</span>
+                                                <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-gray-300">{assignment.subject}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-1 shrink-0">
+                                            <button onClick={() => handleEditAssignment(assignment)} className="p-1.5 text-blue-400 hover:bg-blue-400/10 rounded transition-colors" title="Edit">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" /><path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" /></svg>
+                                            </button>
+                                            <button onClick={() => handleDeleteAssignment(assignment.id)} className="p-1.5 text-red-400 hover:bg-red-400/10 rounded transition-colors" title="Delete">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" /></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex-grow mb-4">
+                                        <p className="text-sm text-gray-400 line-clamp-3">{assignment.description}</p>
+                                    </div>
+
+                                    <div className="pt-4 border-t border-slate-700/50 flex flex-col gap-3">
+                                        <div className="flex justify-between items-center text-xs text-gray-400">
+                                            <span>Due: <span className="text-yellow-400">{assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'No Date'}</span></span>
+                                            <span>{assignment.type || 'Theory'}</span>
+                                        </div>
+                                        <Button size="sm" className="w-full" onClick={() => setViewingSubmissionsFor(assignment)}>
+                                            View Submissions ({submissions.filter(s => s.assignmentId === assignment.id).length})
+                                        </Button>
+                                    </div>
+                                </Card>
+                            ))}
                         </div>
-                    </Card>
+                    </div>
                 );
             case 'live_lesson':
                 return activeLiveLesson ? 
@@ -1380,9 +1417,19 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
                             <h2 className="text-3xl font-bold">My Library</h2>
-                            <Button onClick={() => { setEditingPresentation(null); setShowPresentationGenerator(true); }}>+ Create New</Button>
+                            <div className="flex gap-2">
+                                <Button onClick={() => { setEditingPresentation(null); setShowPresentationGenerator(true); }}>+ Create New</Button>
+                                <TeacherAITools students={students} userProfile={userProfile} />
+                            </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {/* Render My Voice Card */}
+                            <Card className="border-2 border-blue-500/30 hover:border-blue-500 cursor-pointer" onClick={() => { /* Logic to expand voice settings if needed, or keep it separate */ }}>
+                                <h3 className="text-xl font-bold mb-2">🎤 My Voice</h3>
+                                <p className="text-sm text-gray-400 mb-4">Clone your voice for AI-driven presentations.</p>
+                                <TeacherMyVoice userProfile={userProfile} />
+                            </Card>
+
                             {myLibraryContent.map(content => (
                                 <Card key={content.id}>
                                     <h3 className="text-xl font-bold truncate">{content.topic}</h3>
@@ -1513,12 +1560,8 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 );
             case 'past_questions':
                 return <BECEPastQuestionsView />;
-            case 'my_voice':
-                return <TeacherMyVoice userProfile={userProfile} setToast={setToast} />;
-            case 'ai_tools':
-                return <TeacherAITools students={students} userProfile={userProfile} />;
-            case 'settings':
-                return renderSettings();
+             case 'student_activity':
+                return <StudentActivityTable teacherClasses={teacherClasses} />;
             default:
                 return <div>Select a tab</div>;
         }
@@ -1630,7 +1673,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                     userProfile={userProfile}
                     initialContent={editingPresentation}
                     onStartLiveLesson={handleStartLiveLesson}
-                    setToast={setToast}
                 />
             )}
             {showVideoGenerator && user && userProfile && (
@@ -1641,7 +1683,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                     subjectsByClass={userProfile.subjectsByClass || null} 
                 />
             )}
-            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
             {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
             {contentToDelete && (
                  <ConfirmationModal
@@ -1665,7 +1706,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
              {showCreateParentModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
                     <Card className="w-full max-w-md">
-                        <TeacherCreateParentForm allStudents={students} setToast={setToast} />
+                        <TeacherCreateParentForm allStudents={students} />
                         <Button variant="secondary" onClick={() => setShowCreateParentModal(false)} className="w-full mt-2">Cancel</Button>
                     </Card>
                 </div>
@@ -1684,11 +1725,10 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                     subjectsByClass={userProfile.subjectsByClass || {}}
                     teacherId={user.uid}
                     onClose={() => { setShowCreateGroupModal(false); setEditingGroup(null); }}
-                    setToast={setToast}
                     editingGroup={editingGroup}
                 />
              )}
-              {viewingGroup && <GroupDetailsModal group={viewingGroup} onClose={() => setViewingGroup(null)} setToast={setToast} />}
+              {viewingGroup && <GroupDetailsModal group={viewingGroup} onClose={() => setViewingGroup(null)} />}
                <ConfirmationModal
                 isOpen={!!groupToDelete}
                 onClose={() => setGroupToDelete(null)}
@@ -1698,6 +1738,18 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 isLoading={isDeletingGroup}
                 confirmButtonText="Yes, Delete Group"
             />
+             {selectedFlyer && (
+                <div className="fixed inset-0 bg-black bg-opacity-90 flex justify-center items-center p-4 z-50" onClick={() => setSelectedFlyer(null)}>
+                    <div className="max-w-4xl w-full max-h-full overflow-auto relative bg-slate-900 rounded-xl" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setSelectedFlyer(null)} className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full hover:bg-black/70">&times;</button>
+                        <img src={selectedFlyer.imageUrl} alt={selectedFlyer.title} className="w-full h-auto" />
+                        <div className="p-4 bg-slate-800 border-t border-slate-700">
+                            <h2 className="text-2xl font-bold">{selectedFlyer.title}</h2>
+                            <p className="text-sm text-gray-400">Posted by {selectedFlyer.publisherName} on {selectedFlyer.createdAt?.toDate().toLocaleDateString()}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

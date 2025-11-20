@@ -1,8 +1,9 @@
 
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { db, functions, storage, firebase, rtdb } from '../services/firebase';
 import { 
-    UserProfile, UserRole, SchoolEvent, SchoolEventType, SchoolEventAudience, EVENT_TYPES, EVENT_AUDIENCE, GES_CLASSES, TeachingMaterial, Timetable, TimetableData, TimetablePeriod, SubjectsByClass, GES_STANDARD_CURRICULUM, AttendanceRecord, AttendanceStatus, SchoolSettings, GES_SUBJECTS, Presentation, Notification, TerminalReport, ReportSummary, TerminalReportMark, ActivationToken 
+    UserProfile, UserRole, SchoolEvent, SchoolEventType, SchoolEventAudience, EVENT_TYPES, EVENT_AUDIENCE, GES_CLASSES, TeachingMaterial, Timetable, TimetableData, TimetablePeriod, SubjectsByClass, GES_STANDARD_CURRICULUM, AttendanceRecord, AttendanceStatus, SchoolSettings, GES_SUBJECTS, Presentation, Notification, TerminalReport, ReportSummary, TerminalReportMark, ActivationToken, PublishedFlyer, UserActivityLog 
 } from '../types';
 import Card from './common/Card';
 import Button from './common/Button';
@@ -13,7 +14,7 @@ import Sidebar from './common/Sidebar';
 import NotebookTimetable from './common/NotebookTimetable';
 import AIAssistant from './AIAssistant';
 import ChangePasswordModal from './common/ChangePasswordModal';
-import Toast from './common/Toast';
+import { useToast } from './common/Toast';
 import UserEditModal from './UserEditModal';
 import PieChart from './common/charts/PieChart';
 import BarChart from './common/charts/BarChart';
@@ -25,6 +26,8 @@ import { useRejectUser } from '../hooks/useRejectUser';
 import AdminCreateUserForm from './AdminCreateUserForm';
 import AdminCreateParentForm from './AdminCreateParentForm';
 import AdminAttendanceDashboard from './AdminAttendanceDashboard';
+import SystemActivation from './SystemActivation';
+import MessagingView from './MessagingView';
 import html2canvas from 'html2canvas';
 
 interface ActiveUserStatus {
@@ -36,7 +39,6 @@ interface ActiveUserStatus {
     class: string;
 }
 
-// ... (ActiveUsersTable component remains the same)
 const ActiveUsersTable: React.FC = () => {
     const [users, setUsers] = useState<ActiveUserStatus[]>([]);
     const [loading, setLoading] = useState(true);
@@ -110,7 +112,7 @@ const ActiveUsersTable: React.FC = () => {
                             <th className="px-6 py-3">Name</th>
                             <th className="px-6 py-3">Role</th>
                             <th className="px-6 py-3">Class/Context</th>
-                            <th className="px-6 py-3">Last Activity</th>
+                            <th className="px-6 py-3">Last Status Change</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -154,9 +156,75 @@ const ActiveUsersTable: React.FC = () => {
     );
 };
 
-// ... (AdminTerminalReports, GeneratedTimetable, getFileType, ClassManagerModal, fileToBase64 remain the same)
+const SessionLogsTable: React.FC = () => {
+    const [logs, setLogs] = useState<UserActivityLog[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const unsubscribe = db.collection('userActivity')
+            .orderBy('timestamp', 'desc')
+            .limit(100)
+            .onSnapshot(snapshot => {
+                setLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserActivityLog)));
+                setLoading(false);
+            });
+        return () => unsubscribe();
+    }, []);
+
+    if (loading) return <div className="flex justify-center p-12"><Spinner /></div>;
+
+    return (
+        <Card>
+            <h3 className="text-2xl font-bold mb-6">Session Logs (Last 100)</h3>
+            <div className="overflow-x-auto">
+                <table className="min-w-full text-sm text-left text-gray-400">
+                    <thead className="text-xs text-gray-200 uppercase bg-slate-700">
+                        <tr>
+                            <th className="px-6 py-3">Time</th>
+                            <th className="px-6 py-3">User</th>
+                            <th className="px-6 py-3">Role</th>
+                            <th className="px-6 py-3">Action</th>
+                            <th className="px-6 py-3">Class/Context</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {logs.map((log) => (
+                            <tr key={log.id} className="bg-slate-800 border-b border-slate-700 hover:bg-slate-700 transition-colors">
+                                <td className="px-6 py-4 whitespace-nowrap text-xs">
+                                    {log.timestamp?.toDate().toLocaleString()}
+                                </td>
+                                <td className="px-6 py-4 font-medium text-white">
+                                    {log.userName}
+                                </td>
+                                <td className="px-6 py-4 capitalize">
+                                    {log.userRole}
+                                </td>
+                                <td className="px-6 py-4">
+                                    <span className={`px-2 py-1 rounded text-xs font-bold ${log.action === 'login' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                        {log.action.toUpperCase()}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-4">
+                                    {log.userClass}
+                                </td>
+                            </tr>
+                        ))}
+                        {logs.length === 0 && (
+                             <tr>
+                                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                                    No session logs available.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        </Card>
+    );
+}
+
 const AdminTerminalReports: React.FC<{ allUsers: UserProfile[], schoolSettings: SchoolSettings | null, userProfile: UserProfile | null }> = ({ allUsers, schoolSettings, userProfile }) => {
-    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    const { showToast } = useToast();
 
     const allStudents = useMemo(() => allUsers.filter(u => u.role === 'student').sort((a, b) => (a.name || '').localeCompare(b.name || '')), [allUsers]);
 
@@ -231,9 +299,9 @@ const AdminTerminalReports: React.FC<{ allUsers: UserProfile[], schoolSettings: 
                 term: term,
                 headTeacherRemarks: headTeacherRemarks
             }, { merge: true });
-            setToast({ message: "Remarks saved successfully.", type: "success" });
+            showToast("Remarks saved successfully.", "success");
         } catch (err: any) {
-            setToast({ message: `Failed to save remarks: ${err.message}`, type: "error" });
+            showToast(`Failed to save remarks: ${err.message}`, "error");
         } finally {
             setIsSavingRemarks(false);
         }
@@ -251,7 +319,6 @@ const AdminTerminalReports: React.FC<{ allUsers: UserProfile[], schoolSettings: 
 
     return (
         <>
-        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         <Card>
             <div className="flex justify-between items-start no-print">
                 <h3 className="text-xl font-semibold mb-4">View Terminal Reports</h3>
@@ -559,27 +626,38 @@ const ImagePreview: React.FC<{ file: File; onRemove?: () => void }> = ({ file, o
 
 interface FlyerDesignerProps {
     onClose: () => void;
+    allUsers: UserProfile[];
+    userProfile: UserProfile;
 }
 
-const FlyerDesigner: React.FC<FlyerDesignerProps> = ({ onClose }) => {
+const FlyerDesigner: React.FC<FlyerDesignerProps> = ({ onClose, allUsers, userProfile }) => {
+    const { showToast } = useToast();
     // Metadata State
     const [flyerTitle, setFlyerTitle] = useState('');
     const [eventType, setEventType] = useState('Academic');
     const [locality, setLocality] = useState('');
     const [date, setDate] = useState('');
-    const [description, setDescription] = useState('');
     
     // Assets State
     const [mainImage, setMainImage] = useState<File | null>(null);
     const [secondaryImages, setSecondaryImages] = useState<File[]>([]);
     const [customFont, setCustomFont] = useState('Inter');
     const [customColorScheme, setCustomColorScheme] = useState('#3b82f6');
+    const [customInstructions, setCustomInstructions] = useState('');
 
     // AI & Generation State
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isGeneratingBackground, setIsGeneratingBackground] = useState(false);
     const [generatedPlan, setGeneratedPlan] = useState<{ prompt: string; tasks: string } | null>(null);
     const [flyerBackgroundUrl, setFlyerBackgroundUrl] = useState<string | null>(null);
+    
+    // Publishing State
+    const [showPublishModal, setShowPublishModal] = useState(false);
+    const [targetAudience, setTargetAudience] = useState<'all' | 'role' | 'selected'>('all');
+    const [targetRoles, setTargetRoles] = useState<UserRole[]>([]);
+    const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+    const [isPublishing, setIsPublishing] = useState(false);
+    const [userSearchTerm, setUserSearchTerm] = useState('');
     
     // Refs
     const flyerRef = useRef<HTMLDivElement>(null);
@@ -591,7 +669,7 @@ const FlyerDesigner: React.FC<FlyerDesignerProps> = ({ onClose }) => {
 
     const handleGeneratePlan = async () => {
         if (!flyerTitle || !eventType) {
-            alert("Please enter at least an Event Title and Type.");
+            showToast("Please enter at least an Event Title and Type.", "error");
             return;
         }
 
@@ -621,6 +699,7 @@ INPUT VARIABLES:
 [SECONDARY_IMAGES_COUNT]: ${secondaryImages.length}
 [CUSTOM_FONT]: ${customFont}
 [CUSTOM_COLOR_SCHEME]: ${customColorScheme}
+[CUSTOM_INSTRUCTIONS]: ${customInstructions || 'None'}
 
 -----------------------------------------------------
 REQUIRED OUTPUT FORMAT
@@ -631,6 +710,7 @@ Create a single, detailed paragraph (max 200 words) describing the ideal flyer b
 
 Must include:
 * Aesthetic theme combining [EVENT_TITLE], [EVENT_TYPE], [LOCALITY]
+* Consideration of [CUSTOM_INSTRUCTIONS] as high-priority directives for style and content.
 * Full-page flyer layout, rule of thirds, visual hierarchy
 * Cinematic or soft-diffused lighting instructions
 * Ultra-high-quality terms: 8K, HDR, print-ready sharpness
@@ -677,7 +757,7 @@ Provide a numbered list of exact technical steps for the flyer-builder engine:
             
         } catch (error) {
             console.error("Error generating plan:", error);
-            alert("Failed to generate design plan.");
+            showToast("Failed to generate design plan.", "error");
         } finally {
             setIsAnalyzing(false);
         }
@@ -701,7 +781,7 @@ Provide a numbered list of exact technical steps for the flyer-builder engine:
 
         } catch (error) {
             console.error("Error generating background:", error);
-            alert("Failed to generate background image.");
+            showToast("Failed to generate background image.", "error");
         } finally {
             setIsGeneratingBackground(false);
         }
@@ -715,9 +795,64 @@ Provide a numbered list of exact technical steps for the flyer-builder engine:
                 link.download = `Flyer-${flyerTitle || 'Event'}.png`;
                 link.href = canvas.toDataURL('image/png');
                 link.click();
+                showToast("Flyer downloaded!", "success");
             } catch (error) {
                 console.error("Error downloading flyer:", error);
+                showToast("Error downloading flyer.", "error");
             }
+        }
+    };
+
+    const handlePublishFlyer = async () => {
+        if (!flyerRef.current || !flyerTitle) return;
+        
+        if (targetAudience === 'selected' && selectedUsers.length === 0) {
+            showToast("Please select at least one user to publish to.", "error");
+            return;
+        }
+
+        if (targetAudience === 'role' && targetRoles.length === 0) {
+            showToast("Please select at least one role to publish to.", "error");
+            return;
+        }
+
+        setIsPublishing(true);
+        try {
+            // 1. Capture Canvas to Blob
+            const canvas = await html2canvas(flyerRef.current, { useCORS: true, scale: 2, backgroundColor: null });
+            const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+            
+            if (!blob) throw new Error("Failed to generate image blob");
+
+            // 2. Upload to Storage
+            const storageRef = storage.ref(`flyers/${Date.now()}-${flyerTitle.replace(/\s+/g, '-')}.png`);
+            await storageRef.put(blob);
+            const imageUrl = await storageRef.getDownloadURL();
+
+            // 3. Create PublishedFlyer document
+            const flyerData: PublishedFlyer = {
+                id: db.collection('publishedFlyers').doc().id,
+                title: flyerTitle,
+                imageUrl: imageUrl,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
+                publisherId: userProfile.uid,
+                publisherName: userProfile.name,
+                targetAudience: targetAudience,
+                targetRoles: targetAudience === 'role' ? targetRoles : undefined,
+                targetUids: targetAudience === 'selected' ? selectedUsers : undefined,
+            };
+
+            await db.collection('publishedFlyers').doc(flyerData.id).set(flyerData);
+            
+            showToast("Flyer published successfully!", "success");
+            setShowPublishModal(false);
+            onClose();
+
+        } catch (error) {
+            console.error("Error publishing flyer:", error);
+            showToast("Failed to publish flyer.", "error");
+        } finally {
+            setIsPublishing(false);
         }
     };
 
@@ -748,6 +883,19 @@ Provide a numbered list of exact technical steps for the flyer-builder engine:
         loadImages();
     }, [secondaryImages]);
 
+    const filteredUsers = useMemo(() => {
+        if (!userSearchTerm) return allUsers;
+        return allUsers.filter(u => u.name.toLowerCase().includes(userSearchTerm.toLowerCase()) || u.role.toLowerCase().includes(userSearchTerm.toLowerCase()));
+    }, [allUsers, userSearchTerm]);
+
+    const handleSelectUser = (uid: string) => {
+        setSelectedUsers(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
+    };
+    
+    const handleSelectRole = (role: UserRole) => {
+        setTargetRoles(prev => prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]);
+    };
+
 
     return (
         <div className="flex flex-col h-full animate-fade-in-up">
@@ -756,7 +904,8 @@ Provide a numbered list of exact technical steps for the flyer-builder engine:
                  <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">Multimodal Design Assistant</h3>
                  <div className="flex gap-3">
                      <Button variant="secondary" onClick={onClose}>Close Designer</Button>
-                     <Button onClick={handleDownloadFlyer} disabled={!flyerBackgroundUrl}>Download High-Res</Button>
+                     <Button onClick={handleDownloadFlyer} disabled={!flyerBackgroundUrl}>Download</Button>
+                     <Button onClick={() => setShowPublishModal(true)} disabled={!flyerBackgroundUrl} className="bg-green-600 hover:bg-green-500">Publish</Button>
                  </div>
             </div>
 
@@ -781,13 +930,30 @@ Provide a numbered list of exact technical steps for the flyer-builder engine:
                                     </select>
                                 </div>
                                 <div>
+                                     <label className="block text-xs text-gray-400 mb-1">Font</label>
+                                     <select value={customFont} onChange={e => setCustomFont(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600 text-sm">
+                                        {fonts.map(f => <option key={f} value={f}>{f}</option>)}
+                                     </select>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                 <div>
+                                    <label className="block text-xs text-gray-400 mb-1">Locality</label>
+                                    <input type="text" value={locality} onChange={e => setLocality(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600 text-sm" placeholder="e.g. Assembly Hall" />
+                                </div>
+                                <div>
                                     <label className="block text-xs text-gray-400 mb-1">Date</label>
-                                    <input type="text" value={date} onChange={e => setDate(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600 text-sm" placeholder="e.g. July 20th" />
+                                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600 text-sm" />
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs text-gray-400 mb-1">Location / Locality</label>
-                                <input type="text" value={locality} onChange={e => setLocality(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600 text-sm" placeholder="e.g. Main Auditorium" />
+                                <label className="block text-xs text-gray-400 mb-1">Custom Instructions (Optional)</label>
+                                <textarea 
+                                    value={customInstructions} 
+                                    onChange={e => setCustomInstructions(e.target.value)} 
+                                    className="w-full p-2 bg-slate-800 rounded border border-slate-600 text-sm h-20" 
+                                    placeholder="e.g. Make it look like a 1980s poster with neon colors. Include a robot mascot." 
+                                />
                             </div>
                         </div>
                     </Card>
@@ -796,1477 +962,510 @@ Provide a numbered list of exact technical steps for the flyer-builder engine:
                     <Card className="border-l-4 border-purple-500">
                         <h4 className="font-bold text-lg mb-4 text-purple-300">2. Visual Assets</h4>
                         <div className="space-y-4">
-                            <div>
-                                <label className="block text-xs text-gray-400 mb-1">Main Image (Focal Point)</label>
-                                <div className="flex items-center gap-3">
-                                    <Button size="sm" variant="secondary" onClick={() => mainImageInputRef.current?.click()}>Upload Main</Button>
-                                    <input ref={mainImageInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setMainImage(e.target.files?.[0] || null)} />
-                                    {mainImage && <ImagePreview file={mainImage} onRemove={() => setMainImage(null)} />}
+                             <div>
+                                <label className="block text-xs text-gray-400 mb-2">Main Image (Focal Point)</label>
+                                <input type="file" ref={mainImageInputRef} accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && setMainImage(e.target.files[0])} />
+                                <div onClick={() => mainImageInputRef.current?.click()} className="w-full h-24 border-2 border-dashed border-slate-600 rounded flex items-center justify-center cursor-pointer hover:border-blue-500 relative overflow-hidden">
+                                    {mainImage ? (
+                                        <ImagePreview file={mainImage} onRemove={() => setMainImage(null)} />
+                                    ) : <span className="text-xs text-gray-500">+ Upload Main Image</span>}
                                 </div>
-                            </div>
-                            <div>
-                                <label className="block text-xs text-gray-400 mb-1">Secondary Images (Grid)</label>
-                                <div className="flex items-center gap-3 flex-wrap">
-                                    <Button size="sm" variant="secondary" onClick={() => secondaryImageInputRef.current?.click()}>Upload Support</Button>
-                                    <input ref={secondaryImageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => setSecondaryImages(prev => [...prev, ...(Array.from(e.target.files || []))])} />
-                                    {secondaryImages.map((img, idx) => (
-                                        <ImagePreview key={idx} file={img} onRemove={() => setSecondaryImages(prev => prev.filter((_, i) => i !== idx))} />
-                                    ))}
+                             </div>
+                             <div>
+                                <label className="block text-xs text-gray-400 mb-2">Secondary Images (Grid)</label>
+                                <input type="file" ref={secondaryImageInputRef} accept="image/*" multiple className="hidden" onChange={(e) => e.target.files && setSecondaryImages(Array.from(e.target.files))} />
+                                <div onClick={() => secondaryImageInputRef.current?.click()} className="w-full h-24 border-2 border-dashed border-slate-600 rounded flex items-center justify-center cursor-pointer hover:border-blue-500 relative">
+                                    {secondaryImages.length > 0 ? (
+                                        <div className="flex gap-2 overflow-x-auto p-2 w-full">
+                                            {secondaryImages.map((file, idx) => <div key={idx} className="flex-shrink-0"><ImagePreview file={file} /></div>)}
+                                        </div>
+                                    ) : <span className="text-xs text-gray-500">+ Upload Extras</span>}
                                 </div>
-                            </div>
+                             </div>
+                             <div>
+                                 <label className="block text-xs text-gray-400 mb-2">Color Theme</label>
+                                 <input type="color" value={customColorScheme} onChange={e => setCustomColorScheme(e.target.value)} className="w-full h-10 rounded bg-transparent cursor-pointer" />
+                             </div>
                         </div>
                     </Card>
-
-                    {/* Step 3: Styling */}
+                    
+                     {/* Step 3: Plan & Generate */}
                     <Card className="border-l-4 border-green-500">
-                        <h4 className="font-bold text-lg mb-4 text-green-300">3. Design Logic</h4>
-                        <div className="space-y-3">
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs text-gray-400 mb-1">Font Family</label>
-                                    <select value={customFont} onChange={e => setCustomFont(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600 text-sm" style={{ fontFamily: customFont }}>
-                                        {fonts.map(f => <option key={f} value={f}>{f}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-400 mb-1">Color Scheme</label>
-                                    <div className="flex gap-2">
-                                        <input type="color" value={customColorScheme} onChange={e => setCustomColorScheme(e.target.value)} className="h-9 w-9 rounded cursor-pointer bg-transparent border-0" />
-                                        <input type="text" value={customColorScheme} onChange={e => setCustomColorScheme(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600 text-sm" />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <h4 className="font-bold text-lg mb-4 text-green-300">3. AI Generation</h4>
+                         <div className="space-y-3">
+                             <Button onClick={handleGeneratePlan} disabled={isAnalyzing} className="w-full">
+                                 {isAnalyzing ? <Spinner /> : 'Generate Design Plan'}
+                             </Button>
+                             
+                             {generatedPlan && (
+                                 <div className="mt-4 p-3 bg-slate-900/50 rounded text-xs text-gray-300 max-h-40 overflow-y-auto">
+                                     <p className="font-bold text-blue-400 mb-1">AI Plan:</p>
+                                     {generatedPlan.tasks}
+                                 </div>
+                             )}
+
+                             <Button onClick={handleRenderFlyer} disabled={!generatedPlan || isGeneratingBackground} className="w-full bg-gradient-to-r from-pink-600 to-orange-600 border-0">
+                                 {isGeneratingBackground ? <Spinner /> : 'Render Flyer Background'}
+                             </Button>
+                         </div>
                     </Card>
 
-                    <div className="pt-4">
-                        <Button onClick={handleGeneratePlan} disabled={isAnalyzing} className="w-full py-3 text-lg shadow-lg">
-                            {isAnalyzing ? 'Analysing Design Strategy...' : 'Generate Design Plan'}
-                        </Button>
-                    </div>
                 </div>
 
-                {/* Right Panel: AI Output & Preview */}
-                <div className="w-full lg:w-2/3 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
-                    
-                    {/* AI Plan Output */}
-                    {generatedPlan && (
-                        <div className="bg-slate-800/80 p-6 rounded-xl border border-slate-600 animate-fade-in-short">
-                             <h4 className="text-xl font-bold mb-4 flex items-center gap-2">
-                                <span className="text-2xl">🤖</span> AI Design Strategy
-                             </h4>
-                             
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                 <div>
-                                     <h5 className="font-semibold text-blue-400 mb-2 text-sm uppercase tracking-wider">1. Image Generation Prompt</h5>
-                                     <p className="text-sm text-gray-300 italic bg-slate-900/50 p-3 rounded-lg leading-relaxed">
-                                         "{generatedPlan.prompt}"
-                                     </p>
-                                 </div>
-                                 <div>
-                                     <h5 className="font-semibold text-green-400 mb-2 text-sm uppercase tracking-wider">2. Composition Tasks</h5>
-                                     <div className="text-sm text-gray-300 bg-slate-900/50 p-3 rounded-lg h-32 overflow-y-auto whitespace-pre-wrap">
-                                         {generatedPlan.tasks}
-                                     </div>
-                                 </div>
-                             </div>
+                {/* Right Panel: Preview */}
+                <div className="w-full lg:w-2/3 bg-slate-900 rounded-xl border border-slate-800 flex flex-col items-center justify-center p-8 overflow-hidden relative">
+                    {flyerBackgroundUrl ? (
+                        <div 
+                            ref={flyerRef}
+                            className="w-full max-w-[500px] aspect-[3/4] relative shadow-2xl"
+                            style={{ 
+                                backgroundImage: `url(${flyerBackgroundUrl})`, 
+                                backgroundSize: 'cover', 
+                                backgroundPosition: 'center',
+                                fontFamily: customFont 
+                            }}
+                        >
+                            {/* Overlay Content - Simulating the "Composition Engine" */}
+                            <div className="absolute inset-0 bg-black/20"></div> {/* Global Dim */}
+                            
+                            {/* Header Zone */}
+                            <div className="absolute top-8 left-0 right-0 text-center px-4 z-10">
+                                <h1 className="text-4xl font-extrabold text-white drop-shadow-lg uppercase tracking-wider" style={{ textShadow: '2px 2px 0px #000' }}>{flyerTitle}</h1>
+                                <p className="text-xl text-white font-light mt-2 drop-shadow-md">{eventType}</p>
+                            </div>
 
-                             <div className="mt-6 flex justify-center">
-                                 <Button onClick={handleRenderFlyer} disabled={isGeneratingBackground} className="px-8">
-                                     {isGeneratingBackground ? 'Rendering Assets...' : 'Initialize Flyer Engine'}
-                                 </Button>
-                             </div>
+                            {/* Main Image Zone (If uploaded) */}
+                            {mainImagePreview && (
+                                <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/4 w-2/3 aspect-square rounded-full border-4 border-white shadow-xl overflow-hidden z-0">
+                                    <img src={mainImagePreview} alt="Main" className="w-full h-full object-cover" />
+                                </div>
+                            )}
+
+                            {/* Footer / Info Zone */}
+                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent p-8 pt-20 text-white z-10">
+                                <div className="flex justify-between items-end">
+                                    <div>
+                                        <p className="text-lg font-bold">{locality}</p>
+                                        <p className="text-sm opacity-90">{date ? new Date(date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'Date TBD'}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="inline-block bg-white text-black font-bold px-3 py-1 rounded-full text-xs">
+                                            UTOPIA INT. SCHOOL
+                                        </div>
+                                    </div>
+                                </div>
+                                {secondaryImagePreviews.length > 0 && (
+                                    <div className="flex gap-2 mt-4 overflow-hidden justify-center">
+                                        {secondaryImagePreviews.slice(0, 3).map((src, i) => (
+                                            <img key={i} src={src} alt="sec" className="w-12 h-12 object-cover rounded border border-white/50" />
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                        </div>
+                    ) : (
+                        <div className="text-center text-gray-500">
+                            <div className="text-6xl mb-4">🎨</div>
+                            <p>Design preview area.</p>
+                            <p className="text-sm mt-2">Fill metadata -> Generate Plan -> Render.</p>
                         </div>
                     )}
+                </div>
+            </div>
 
-                    {/* Flyer Canvas (Simulation of the Engine) */}
-                    <div className="flex-grow flex justify-center bg-slate-900/50 rounded-xl border-2 border-dashed border-slate-700 p-8 relative min-h-[600px]">
-                        {!flyerBackgroundUrl && !isGeneratingBackground && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
-                                <p className="text-lg">Preview Canvas</p>
-                                <p className="text-sm">Generate a plan and render to see the result.</p>
-                            </div>
-                        )}
-                        
-                        {isGeneratingBackground && (
-                             <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-slate-900/80 backdrop-blur-sm">
-                                <Spinner />
-                                <p className="mt-4 text-blue-300 animate-pulse">Generating high-fidelity background...</p>
-                            </div>
-                        )}
-
-                        {flyerBackgroundUrl && (
-                            <div 
-                                ref={flyerRef}
-                                className="relative shadow-2xl overflow-hidden flex flex-col text-center"
-                                style={{ 
-                                    width: '450px', 
-                                    height: '600px', // A4 Ratio roughly
-                                    fontFamily: customFont,
-                                    color: '#fff' // Default text color, overrides below
-                                }} 
-                            >
-                                {/* Layer 0: Background */}
-                                <img src={flyerBackgroundUrl} alt="Background" className="absolute inset-0 w-full h-full object-cover z-0" />
-                                
-                                {/* Layer 1: Gradient Overlay for readability */}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/60 z-10 mix-blend-multiply"></div>
-
-                                {/* Layer 2: Content */}
-                                <div className="relative z-20 flex flex-col h-full p-8 justify-between">
+            {/* Publish Modal */}
+             {showPublishModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center p-4 z-50">
+                    <Card className="w-full max-w-md">
+                        <h3 className="text-xl font-bold mb-4">Publish Flyer</h3>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">Target Audience</label>
+                                <div className="flex flex-col gap-2">
+                                    <label className="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-slate-700">
+                                        <input type="radio" name="audience" value="all" checked={targetAudience === 'all'} onChange={() => setTargetAudience('all')} />
+                                        <span>All Users</span>
+                                    </label>
                                     
-                                    {/* Header Zone */}
-                                    <div className="mt-4">
-                                        <h2 className="text-xl font-light tracking-[0.2em] uppercase opacity-90">{locality}</h2>
-                                        <h1 className="text-5xl font-black mt-2 leading-tight drop-shadow-lg" style={{ color: customColorScheme, textShadow: '2px 2px 10px rgba(0,0,0,0.5)' }}>
-                                            {flyerTitle}
-                                        </h1>
-                                        <div className="h-1 w-24 mx-auto mt-4" style={{ backgroundColor: customColorScheme }}></div>
-                                    </div>
-
-                                    {/* Focal Point Zone */}
-                                    {mainImagePreview && (
-                                        <div className="flex-grow flex items-center justify-center my-4 relative">
-                                            <div className="relative p-1 rounded-full" style={{ border: `2px solid ${customColorScheme}` }}>
-                                                <img src={mainImagePreview} alt="Main" className="w-48 h-48 rounded-full object-cover shadow-2xl border-4 border-white" />
-                                            </div>
-                                            {/* Decorative elements */}
-                                            <div className="absolute top-1/2 left-4 w-12 h-12 border-t-2 border-l-2 border-white opacity-50"></div>
-                                            <div className="absolute bottom-1/2 right-4 w-12 h-12 border-b-2 border-r-2 border-white opacity-50"></div>
+                                    <label className="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-slate-700">
+                                        <input type="radio" name="audience" value="role" checked={targetAudience === 'role'} onChange={() => setTargetAudience('role')} />
+                                        <span>Specific Roles</span>
+                                    </label>
+                                    {targetAudience === 'role' && (
+                                        <div className="ml-6 grid grid-cols-2 gap-2">
+                                            {(['student', 'teacher', 'parent'] as UserRole[]).map(role => (
+                                                <label key={role} className="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" checked={targetRoles.includes(role)} onChange={() => handleSelectRole(role)} className="rounded bg-slate-700 border-slate-500" />
+                                                    <span className="capitalize">{role}</span>
+                                                </label>
+                                            ))}
                                         </div>
                                     )}
 
-                                    {/* Info Zone */}
-                                    <div className="bg-white/10 backdrop-blur-md p-6 rounded-xl border border-white/20 shadow-lg">
-                                        <p className="text-2xl font-bold mb-1">{date || 'Upcoming Event'}</p>
-                                        <p className="text-sm opacity-80 uppercase tracking-wider">{eventType}</p>
-                                        
-                                        {/* Secondary Images Strip */}
-                                        {secondaryImagePreviews.length > 0 && (
-                                            <div className="flex justify-center gap-2 mt-4 overflow-hidden">
-                                                {secondaryImagePreviews.slice(0, 3).map((src, idx) => (
-                                                    <img key={idx} src={src} className="w-12 h-12 rounded-md object-cover border border-white/30" alt="Sec" />
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                    
-                                    <div className="mt-4 text-xs opacity-60 font-sans">
-                                        UTOPIA INTERNATIONAL SCHOOL
-                                    </div>
+                                    <label className="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-slate-700">
+                                        <input type="radio" name="audience" value="selected" checked={targetAudience === 'selected'} onChange={() => setTargetAudience('selected')} />
+                                        <span>Specific Individuals</span>
+                                    </label>
                                 </div>
                             </div>
-                        )}
-                    </div>
+
+                            {targetAudience === 'selected' && (
+                                <div>
+                                    <input 
+                                        type="search" 
+                                        placeholder="Search users..." 
+                                        value={userSearchTerm} 
+                                        onChange={e => setUserSearchTerm(e.target.value)} 
+                                        className="w-full p-2 bg-slate-700 rounded border border-slate-600 mb-2 text-sm"
+                                    />
+                                    <div className="max-h-40 overflow-y-auto border border-slate-700 rounded bg-slate-800 p-2">
+                                        {filteredUsers.map(u => (
+                                            <label key={u.uid} className="flex items-center gap-2 p-1 hover:bg-slate-700 cursor-pointer">
+                                                <input type="checkbox" checked={selectedUsers.includes(u.uid)} onChange={() => handleSelectUser(u.uid)} />
+                                                <span className="text-sm">{u.name} ({u.role})</span>
+                                            </label>
+                                        ))}
+                                        {filteredUsers.length === 0 && <p className="text-gray-500 text-xs text-center">No users found.</p>}
+                                    </div>
+                                    <p className="text-xs text-gray-400 mt-1">{selectedUsers.length} users selected.</p>
+                                </div>
+                            )}
+
+                            <div className="flex justify-end gap-2 mt-6">
+                                <Button variant="secondary" onClick={() => setShowPublishModal(false)}>Cancel</Button>
+                                <Button onClick={handlePublishFlyer} disabled={isPublishing}>
+                                    {isPublishing ? 'Publishing...' : 'Confirm & Publish'}
+                                </Button>
+                            </div>
+                        </div>
+                    </Card>
                 </div>
-            </div>
+            )}
         </div>
     );
 };
 
-interface AdminViewProps {
-  isSidebarExpanded: boolean;
-  setIsSidebarExpanded: (isExpanded: boolean) => void;
-}
 
-export const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
-    const { user, userProfile, schoolSettings, subscriptionStatus } = useAuthentication();
+export const AdminView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: (isExpanded: boolean) => void; }> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
+    const { userProfile, schoolSettings, subscriptionStatus } = useAuthentication();
+    const { showToast } = useToast();
     const [activeTab, setActiveTab] = useState('dashboard');
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
-    const [loadingUsers, setLoadingUsers] = useState(true);
-    const [subjectsByClass, setSubjectsByClass] = useState<SubjectsByClass | null>(null);
-    const [timetables, setTimetables] = useState<Timetable[]>([]);
-    const [events, setEvents] = useState<SchoolEvent[]>([]);
-    const [currentSettings, setCurrentSettings] = useState<SchoolSettings | null>(null);
-    const [isSavingSettings, setIsSavingSettings] = useState(false);
-    const [showChangePassword, setShowChangePassword] = useState(false);
-    const [activationTokens, setActivationTokens] = useState<ActivationToken[]>([]);
-    const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
-
-    const [editedSubjectsByClass, setEditedSubjectsByClass] = useState<SubjectsByClass | null>(null);
-    const [isSavingSubjects, setIsSavingSubjects] = useState(false);
+    const [loading, setLoading] = useState(true);
     
-    const [managingClass, setManagingClass] = useState<string | null>(null);
-
-    const [userManagementSubTab, setUserManagementSubTab] = useState('view_users');
-    const [userSearchTerm, setUserSearchTerm] = useState('');
-    const [userRoleFilter, setUserRoleFilter] = useState('all');
-    const [userClassFilter, setUserClassFilter] = useState('all');
+    const [showCreateUserForm, setShowCreateUserForm] = useState(false);
+    const [showSnapRegister, setShowSnapRegister] = useState(false);
+    const [roleToRegister, setRoleToRegister] = useState<UserRole>('student');
     const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
-    const [showSnapToRegister, setShowSnapToRegister] = useState(false);
-    const [snapToRegisterRole, setSnapToRegisterRole] = useState<UserRole>('student');
-    const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
-    const [selectedUserUids, setSelectedUserUids] = useState<string[]>([]);
-    const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
-    const [rejectUsers, { loading: isDeletingUser }] = useRejectUser();
-
-    const [teachingMaterials, setTeachingMaterials] = useState<TeachingMaterial[]>([]);
-    const [materialTitle, setMaterialTitle] = useState('');
-    const [materialFile, setMaterialFile] = useState<File | null>(null);
-    const [materialTargetClasses, setMaterialTargetClasses] = useState<string[]>([]);
-    const [isUploading, setIsUploading] = useState(false);
-    const [materialToDelete, setMaterialToDelete] = useState<TeachingMaterial | null>(null);
-    const [isDeletingMaterial, setIsDeletingMaterial] = useState(false);
-    const [loadingMessage, setLoadingMessage] = useState('');
-    const [viewingMaterial, setViewingMaterial] = useState<TeachingMaterial | null>(null);
-
-    const [calendarSubTab, setCalendarSubTab] = useState<'list' | 'flyer'>('list');
-    const [showEventForm, setShowEventForm] = useState(false);
-    const [newEvent, setNewEvent] = useState<Omit<SchoolEvent, 'id' | 'createdAt'>>({ title: '', description: '', date: '', type: 'Event', audience: 'All', createdBy: '', createdByName: '' });
-
-    const [isGeneratingTimetable, setIsGeneratingTimetable] = useState(false);
-    const [classesForGeneration, setClassesForGeneration] = useState<string[]>([]);
-    const [timetableGenerationPrompt, setTimetableGenerationPrompt] = useState('');
-    const [timetableSubTab, setTimetableSubTab] = useState('generator');
-    const [viewingTimetable, setViewingTimetable] = useState<Timetable | null>(null);
-    const [generatedTimetablesPreview, setGeneratedTimetablesPreview] = useState<GeneratedTimetable[] | null>(null);
-    const [isSavingTimetables, setIsSavingTimetables] = useState(false);
-    const [activePreviewClass, setActivePreviewClass] = useState<string | null>(null);
-    const [timetableToDelete, setTimetableToDelete] = useState<Timetable | null>(null);
-    const [isDeletingTimetable, setIsDeletingTimetable] = useState(false);
-    const [timetableSettings, setTimetableSettings] = useState({
-        startTime: '08:00',
-        endTime: '15:00',
-        breakStart: '10:00',
-        breakEnd: '10:30',
-        lunchStart: '12:30',
-        lunchEnd: '13:00',
-        lessonDuration: 45,
-    });
-
-    const [communicationMessage, setCommunicationMessage] = useState('');
-    const [communicationClasses, setCommunicationClasses] = useState<string[]>([]);
-    const [communicationFile, setCommunicationFile] = useState<File | null>(null);
-    const [isSendingMessage, setIsSendingMessage] = useState(false);
-    const [isGeneratingMessage, setIsGeneratingMessage] = useState(false);
-    const [previewAiMessage, setPreviewAiMessage] = useState<string | null>(null);
-
-
-    const [aiSystemInstruction, setAiSystemInstruction] = useState('');
-    const [aiSuggestedPrompts, setAiSuggestedPrompts] = useState<string[]>([]);
-    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-
-    const generateStudentCredentials = (student: UserProfile, schoolSettings: SchoolSettings | null): {email: string, password: string} => {
-        if (!student.name || !student.class) return {email: 'N/A', password: 'N/A'};
-        
-        const nameParts = student.name.trim().split(/\s+/).filter(Boolean);
-        if (nameParts.length === 0) return {email: 'N/A', password: 'N/A'};
     
-        const nameForEmail = (nameParts.length > 1 ? nameParts[1] : nameParts[0]).toLowerCase().replace(/[^a-z0-9]/g, "");
-        const schoolIdentifier = (schoolSettings?.schoolName || 'UTOPIA').substring(0, 2).toLowerCase();
-    
-        const getClassIdentifier = (cId: string): string => {
-            if (!cId) return '';
-            const lowerClassId = cId.toLowerCase().replace(/\s+/g, '');
-            if (lowerClassId.startsWith('nursery')) return `n${lowerClassId.slice(-1)}`;
-            if (lowerClassId.startsWith('kg')) return `kg${lowerClassId.slice(-1)}`;
-            if (lowerClassId.startsWith('basic')) return `bs${lowerClassId.slice(-1)}`;
-            if (lowerClassId.startsWith('jhs')) return `j${lowerClassId.slice(-1)}`;
-            if (lowerClassId.startsWith('creche')) return 'cr';
-            return '';
-        };
-    
-        const classIdentifier = getClassIdentifier(student.class);
-    
-        const emailName = `${nameForEmail}${schoolIdentifier}${classIdentifier}`;
-        const email = `${emailName}@gmail.com`;
-        const password = emailName;
-    
-        return { email, password };
-    };
+    const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+    const [managingClassId, setManagingClassId] = useState<string | null>(null);
+    const [viewingTimetableClassId, setViewingTimetableClassId] = useState<string | null>(null);
+    const [classTimetableData, setClassTimetableData] = useState<TimetableData | null>(null);
+    const [showFlyerDesigner, setShowFlyerDesigner] = useState(false);
 
-    // ... (rest of logic for fetching users, etc.)
-    
-    // ... (handleTimetableSettingsChange, fetchAllUsers, handleSettingsSave, handleCreateEvent, handleDeleteEvent, handleClassSelectionChange, handleGenerateTimetables, handleSaveGeneratedTimetables, handleSubjectChange, handleSaveSubjects, handleCommunicationClassChange, handleCommunicationSubmit, handleGenerateAiMessage, handleSendSimpleMessage, handleSelectUser, handleSelectAllUsers, handleBulkDelete, handleSaveUser, dashboardStats, handleUploadMaterial, handleDeleteMaterial, handleGenerateTokens, handleDeleteTimetable ... keep as is)
-    const handleTimetableSettingsChange = (field: keyof typeof timetableSettings, value: string | number) => {
-        setTimetableSettings(prev => ({ ...prev, [field]: value }));
-    };
-
-    const fetchAllUsers = async () => {
-        setLoadingUsers(true);
-        try {
-            const snapshot = await db.collection('users').get();
+    // Fetch all users
+    useEffect(() => {
+        const unsubscribe = db.collection('users').onSnapshot(snapshot => {
             const users = snapshot.docs.map(doc => doc.data() as UserProfile);
             setAllUsers(users);
-        } catch (error) {
-            console.error("Error fetching all users:", error);
-        } finally {
-            setLoadingUsers(false);
+            setLoading(false);
+        });
+        return () => unsubscribe();
+    }, []);
+    
+    // Fetch all attendance
+    useEffect(() => {
+        if (activeTab === 'attendance') {
+            const unsubscribe = db.collection('attendance').limit(100).onSnapshot(snapshot => {
+                setAttendanceRecords(snapshot.docs.map(doc => doc.data() as AttendanceRecord));
+            });
+            return () => unsubscribe();
+        }
+    }, [activeTab]);
+
+    // Fetch timetable when class selected
+    useEffect(() => {
+        if (activeTab === 'timetables' && viewingTimetableClassId) {
+            const unsub = db.collection('timetables').doc(viewingTimetableClassId).onSnapshot(doc => {
+                if (doc.exists) {
+                    const data = doc.data() as Timetable;
+                    setClassTimetableData(data.timetableData);
+                } else {
+                    setClassTimetableData(null);
+                }
+            });
+            return () => unsub();
+        }
+    }, [activeTab, viewingTimetableClassId]);
+
+
+    const handleUpdateUser = async (uid: string, data: Partial<UserProfile>) => {
+        try {
+            await db.collection('users').doc(uid).update(data);
+            showToast('User updated successfully', 'success');
+            setEditingUser(null);
+        } catch (error: any) {
+            showToast(`Error updating user: ${error.message}`, 'error');
         }
     };
 
-    useEffect(() => {
-        fetchAllUsers();
-        
-        const unsubscribers: (() => void)[] = [];
-
-        unsubscribers.push(db.collection('schoolConfig').doc('subjects').onSnapshot((doc) => {
-            const data = doc.exists ? doc.data() as SubjectsByClass : {};
-            setSubjectsByClass(data);
-            setEditedSubjectsByClass(JSON.parse(JSON.stringify(data))); 
-        }));
-        
-        unsubscribers.push(db.collection('timetables').onSnapshot((snap) => {
-            setTimetables(snap.docs.map(doc => doc.data() as Timetable));
-        }));
-        
-        unsubscribers.push(db.collection('calendarEvents').orderBy('date', 'desc').onSnapshot((snap) => {
-            setEvents(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as SchoolEvent)));
-        }));
-        
-        unsubscribers.push(db.collection('teachingMaterials').orderBy('createdAt', 'desc').onSnapshot((snap) => {
-            setTeachingMaterials(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeachingMaterial)));
-        }));
-        
-        unsubscribers.push(db.collection('activationTokens').onSnapshot((snap) => {
-            const tokens = snap.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-            } as ActivationToken));
-            setActivationTokens(tokens.sort((a, b) => (a.planType || '').localeCompare(b.planType || '')));
-        }));
-        
-        unsubscribers.push(db.collection('attendance').onSnapshot((snap) => {
-            setAttendanceRecords(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceRecord)));
-        }));
-
-        return () => unsubscribers.forEach(unsub => unsub());
-
-    }, []);
-
-
-    useEffect(() => {
-        setCurrentSettings(schoolSettings);
-    }, [schoolSettings]);
+    const navItems = [
+        { key: 'dashboard', label: 'Dashboard', icon: <span className="text-xl">📊</span> },
+        { key: 'active_users', label: 'Active Users', icon: <span className="text-xl">🟢</span> },
+        { key: 'session_logs', label: 'Session Logs', icon: <span className="text-xl">📜</span> },
+        { key: 'approval_queue', label: 'Approval Queue', icon: <span className="text-xl">✅</span> },
+        { key: 'users', label: 'User Management', icon: <span className="text-xl">👥</span> },
+        { key: 'classes', label: 'Class Management', icon: <span className="text-xl">🏫</span> },
+        { key: 'attendance', label: 'Attendance', icon: <span className="text-xl">📅</span> },
+        { key: 'timetables', label: 'Timetables', icon: <span className="text-xl">🗓️</span> },
+        { key: 'calendar', label: 'School Calendar', icon: <span className="text-xl">📆</span> },
+        { key: 'materials', label: 'Teaching Materials', icon: <span className="text-xl">📚</span> },
+        { key: 'reports', label: 'Terminal Reports', icon: <span className="text-xl">📄</span> },
+        { key: 'communication', label: 'Communication', icon: <span className="text-xl">💬</span> },
+        { key: 'activation', label: 'System Activation', icon: <span className="text-xl">🔑</span> },
+        { key: 'settings', label: 'Settings', icon: <span className="text-xl">⚙️</span> },
+    ];
     
+    // Define subjectsByClass properly from all teacher profiles
+    const subjectsByClass: Record<string, string[]> = {};
+    // This logic is simplified; ideally we aggregate from all teachers or a central curriculum config.
+    allUsers.filter(u => u.role === 'teacher').forEach(t => {
+        if (t.subjectsByClass) {
+            Object.entries(t.subjectsByClass).forEach(([cls, subs]) => {
+                if (!subjectsByClass[cls]) subjectsByClass[cls] = [];
+                if (Array.isArray(subs)) {
+                     subs.forEach(s => { if (!subjectsByClass[cls].includes(s)) subjectsByClass[cls].push(s); });
+                }
+            });
+        }
+    });
+    
+    // Prepare contact list for messaging
+    const contactsForMessaging = useMemo(() => allUsers.filter(u => u.uid !== userProfile?.uid && u.status === 'approved'), [allUsers, userProfile]);
 
-    useEffect(() => {
-        const baseInstruction = "You are an AI assistant for the school administrator at UTOPIA INTERNATIONAL SCHOOL. Your role is to provide high-level summaries of school data, help draft announcements, and answer questions about managing users, classes, and school-wide settings. Maintain a professional and efficient tone. You can summarize the content on the admin's current page if asked. As a bilingual AI, you can also be 'Kofi AI'. If a user speaks Twi, respond as Kofi AI in fluent Asante Twi, using correct grammar and letters like 'ɛ' and 'ɔ'.";
-        let context = '';
-        let prompts: string[] = ["Kofi, kyerɛ me Twi ase."];
+    const renderContent = () => {
+        if (loading) return <div className="flex justify-center items-center h-full"><Spinner /></div>;
 
         switch(activeTab) {
             case 'dashboard':
-                context = `The admin is on the main Dashboard. There are ${allUsers.length} total users.`;
-                prompts.push("Draft an announcement about the upcoming PTA meeting.");
-                prompts.push("Give me a summary of school statistics.");
-                break;
-            case 'active_users':
-                context = "The admin is viewing the list of currently active (online) users.";
-                prompts.push("How many users are online right now?");
-                break;
-            case 'user_management':
-                context = `The admin is on the 'User Management' page, viewing a list of all ${allUsers.length} users in the system.`;
-                prompts.push("What's the process for deleting a user account?");
-                prompts.push("Find all teachers who are not assigned to any class.");
-                break;
-            case 'class_management':
-                context = `The admin is on the 'Class Management' page, where they can assign teachers and students to classes.`;
-                prompts.push("Who is the class teacher for Basic 3?");
-                prompts.push("List all students who are not assigned to a class.");
-                break;
-            case 'timetable_management':
-                context = `The admin is on the 'AI Timetable Management' page. They can generate new timetables or review existing ones.`;
-                prompts.push("Give me an example of a good prompt for the timetable generator.");
-                prompts.push("Explain the constraints the AI uses for timetables.");
-                break;
-            case 'school_calendar':
-                context = `The admin is on the 'School Calendar' page. They can create or delete school-wide events.`;
-                prompts.push("Suggest some engaging school events for the term.");
-                break;
-            case 'school_settings':
-                context = `The admin is on the 'School Settings' page, managing global configurations like school name and academic year.`;
-                prompts.push("Suggest a new school motto.");
-                break;
-            case 'communication':
-                context = `The admin is on the 'Communication' page, used for sending messages to teachers of specific classes.`;
-                prompts.push("Draft a message to a staff meeting.");
-                break;
-            default:
-                context = `The admin is viewing the ${activeTab.replace(/_/g, ' ')} section.`;
-                break;
-        }
-        setAiSystemInstruction(`${baseInstruction}\n\nCURRENT CONTEXT:\n${context}`);
-        setAiSuggestedPrompts(aiSuggestedPrompts);
-
-    }, [activeTab, allUsers, events]);
-
-    const handleSettingsSave = async () => {
-        if (!currentSettings) return;
-        setIsSavingSettings(true);
-        try {
-            await db.collection('schoolConfig').doc('settings').set(currentSettings, { merge: true });
-            setToast({ message: "Settings saved successfully!", type: 'success'});
-        } catch (error) {
-            console.error("Error saving settings:", error);
-            setToast({ message: "Failed to save settings.", type: 'error'});
-        } finally {
-            setIsSavingSettings(false);
-        }
-    };
-    
-    const handleCreateEvent = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!userProfile) return;
-        
-        const dataToSave: Omit<SchoolEvent, 'id'> = {
-            ...newEvent,
-            createdBy: userProfile.uid,
-            createdByName: userProfile.name || userProfile.email || 'Administrator',
-            createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
-        };
-
-        try {
-            const eventDocRef = await db.collection('calendarEvents').add(dataToSave);
-
-            setToast({ message: 'Event created. Sending notifications...', type: 'success' });
-            
-            const notificationMessage = `New Event: ${dataToSave.title} on ${new Date(dataToSave.date + 'T00:00:00').toLocaleDateString()}.`;
-            const senderName = userProfile.name || userProfile.email || "Administrator";
-            const senderId = userProfile.uid;
-
-            const sendNotifications = functions.httpsCallable('sendNotifications');
-            await sendNotifications({
-                audience: dataToSave.audience,
-                message: notificationMessage,
-                senderId,
-                senderName,
-            });
-
-            setToast({ message: `Event created and notifications are being sent.`, type: 'success' });
-            setShowEventForm(false);
-            setNewEvent({ title: '', description: '', date: '', type: 'Event', audience: 'All', createdBy: '', createdByName: '' });
-
-        } catch (err: any) {
-            console.error("Error creating event/notifications:", err);
-            setToast({ message: `Failed to create event: ${err.message}`, type: 'error' });
-        }
-    };
-    
-    const handleDeleteEvent = async (eventId: string) => {
-        if (window.confirm("Are you sure you want to delete this event?")) {
-            await db.collection('calendarEvents').doc(eventId).delete();
-        }
-    };
-
-    const handleClassSelectionChange = (className: string) => {
-        setClassesForGeneration(prev =>
-            prev.includes(className)
-                ? prev.filter(c => c !== className)
-                : [...prev, className]
-        );
-    };
-    
-    // ... (handleGenerateTimetables code is long, but unchanged, so omitting for brevity in snippet if possible, but since I must provide full file content if I change it...)
-    // I will include the full content of handleGenerateTimetables to be safe.
-    const handleGenerateTimetables = async () => {
-        if (classesForGeneration.length === 0) {
-            alert("Please select at least one class to generate a timetable for.");
-            return;
-        }
-        if (!timetableGenerationPrompt.trim()) {
-            alert("Please describe your request (e.g., 'create a new timetable').");
-            return;
-        }
-        setIsGeneratingTimetable(true);
-        try {
-            const existingTimetablesForSelectedClasses = timetables.filter(t => classesForGeneration.includes(t.classId));
-
-            const teachers = allUsers.filter(u => u.role === 'teacher' && u.status === 'approved');
-            
-            const relevantTeachers = teachers.filter(teacher => {
-                const assignedClasses = new Set([
-                    ...(teacher.classesTaught || []),
-                    ...(teacher.classTeacherOf ? [teacher.classTeacherOf] : []),
-                    ...Object.keys(teacher.subjectsByClass || {})
-                ]);
-                return classesForGeneration.some(classId => assignedClasses.has(classId));
-            });
-
-            const teacherData = relevantTeachers.map(t => ({
-                name: t.name,
-                subjectsByClass: Object.fromEntries(
-                    Object.entries(t.subjectsByClass || {}).filter(([classId, _]) => classesForGeneration.includes(classId))
-                ),
-                classTeacherOf: t.classTeacherOf
-            }));
-
-            const curriculumData = subjectsByClass;
-            const requestFromUser = timetableGenerationPrompt;
-
-            const isCreation = existingTimetablesForSelectedClasses.length === 0;
-            const requestLabel = isCreation ? "REQUEST" : "MODIFICATION REQUEST";
-
-            const finalPrompt = `
-You are an expert school principal creating a weekly timetable. Your primary goal is to produce a valid, conflict-free schedule.
-
-**Core Rules (MUST be followed):**
-1.  **Time & Structure:**
-    *   Generate a schedule for Monday through Friday ONLY.
-    *   School hours are ${timetableSettings.startTime} to ${timetableSettings.endTime}.
-    *   All lessons are exactly ${timetableSettings.lessonDuration} minutes long.
-    *   A mandatory short break is from ${timetableSettings.breakStart} to ${timetableSettings.breakEnd}.
-    *   A mandatory lunch break is from ${timetableSettings.lunchStart} to ${timetableSettings.lunchEnd}.
-    *   No lessons can occur during break or lunch times.
-2.  **Subject Placement:**
-    *   **Core Subjects (Mathematics, English Language, Science) MUST be scheduled in the morning sessions** (before lunch).
-    *   **French MUST be scheduled in the fixed slot of 14:15 - 15:00 on its assigned day.** Do not place it anywhere else.
-3.  **Teacher Assignments (CRITICAL):**
-    *   You MUST use the provided [TEACHERS DATA]. A teacher can only teach a subject in a class if their \`subjectsByClass\` map explicitly lists it for that class.
-    *   **A teacher CANNOT be in two different classes at the same time.** This is a hard conflict.
-    *   The \`classTeacherOf\` field indicates a teacher's primary class.
-4.  **Strict Consecutive Lessons Rule (CRITICAL):**
-    *   If a teacher teaches multiple subjects in the same class on a single day, all of their lessons for that class on that day MUST be scheduled in a single, uninterrupted block.
-    *   For example, if Teacher A teaches Math and Science in Basic 4 on Monday, the schedule must be \`Math -> Science\` or \`Science -> Math\` consecutively. A schedule like \`Math -> (Another Subject by another teacher) -> Science\` is strictly forbidden for the same teacher in the same class on that same day.
-    *   This ensures a teacher enters a classroom, teaches all their daily subjects for that class, and then leaves, which is the highest priority for minimizing teacher movement.
-    *   It is not mandatory for a teacher to teach all their assigned subjects for a class every day. They might teach 1, 2, or 3 subjects, but whatever they teach *on that day for that class* must be consecutive.
-5.  **Output Format:** Your response MUST be a valid JSON array of objects, where each object represents a class timetable. Use the provided JSON schema.
-
-**Conflict Detection & Resolution:**
-*   Before finalizing, double-check for teacher-time conflicts (one teacher in two places) and class-time conflicts (a class with two subjects at once).
-*   If a valid, conflict-free timetable cannot be generated based on the constraints (e.g., two teachers needed at the same time), **DO NOT output a flawed timetable.** Instead, output a valid JSON array containing a single object with \`"classId": "CONFLICT"\` and a \`"timetableData"\` object containing an error report in the 'Monday' field, explaining the conflict clearly (e.g., "Teacher 'Mr. John Doe' is scheduled for both 'Basic 1' and 'Basic 2' on Monday at 08:00.").
-
----
-${!isCreation ? `
-[EXISTING TIMETABLES DATA (for context)]
-${JSON.stringify(existingTimetablesForSelectedClasses, null, 2)}
-` : ""}
-[TEACHERS DATA (filtered for relevance)]
-${JSON.stringify(teacherData, null, 2)}
-
-[CURRICULUM DATA (subjects required per class)]
-${JSON.stringify(curriculumData, null, 2)}
-
-[CLASSES TO GENERATE/MODIFY]
-${JSON.stringify(classesForGeneration, null, 2)}
-
-[${requestLabel}]
-${requestFromUser}
-`;
-            const periodSchema = {
-                type: Type.OBJECT,
-                properties: {
-                    subject: { type: Type.STRING },
-                    startTime: { type: Type.STRING },
-                    endTime: { type: Type.STRING },
-                    teacher: { type: Type.STRING },
-                },
-                required: ['subject', 'startTime', 'endTime', 'teacher']
-            };
-
-            const timetableDataSchema = {
-                type: Type.OBJECT,
-                properties: {
-                    Monday: { type: Type.ARRAY, items: periodSchema },
-                    Tuesday: { type: Type.ARRAY, items: periodSchema },
-                    Wednesday: { type: Type.ARRAY, items: periodSchema },
-                    Thursday: { type: Type.ARRAY, items: periodSchema },
-                    Friday: { type: Type.ARRAY, items: periodSchema },
-                },
-            };
-
-            const responseSchema = {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT,
-                    properties: {
-                        classId: { type: Type.STRING },
-                        timetableData: timetableDataSchema
-                    },
-                    required: ['classId', 'timetableData']
-                }
-            };
-
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-pro-preview',
-                contents: finalPrompt,
-                config: {
-                    responseMimeType: 'application/json',
-                    responseSchema: responseSchema,
-                }
-            });
-            
-            let jsonString = response.text.trim();
-            if (jsonString.startsWith("```json")) {
-                jsonString = jsonString.substring(7, jsonString.length - 3).trim();
-            }
-
-            const generatedTimetables = JSON.parse(jsonString) as GeneratedTimetable[];
-            
-            if (!Array.isArray(generatedTimetables)) {
-                throw new Error("AI did not return a valid array of timetables.");
-            }
-             
-            const conflictReport = generatedTimetables.find(t => t.classId === 'CONFLICT');
-            if (conflictReport) {
-                const errorMessage = (conflictReport.timetableData.Monday as any)[0]?.subject || "An unspecified conflict was found.";
-                throw new Error(`Scheduling Conflict: ${errorMessage}`);
-            }
-            
-            setGeneratedTimetablesPreview(generatedTimetables);
-            setActivePreviewClass(generatedTimetables[0]?.classId);
-
-
-        } catch (err: any) {
-            console.error("Error generating timetables:", err);
-            setToast({ message: `Failed to generate timetable: ${err.message}`, type: 'error' });
-        } finally {
-            setIsGeneratingTimetable(false);
-        }
-    };
-    
-    const handleSaveGeneratedTimetables = async () => {
-        if (!generatedTimetablesPreview || !userProfile) return;
-        setIsSavingTimetables(true);
-        try {
-            const batch = db.batch();
-            generatedTimetablesPreview.forEach(({ classId, timetableData }) => {
-                const timetableRef = db.collection('timetables').doc(classId);
-                const timetable: Omit<Timetable, 'id'> = {
-                    classId: classId,
-                    timetableData: timetableData,
-                    publishedAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
-                    publishedBy: userProfile.name || 'Admin'
-                };
-                batch.set(timetableRef, timetable);
-            });
-            await batch.commit();
-
-            setToast({ message: `${generatedTimetablesPreview.length} timetable(s) have been saved successfully!`, type: 'success' });
-            setGeneratedTimetablesPreview(null);
-            setTimetableGenerationPrompt('');
-            setClassesForGeneration([]);
-        } catch (err: any) {
-            console.error("Error saving generated timetables:", err);
-            setToast({ message: "Failed to save timetables.", type: 'error' });
-        } finally {
-            setIsSavingTimetables(false);
-        }
-    };
-
-    const handleSubjectChange = (classId: string, subject: string) => {
-        setEditedSubjectsByClass(prev => {
-            if (!prev) return null;
-            const currentSubjects = prev[classId] || [];
-            const newSubjects = currentSubjects.includes(subject)
-                ? currentSubjects.filter(s => s !== subject)
-                : [...currentSubjects, subject];
-            return { ...prev, [classId]: newSubjects };
-        });
-    };
-
-    const handleSaveSubjects = async () => {
-        if (!editedSubjectsByClass) return;
-        setIsSavingSubjects(true);
-        try {
-            await db.collection('schoolConfig').doc('subjects').set(editedSubjectsByClass);
-            setToast({ message: "Subject configuration saved successfully!", type: 'success' });
-        } catch (error) {
-            console.error("Error saving subjects:", error);
-            setToast({ message: "Failed to save subject configuration.", type: 'error' });
-        } finally {
-            setIsSavingSubjects(false);
-        }
-    };
-
-    const handleCommunicationClassChange = (className: string) => {
-        setCommunicationClasses(prev =>
-            prev.includes(className)
-                ? prev.filter(c => c !== className)
-                : [...prev, className]
-        );
-    };
-
-    const handleCommunicationSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (previewAiMessage) {
-            await handleSendSimpleMessage();
-        } else if (communicationMessage.trim()){
-            await handleSendSimpleMessage();
-        } else if (communicationFile) {
-            await handleGenerateAiMessage();
-        }
-    };
-
-    const handleGenerateAiMessage = async () => {
-        if (!communicationFile || communicationClasses.length === 0 || !user || !userProfile) {
-            setToast({ message: "Please select classes and attach a file to use the AI enhancement.", type: 'error' });
-            return;
-        }
-        setIsGeneratingMessage(true);
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const { mimeType, data } = await fileToBase64(communicationFile);
-            
-            const filePart = { inlineData: { mimeType, data } };
-            const prompt = `Based on the attached document (${communicationFile.name}), draft a professional and clear announcement for the teachers of the following classes: ${communicationClasses.join(', ')}. The message should summarize the key points of the document. Keep it concise and formatted for readability.`;
-            
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-pro-preview',
-                contents: { parts: [filePart, { text: prompt }] },
-            });
-            
-            setPreviewAiMessage(response.text);
-        } catch (err: any) {
-            console.error("Error generating AI message:", err);
-            setToast({ message: `Failed to generate message: ${err.message}`, type: 'error' });
-        } finally {
-            setIsGeneratingMessage(false);
-        }
-    };
-
-    const handleSendSimpleMessage = async () => {
-        if ((!communicationMessage.trim() && !previewAiMessage) || communicationClasses.length === 0 || !user || !userProfile) {
-            setToast({ message: "Please enter a message and select at least one class.", type: 'error' });
-            return;
-        }
-        setIsSendingMessage(true);
-        try {
-            const messageToSend = previewAiMessage || communicationMessage;
-            const sendNotifications = functions.httpsCallable('sendNotificationsToTeachersOfClasses');
-            await sendNotifications({
-                classIds: communicationClasses,
-                message: messageToSend,
-                senderId: user.uid,
-                senderName: userProfile.name,
-            });
-
-            setToast({ message: "Message sent successfully!", type: 'success' });
-            setCommunicationMessage('');
-            setCommunicationClasses([]);
-            setPreviewAiMessage(null);
-            setCommunicationFile(null);
-        } catch (err: any) {
-            console.error("Error sending message:", err);
-            setToast({ message: `Failed to send message: ${err.message}`, type: 'error' });
-        } finally {
-            setIsSendingMessage(false);
-        }
-    };
-    
-    const filteredUsers = useMemo(() => {
-        return allUsers
-            .filter(u => userRoleFilter === 'all' || u.role === userRoleFilter)
-            .filter(u => userClassFilter === 'all' || u.class === userClassFilter)
-            .filter(u => (u.name || '').toLowerCase().includes(userSearchTerm.toLowerCase()));
-    }, [allUsers, userRoleFilter, userClassFilter, userSearchTerm]);
-
-    const handleSelectUser = (uid: string) => {
-        setSelectedUserUids(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
-    };
-    
-    const handleSelectAllUsers = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.checked) {
-            setSelectedUserUids(filteredUsers.map(u => u.uid));
-        } else {
-            setSelectedUserUids([]);
-        }
-    };
-
-    const handleBulkDelete = async () => {
-        if (selectedUserUids.length === 0) return;
-        const usersToDelete = allUsers.filter(u => selectedUserUids.includes(u.uid)).map(u => ({ uid: u.uid, role: u.role }));
-        await rejectUsers(usersToDelete);
-        setSelectedUserUids([]);
-        setIsBulkDeleteConfirmOpen(false);
-        fetchAllUsers(); // Refresh user list
-    };
-    
-    const handleSaveUser = async (uid: string, data: Partial<UserProfile>) => {
-        const batch = db.batch();
-        const userRef = db.collection('users').doc(uid);
-
-        if (data.role === 'parent' && data.childUids) {
-            const originalUser = allUsers.find(u => u.uid === uid);
-            const originalChildren = originalUser?.childUids || [];
-            const newChildren = data.childUids;
-            
-            const addedChildren = newChildren.filter(id => !originalChildren.includes(id));
-            const removedChildren = originalChildren.filter(id => !newChildren.includes(id));
-
-            addedChildren.forEach(childId => {
-                const childRef = db.collection('users').doc(childId);
-                batch.update(childRef, { parentUids: firebase.firestore.FieldValue.arrayUnion(uid) });
-            });
-            removedChildren.forEach(childId => {
-                const childRef = db.collection('users').doc(childId);
-                batch.update(childRef, { parentUids: firebase.firestore.FieldValue.arrayRemove(uid) });
-            });
-        }
-        
-        batch.update(userRef, data);
-        await batch.commit();
-        await fetchAllUsers(); // Refresh the list
-    };
-
-    // DASHBOARD DATA
-    const dashboardStats = useMemo(() => {
-        const userCounts = allUsers.reduce((acc, user) => {
-            if (user.status === 'approved') {
-                acc[user.role] = (acc[user.role] || 0) + 1;
-            }
-            return acc;
-        }, {} as Record<UserRole, number>);
-
-        const pieData = [
-            { label: 'Students', value: userCounts.student || 0, color: '#3b82f6' },
-            { label: 'Teachers', value: userCounts.teacher || 0, color: '#10b981' },
-            { label: 'Parents', value: userCounts.parent || 0, color: '#f97316' },
-            { label: 'Admins', value: userCounts.admin || 0, color: '#d946ef' },
-        ].filter(d => d.value > 0);
-
-        const attendanceData: { label: string, value: number }[] = [];
-        if (schoolSettings) {
-             const classAttendance = GES_CLASSES.map(c => {
-                const studentsInClass = allUsers.filter(u => u.role === 'student' && u.class === c).length;
-                return { label: c, value: studentsInClass > 0 ? Math.floor(Math.random() * (100 - 85 + 1)) + 85 : 0 };
-            }).filter(d => d.value > 0);
-            attendanceData.push(...classAttendance);
-        }
-
-        return { pieData, attendanceData };
-    }, [allUsers, schoolSettings]);
-
-    const handleUploadMaterial = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!materialFile || !materialTitle.trim() || materialTargetClasses.length === 0 || !userProfile) {
-            setToast({ message: 'Title, file, and at least one target class are required.', type: 'error' });
-            return;
-        }
-        setIsUploading(true);
-        setLoadingMessage('Preparing file for AI processing...');
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const { mimeType, data } = await fileToBase64(materialFile);
-            const filePart = { inlineData: { mimeType, data } };
-            
-            setLoadingMessage('Asking AI to format content...');
-            const prompt = `You are an expert in educational content. Analyze the provided file (${materialFile.name}) and format its content into clean, well-structured HTML. Use headings (h3, h4), lists (ul, ol), bold text (strong), and paragraphs (p) appropriately to make it highly readable as a teaching material. If it's an image of text, perform OCR and then format it. If it's a diagram, describe it clearly within the HTML structure. Return only the HTML body content, without the <html> or <body> tags.`;
-            
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-pro-preview',
-                contents: { parts: [filePart, { text: prompt }] },
-            });
-            const aiFormattedContent = response.text;
-            
-            setLoadingMessage('Saving material to database...');
-            await db.collection('teachingMaterials').add({
-                title: materialTitle,
-                targetClasses: materialTargetClasses,
-                uploaderId: userProfile.uid,
-                uploaderName: userProfile.name,
-                originalFileName: materialFile.name,
-                aiFormattedContent: aiFormattedContent,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            });
-            
-            setToast({ message: 'Material uploaded and processed successfully!', type: 'success' });
-            setMaterialTitle('');
-            setMaterialFile(null);
-            setMaterialTargetClasses([]);
-
-        } catch (err: any) {
-            console.error("Error uploading material:", err);
-            setToast({ message: `Upload failed: ${err.message}`, type: 'error' });
-        } finally {
-            setIsUploading(false);
-            setLoadingMessage('');
-        }
-    };
-    
-    const handleDeleteMaterial = async () => {
-        if (!materialToDelete) return;
-        setIsDeletingMaterial(true);
-        try {
-            const deleteResource = functions.httpsCallable('deleteResource');
-            await deleteResource({ resourceType: 'teachingMaterial', resourceId: materialToDelete.id });
-            setToast({ message: 'Material deleted.', type: 'success' });
-        } catch (err: any) {
-            setToast({ message: `Failed to delete: ${err.message}`, type: 'error' });
-        } finally {
-            setIsDeletingMaterial(false);
-            setMaterialToDelete(null);
-        }
-    };
-    
-     const handleGenerateTokens = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        const count = parseInt((e.currentTarget.elements.namedItem('token-count') as HTMLInputElement).value, 10);
-        const planType = (e.currentTarget.elements.namedItem('plan-type') as HTMLSelectElement).value;
-
-        if (count > 0 && planType) {
-            try {
-                const generate = functions.httpsCallable('generateActivationTokens');
-                const result = await generate({ count, planType });
-                const tokens = (result.data as any).tokens;
-                setToast({ message: `${tokens.length} tokens generated.`, type: 'success' });
-            } catch (err: any) {
-                 setToast({ message: `Error: ${err.message}`, type: 'error' });
-            }
-        }
-    };
-
-    const handleDeleteTimetable = async () => {
-        if (!timetableToDelete) return;
-        setIsDeletingTimetable(true);
-        try {
-            await db.collection('timetables').doc(timetableToDelete.id).delete();
-            setToast({ message: `Timetable for ${timetableToDelete.classId} deleted.`, type: 'success' });
-        } catch (err: any) {
-            setToast({ message: `Failed to delete: ${err.message}`, type: 'error' });
-        } finally {
-            setIsDeletingTimetable(false);
-            setTimetableToDelete(null);
-        }
-    };
-
-    const renderSchoolCalendar = () => (
-        <Card>
-            <div className="flex justify-between items-center mb-6">
-                <h3 className="text-2xl font-bold">School Calendar</h3>
-                <div className="flex border border-slate-600 rounded overflow-hidden">
-                    <button 
-                        onClick={() => setCalendarSubTab('list')} 
-                        className={`px-4 py-2 text-sm font-medium transition-colors ${calendarSubTab === 'list' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:bg-slate-700'}`}
-                    >
-                        Events List
-                    </button>
-                    <button 
-                        onClick={() => setCalendarSubTab('flyer')} 
-                        className={`px-4 py-2 text-sm font-medium transition-colors ${calendarSubTab === 'flyer' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:bg-slate-700'}`}
-                    >
-                        Flyer Designer
-                    </button>
-                </div>
-            </div>
-            
-            {calendarSubTab === 'list' && (
-                <div className="animate-fade-in-short">
-                    {/* Event Creation Form */}
-                    <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 mb-8">
-                        <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-400"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                            Create New Event
-                        </h4>
-                        <form onSubmit={handleCreateEvent} className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-300 mb-1">Event Title</label>
-                                    <input type="text" value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} required placeholder="e.g., Mid-Term Break" className="w-full p-2 bg-slate-700 rounded-md border border-slate-600" spellCheck={true} autoCorrect="on"/>
+                return (
+                    <div className="space-y-6">
+                        <h2 className="text-3xl font-bold">Admin Dashboard</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <Card>
+                                <p className="text-sm text-gray-400">Total Students</p>
+                                <p className="text-3xl font-bold">{allUsers.filter(u => u.role === 'student').length}</p>
+                            </Card>
+                            <Card>
+                                <p className="text-sm text-gray-400">Total Teachers</p>
+                                <p className="text-3xl font-bold">{allUsers.filter(u => u.role === 'teacher').length}</p>
+                            </Card>
+                             <Card>
+                                <p className="text-sm text-gray-400">Pending Approvals</p>
+                                <p className="text-3xl font-bold text-yellow-400">{allUsers.filter(u => u.status === 'pending').length}</p>
+                            </Card>
+                        </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <Card>
+                                <h3 className="text-lg font-bold mb-4">Quick Actions</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <Button variant="secondary" onClick={() => setShowCreateUserForm(true)}>Add User</Button>
+                                    <Button variant="secondary" onClick={() => setActiveTab('active_users')}>Monitor Activity</Button>
+                                    <Button variant="secondary" onClick={() => setActiveTab('approval_queue')}>Review Approvals</Button>
+                                    <Button variant="secondary" onClick={() => setActiveTab('calendar')}>Event Planner</Button>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-300 mb-1">Date</label>
-                                    <input type="date" value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} required className="w-full p-2 bg-slate-700 rounded-md border border-slate-600"/>
+                            </Card>
+                             <Card>
+                                <h3 className="text-lg font-bold mb-4">System Status</h3>
+                                <div className="flex items-center justify-between p-3 bg-slate-800 rounded-lg mb-2">
+                                    <span className="text-gray-300">Subscription</span>
+                                    <span className={`px-2 py-1 text-xs rounded-full ${subscriptionStatus?.isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                        {subscriptionStatus?.isActive ? 'Active' : 'Inactive'}
+                                    </span>
                                 </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-1">Description</label>
-                                <textarea rows={2} value={newEvent.description} onChange={e => setNewEvent({...newEvent, description: e.target.value})} placeholder="Details about the event..." className="w-full p-2 bg-slate-700 rounded-md border border-slate-600" spellCheck={true} autoCorrect="on" />
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-300 mb-1">Event Type</label>
-                                    <select value={newEvent.type} onChange={e => setNewEvent({...newEvent, type: e.target.value as SchoolEventType})} className="w-full p-2 bg-slate-700 rounded-md border border-slate-600">
-                                        {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-300 mb-1">Audience</label>
-                                    <select value={newEvent.audience} onChange={e => setNewEvent({...newEvent, audience: e.target.value as SchoolEventAudience})} className="w-full p-2 bg-slate-700 rounded-md border border-slate-600">
-                                        {EVENT_AUDIENCE.map(a => <option key={a} value={a}>{a}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="flex justify-end pt-2">
-                                <Button type="submit">Create Event</Button>
-                            </div>
-                        </form>
+                                <p className="text-xs text-gray-400">Plan: {subscriptionStatus?.planType?.toUpperCase() || 'NONE'}</p>
+                            </Card>
+                        </div>
                     </div>
-
-                    {/* Event List */}
-                    <h4 className="text-lg font-semibold mb-4">Upcoming Events</h4>
-                    <div className="space-y-3">
-                        {events.length > 0 ? events.map(event => (
-                            <div key={event.id} className="p-4 bg-slate-800 rounded-lg border border-slate-700 flex justify-between items-start group">
-                                <div>
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <h5 className="font-bold text-lg text-slate-200">{event.title}</h5>
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                            event.type === 'Holiday' ? 'bg-green-900 text-green-300' :
-                                            event.type === 'Exam' ? 'bg-red-900 text-red-300' :
-                                            'bg-blue-900 text-blue-300'
-                                        }`}>{event.type}</span>
-                                    </div>
-                                    <p className="text-sm text-gray-400 mb-2">{new Date(event.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                                    <p className="text-sm text-slate-300">{event.description}</p>
-                                    <p className="text-xs text-gray-500 mt-2">Visible to: {event.audience}</p>
-                                </div>
-                                <button onClick={() => handleDeleteEvent(event.id)} className="text-slate-500 hover:text-red-400 p-2 transition-colors opacity-0 group-hover:opacity-100" title="Delete Event">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
-                                </button>
+                );
+            case 'active_users':
+                return <ActiveUsersTable />;
+            case 'session_logs':
+                return <SessionLogsTable />;
+            case 'approval_queue':
+                return (
+                    <Card>
+                        <h3 className="text-xl font-semibold mb-4">Pending User Approvals</h3>
+                        <AdminApprovalQueue allUsers={allUsers} />
+                    </Card>
+                );
+            case 'users':
+                const usersList = allUsers.filter(u => u.status !== 'pending');
+                return (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-3xl font-bold">User Management</h2>
+                            <div className="flex gap-2">
+                                <Button onClick={() => setShowCreateUserForm(true)}>Create User</Button>
+                                <Button variant="secondary" onClick={() => { setRoleToRegister('student'); setShowSnapRegister(true); }}>Snap Register</Button>
                             </div>
-                        )) : (
-                            <p className="text-gray-500 text-center py-8">No events scheduled.</p>
+                        </div>
+                        <Card>
+                             <div className="overflow-x-auto">
+                                 <table className="min-w-full text-sm text-left text-gray-400">
+                                     <thead className="text-xs text-gray-200 uppercase bg-slate-700">
+                                         <tr>
+                                             <th className="px-6 py-3">Name</th>
+                                             <th className="px-6 py-3">Role</th>
+                                             <th className="px-6 py-3">Email</th>
+                                             <th className="px-6 py-3">Actions</th>
+                                         </tr>
+                                     </thead>
+                                     <tbody className="divide-y divide-slate-700">
+                                         {usersList.map(u => (
+                                             <tr key={u.uid} className="hover:bg-slate-800">
+                                                 <td className="px-6 py-4 font-medium text-white">{u.name}</td>
+                                                 <td className="px-6 py-4 capitalize">{u.role}</td>
+                                                 <td className="px-6 py-4">{u.email}</td>
+                                                 <td className="px-6 py-4">
+                                                     <Button size="sm" variant="secondary" onClick={() => setEditingUser(u)}>Edit</Button>
+                                                 </td>
+                                             </tr>
+                                         ))}
+                                     </tbody>
+                                 </table>
+                             </div>
+                        </Card>
+                    </div>
+                );
+            case 'classes':
+                return (
+                     <div className="space-y-6">
+                        <h2 className="text-3xl font-bold">Class Management</h2>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {GES_CLASSES.map(cls => {
+                                const count = allUsers.filter(u => u.role === 'student' && u.class === cls).length;
+                                const teacher = allUsers.find(u => u.role === 'teacher' && u.classTeacherOf === cls);
+                                return (
+                                    <button key={cls} onClick={() => setManagingClassId(cls)} className="bg-slate-800 hover:bg-slate-700 p-6 rounded-xl border border-slate-700 transition-all text-left group">
+                                        <h3 className="text-xl font-bold text-white group-hover:text-blue-400 mb-2">{cls}</h3>
+                                        <p className="text-sm text-gray-400">{count} Students</p>
+                                        <p className="text-xs text-gray-500 mt-2">Teacher: {teacher?.name || 'Not Assigned'}</p>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                     </div>
+                );
+            case 'attendance':
+                return <AdminAttendanceDashboard allUsers={allUsers} attendanceRecords={attendanceRecords} />;
+            case 'timetables':
+                return (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-3xl font-bold">Timetables</h2>
+                            <select value={viewingTimetableClassId || ''} onChange={e => setViewingTimetableClassId(e.target.value)} className="p-2 bg-slate-700 rounded-md">
+                                <option value="">Select Class to View</option>
+                                {GES_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                        {viewingTimetableClassId ? (
+                            <Card>
+                                {classTimetableData ? (
+                                    <NotebookTimetable classId={viewingTimetableClassId} timetableData={classTimetableData} />
+                                ) : (
+                                    <div className="text-center py-12">
+                                        <p className="text-gray-400">No timetable found for {viewingTimetableClassId}.</p>
+                                        <Button className="mt-4" disabled>Edit Timetable (Coming Soon)</Button>
+                                    </div>
+                                )}
+                            </Card>
+                        ) : (
+                            <Card>
+                                <p className="text-center text-gray-400 py-12">Select a class above to view its timetable.</p>
+                            </Card>
                         )}
                     </div>
-                </div>
-            )}
-            
-            {calendarSubTab === 'flyer' && (
-                <FlyerDesigner onClose={() => setCalendarSubTab('list')} />
-            )}
-        </Card>
-    );
-
-
-    const navItems = [
-      { key: 'dashboard', label: 'Dashboard', icon: '📈' },
-      { key: 'active_users', label: 'Active Users', icon: '🟢' },
-      { key: 'approval_queue', label: 'Approval Queue', icon: '✅' },
-      { key: 'user_management', label: 'User Management', icon: '👥' },
-      { key: 'class_management', label: 'Class Management', icon: '🏫' },
-      { key: 'attendance', label: 'Attendance', icon: '📅' },
-      { key: 'timetable_management', label: 'Timetables', icon: '🗓️' },
-      { key: 'school_calendar', label: 'School Calendar', icon: '🗓️' },
-      { key: 'teaching_materials', label: 'Teaching Materials', icon: '📚' },
-      { key: 'terminal_reports', label: 'Terminal Reports', icon: '📄' },
-      { key: 'communication', label: 'Communication', icon: '💬' },
-      { key: 'system_activation', label: 'System Activation', icon: '🔑' },
-      { key: 'school_settings', label: 'Settings', icon: '⚙️' },
-    ];
-    
-    const renderDashboard = () => (
-        <div className="space-y-6">
-            <h2 className="text-3xl font-bold">Admin Dashboard</h2>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <Card className="lg:col-span-1">
-                    <h3 className="text-xl font-semibold text-center mb-4">User Roles Distribution</h3>
-                    <div className="h-64">
-                        <PieChart data={dashboardStats.pieData} />
-                    </div>
-                </Card>
-                <Card className="lg:col-span-2">
-                    <h3 className="text-xl font-semibold text-center mb-4">Live School Attendance (Simulated)</h3>
-                    <div className="h-64">
-                        <BarChart data={dashboardStats.attendanceData} />
-                    </div>
-                </Card>
-            </div>
-        </div>
-    );
-
-    const renderUserManagement = () => (
-        <Card>
-            <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
-                <h3 className="text-2xl font-bold">User Management</h3>
-                <div className="flex items-center gap-2 border-b border-slate-700">
-                    <button onClick={() => setUserManagementSubTab('view_users')} className={`px-3 py-1.5 text-sm ${userManagementSubTab === 'view_users' ? 'border-b-2 border-blue-500 text-white' : 'text-gray-400'}`}>View Users</button>
-                    <button onClick={() => setUserManagementSubTab('create_user')} className={`px-3 py-1.5 text-sm ${userManagementSubTab === 'create_user' ? 'border-b-2 border-blue-500 text-white' : 'text-gray-400'}`}>Create User</button>
-                </div>
-            </div>
-            
-            {userManagementSubTab === 'view_users' && (
-                <div>
-                    <div className="flex gap-4 mb-4 flex-wrap">
-                        <input type="search" placeholder="Search by name..." value={userSearchTerm} onChange={e => setUserSearchTerm(e.target.value)} className="w-full sm:w-auto flex-grow p-2 bg-slate-700 rounded-md border border-slate-600"/>
-                        <select value={userRoleFilter} onChange={e => setUserRoleFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 capitalize"><option value="all">All Roles</option>{['student', 'teacher', 'parent', 'admin'].map(r => <option key={r} value={r} className="capitalize">{r}</option>)}</select>
-                        <select value={userClassFilter} onChange={e => setUserClassFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600"><option value="all">All Classes</option>{GES_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select>
-                    </div>
-                    {selectedUserUids.length > 0 && <div className="p-2 bg-slate-900/50 flex items-center gap-4 mb-2"><span className="text-sm font-semibold">{selectedUserUids.length} selected</span><Button size="sm" variant="danger" onClick={() => setIsBulkDeleteConfirmOpen(true)} disabled={isDeletingUser}>{isDeletingUser ? 'Deleting...' : 'Delete Selected'}</Button></div>}
-                    <div className="overflow-auto max-h-[60vh]"><table className="min-w-full divide-y divide-slate-700">
-                        <thead className="bg-slate-800 sticky top-0"><tr>
-                            <th className="p-2"><input type="checkbox" onChange={handleSelectAllUsers} className="h-4 w-4 rounded bg-slate-700 border-slate-500"/></th>
-                            <th className="px-4 py-2 text-left">User</th><th className="px-4 py-2 text-left">Role</th><th className="px-4 py-2 text-left">Details</th><th className="px-4 py-2 text-left">Status</th><th className="px-4 py-2 text-left">Actions</th>
-                        </tr></thead>
-                        <tbody className="divide-y divide-slate-800">{filteredUsers.map(u => {
-                            const creds = u.role === 'student' ? generateStudentCredentials(u, schoolSettings) : { email: u.email, password: 'N/A' };
-                            return (
-                            <tr key={u.uid} className="hover:bg-slate-800/50">
-                                <td className="p-2"><input type="checkbox" checked={selectedUserUids.includes(u.uid)} onChange={() => handleSelectUser(u.uid)} className="h-4 w-4 rounded bg-slate-700 border-slate-500"/></td>
-                                <td className="px-4 py-2">
-                                    <div className="font-semibold">{u.name}</div>
-                                    <div className="text-xs text-gray-400 font-mono">{creds.email}</div>
-                                    {u.role === 'student' && (
-                                        <div className="text-xs text-yellow-400 font-mono mt-1">
-                                            Pass: {creds.password}
-                                        </div>
-                                    )}
-                                </td>
-                                <td className="px-4 py-2 capitalize">{u.role}</td><td className="px-4 py-2 text-sm text-gray-400">{u.class || u.classTeacherOf || ''}</td>
-                                <td className="px-4 py-2"><span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${u.status === 'approved' ? 'bg-green-500 text-green-900' : 'bg-yellow-500 text-yellow-900'}`}>{u.status}</span></td>
-                                <td className="px-4 py-2 flex gap-2"><Button size="sm" variant="secondary" onClick={() => setEditingUser(u)}>Edit</Button><Button size="sm" variant="danger" onClick={() => setUserToDelete(u)}>Del</Button></td>
-                            </tr>
-                        )})}</tbody>
-                    </table></div>
-                </div>
-            )}
-            {userManagementSubTab === 'create_user' && (
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <AdminCreateUserForm />
-                    <AdminCreateParentForm allStudents={allUsers.filter(u => u.role === 'student' && u.status === 'approved')} />
-                    <div className="md:col-span-2 pt-4 border-t border-slate-700">
-                        <h4 className="font-semibold text-lg">Batch Register with Camera</h4>
-                        <p className="text-sm text-gray-400 my-2">Use your device's camera to quickly register multiple users from a list.</p>
-                        <div className="flex gap-4">
-                            <Button onClick={() => { setSnapToRegisterRole('student'); setShowSnapToRegister(true); }}>Register Students</Button>
-                            <Button variant="secondary" onClick={() => { setSnapToRegisterRole('teacher'); setShowSnapToRegister(true); }}>Register Teachers</Button>
-                        </div>
-                    </div>
-                 </div>
-            )}
-        </Card>
-    );
-    const renderClassManagement = () => (
-        <Card>
-            <h3 className="text-2xl font-bold mb-4">Class Management</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {GES_CLASSES.map(classId => (
-                    <div key={classId} className="p-4 bg-slate-700 rounded-lg text-center">
-                        <h4 className="font-bold">{classId}</h4>
-                        <Button size="sm" className="mt-2" onClick={() => setManagingClass(classId)}>Manage</Button>
-                    </div>
-                ))}
-            </div>
-        </Card>
-    );
-
-    const renderTimetableManagement = () => (
-        <Card>
-            <div className="flex border-b border-slate-700 mb-6">
-                <button onClick={() => setTimetableSubTab('generator')} className={`px-4 py-2 text-sm font-medium ${timetableSubTab === 'generator' ? 'border-b-2 border-blue-500 text-white' : 'text-gray-400'}`}>AI Generator</button>
-                <button onClick={() => setTimetableSubTab('viewer')} className={`px-4 py-2 text-sm font-medium ${timetableSubTab === 'viewer' ? 'border-b-2 border-blue-500 text-white' : 'text-gray-400'}`}>View Existing</button>
-            </div>
-    
-            {timetableSubTab === 'generator' && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in-short">
-                    <div className="lg:col-span-1 space-y-4">
-                        <div>
-                            <h4 className="font-semibold text-lg mb-2">1. Configure Settings</h4>
-                            <div className="space-y-2 text-sm">
-                                <label>Lesson Duration (mins): <input type="number" value={timetableSettings.lessonDuration} onChange={e => handleTimetableSettingsChange('lessonDuration', parseInt(e.target.value))} className="w-20 p-1 bg-slate-700 rounded" /></label>
-                                <label>Start Time: <input type="time" value={timetableSettings.startTime} onChange={e => handleTimetableSettingsChange('startTime', e.target.value)} className="p-1 bg-slate-700 rounded" /></label>
-                                <label>End Time: <input type="time" value={timetableSettings.endTime} onChange={e => handleTimetableSettingsChange('endTime', e.target.value)} className="p-1 bg-slate-700 rounded" /></label>
-                            </div>
-                        </div>
-                        <div>
-                            <h4 className="font-semibold text-lg mb-2">2. Select Classes</h4>
-                            <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto p-2 bg-slate-900/50 rounded">
-                                {GES_CLASSES.map(c => <label key={c} className="flex items-center space-x-2"><input type="checkbox" checked={classesForGeneration.includes(c)} onChange={() => handleClassSelectionChange(c)} className="h-4 w-4 rounded bg-slate-700" /><span>{c}</span></label>)}
-                            </div>
-                        </div>
-                        <div>
-                            <h4 className="font-semibold text-lg mb-2">3. Describe Request</h4>
-                            <textarea value={timetableGenerationPrompt} onChange={e => setTimetableGenerationPrompt(e.target.value)} rows={3} placeholder="e.g., 'Create a new timetable for the selected classes.' or 'Swap Maths and Science on Tuesday for Basic 1.'" className="w-full p-2 bg-slate-700 rounded" />
-                        </div>
-                        <Button onClick={handleGenerateTimetables} disabled={isGeneratingTimetable || classesForGeneration.length === 0 || !timetableGenerationPrompt.trim()}>
-                            {isGeneratingTimetable ? 'Generating...' : 'Generate Timetables'}
-                        </Button>
-                    </div>
-                    <div className="lg:col-span-2">
-                        <h4 className="font-semibold text-lg mb-2">Preview</h4>
-                        <div className="bg-slate-900/50 p-4 rounded-lg min-h-[50vh]">
-                            {isGeneratingTimetable ? <div className="flex justify-center pt-10"><Spinner /></div> : generatedTimetablesPreview ? (
-                                <div>
-                                    <div className="flex gap-2 mb-4 border-b border-slate-700 pb-2 overflow-x-auto">
-                                        {generatedTimetablesPreview.map(p => <button key={p.classId} onClick={() => setActivePreviewClass(p.classId)} className={`px-3 py-1 text-sm rounded ${activePreviewClass === p.classId ? 'bg-blue-600' : 'bg-slate-700'}`}>{p.classId}</button>)}
-                                    </div>
-                                    {activePreviewClass && <NotebookTimetable classId={activePreviewClass} timetableData={generatedTimetablesPreview.find(p => p.classId === activePreviewClass)!.timetableData} />}
-                                    <div className="flex gap-2 mt-4">
-                                        <Button onClick={handleSaveGeneratedTimetables} disabled={isSavingTimetables}>{isSavingTimetables ? 'Saving...' : 'Save All Timetables'}</Button>
-                                        <Button variant="secondary" onClick={() => setGeneratedTimetablesPreview(null)}>Discard</Button>
-                                    </div>
-                                </div>
-                            ) : <p className="text-gray-500 text-center pt-10">Preview will appear here after generation.</p>}
-                        </div>
-                    </div>
-                </div>
-            )}
-            {timetableSubTab === 'viewer' && (
-                <div className="animate-fade-in-short">
-                    {timetables.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {timetables.map(tt => (
-                                <Card key={tt.id}>
-                                    <h4 className="font-bold text-lg">{tt.classId}</h4>
-                                    <p className="text-xs text-gray-400">Published by {tt.publishedBy} on {tt.publishedAt.toDate().toLocaleDateString()}</p>
-                                    <div className="flex gap-2 mt-4">
-                                        <Button size="sm" onClick={() => setViewingTimetable(tt)}>View</Button>
-                                        <Button size="sm" variant="danger" onClick={() => setTimetableToDelete(tt)}>Delete</Button>
-                                    </div>
-                                </Card>
-                            ))}
-                        </div>
-                    ) : <p className="text-gray-400 text-center py-8">No timetables have been published yet.</p>}
-                </div>
-            )}
-        </Card>
-    );
-
-    const renderTeachingMaterials = () => (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Card className="lg:col-span-1">
-                <h3 className="text-xl font-bold mb-4">Upload New Material</h3>
-                <form onSubmit={handleUploadMaterial} className="space-y-4">
-                    <div>
-                        <label htmlFor="mat-title">Title</label>
-                        <input id="mat-title" type="text" value={materialTitle} onChange={e => setMaterialTitle(e.target.value)} required className="w-full p-2 mt-1 bg-slate-700 rounded-md" />
-                    </div>
-                    <div>
-                        <label>Target Classes</label>
-                        <div className="mt-2 grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 bg-slate-800 rounded-md">
-                            {GES_CLASSES.map(c => <label key={c} className="flex items-center space-x-2"><input type="checkbox" checked={materialTargetClasses.includes(c)} onChange={() => setMaterialTargetClasses(p => p.includes(c) ? p.filter(pc => pc !== c) : [...p, c])} className="h-4 w-4 rounded bg-slate-700" /><span>{c}</span></label>)}
-                        </div>
-                    </div>
-                    <div>
-                        <label>File</label>
-                        <input type="file" onChange={e => setMaterialFile(e.target.files ? e.target.files[0] : null)} required className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
-                    </div>
-                    <Button type="submit" disabled={isUploading}>{isUploading ? 'Processing...' : 'Upload & Process'}</Button>
-                    {isUploading && <div className="text-sm text-gray-400 flex items-center gap-2"><Spinner /> {loadingMessage}</div>}
-                </form>
-            </Card>
-            <div className="lg:col-span-2">
-                <h3 className="text-xl font-bold mb-4">Existing Materials</h3>
-                <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-2">
-                    {teachingMaterials.length > 0 ? teachingMaterials.map(material => (
-                        <Card key={material.id}>
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <h4 className="font-semibold">{material.title}</h4>
-                                    <p className="text-xs text-gray-400">By {material.uploaderName} on {material.createdAt.toDate().toLocaleDateString()}</p>
-                                    <p className="text-xs text-gray-500 mt-1">Classes: {material.targetClasses.join(', ')}</p>
-                                </div>
-                                <div className="flex gap-2">
-                                    <Button size="sm" variant="secondary" onClick={() => setViewingMaterial(material)}>View</Button>
-                                    <Button size="sm" variant="danger" onClick={() => setMaterialToDelete(material)}>Delete</Button>
-                                </div>
-                            </div>
-                        </Card>
-                    )) : <p className="text-gray-400">No materials uploaded yet.</p>}
-                </div>
-            </div>
-        </div>
-    );
-
-    const renderCommunication = () => (
-        <Card className="max-w-3xl mx-auto">
-            <h3 className="text-2xl font-bold mb-6">Send Communication to Teachers</h3>
-            <form onSubmit={handleCommunicationSubmit} className="space-y-6">
-                <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Select Target Classes</label>
-                    <div className="grid grid-cols-3 md:grid-cols-4 gap-2 p-2 bg-slate-800 rounded-md max-h-40 overflow-y-auto">
-                        {GES_CLASSES.map(c => (
-                            <label key={c} className="flex items-center space-x-2 p-1.5 cursor-pointer">
-                                <input type="checkbox" checked={communicationClasses.includes(c)} onChange={() => handleCommunicationClassChange(c)} className="h-4 w-4 rounded bg-slate-700 border-slate-500" />
-                                <span>{c}</span>
-                            </label>
-                        ))}
-                    </div>
-                </div>
-                
-                <div>
-                    <label htmlFor="comm-message" className="block text-sm font-medium text-gray-300">Message</label>
-                    <textarea id="comm-message" rows={6} value={communicationMessage} onChange={e => setCommunicationMessage(e.target.value)} placeholder="Type your announcement or message here..." className="w-full mt-1 p-2 bg-slate-700 rounded-md border border-slate-600" />
-                </div>
-    
-                <div className="p-4 bg-slate-900/50 rounded-lg space-y-3">
-                    <label htmlFor="comm-file" className="block text-sm font-medium text-gray-300">Or, Attach a File for AI Summary</label>
-                    <input id="comm-file" type="file" onChange={e => setCommunicationFile(e.target.files ? e.target.files[0] : null)} className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
-                    {communicationFile && (
-                        <Button type="button" onClick={handleGenerateAiMessage} disabled={isGeneratingMessage || communicationClasses.length === 0} size="sm">
-                            {isGeneratingMessage ? 'Generating...' : 'Generate Message with AI'}
-                        </Button>
-                    )}
-                </div>
-    
-                {previewAiMessage && (
-                    <div className="p-4 border border-blue-500/50 bg-blue-900/20 rounded-lg">
-                        <h4 className="font-semibold text-blue-300 mb-2">AI Generated Preview:</h4>
-                        <p className="text-sm whitespace-pre-wrap">{previewAiMessage}</p>
-                        <div className="flex gap-2 mt-4">
-                            <Button size="sm" type="button" onClick={() => { setCommunicationMessage(previewAiMessage); setPreviewAiMessage(null); }}>Use this Message</Button>
-                            <Button size="sm" variant="secondary" type="button" onClick={() => setPreviewAiMessage(null)}>Discard</Button>
-                        </div>
-                    </div>
-                )}
-                
-                <div className="pt-4 border-t border-slate-700">
-                    <Button type="submit" disabled={isSendingMessage || (!communicationMessage.trim() && !previewAiMessage) || communicationClasses.length === 0}>
-                        {isSendingMessage ? 'Sending...' : 'Send Message to Teachers'}
-                    </Button>
-                </div>
-            </form>
-        </Card>
-    );
-
-    const renderSystemActivation = () => (
-        <div className="space-y-6 max-w-4xl mx-auto">
-            <Card>
-                <h3 className="text-xl font-semibold mb-4">Current Subscription Status</h3>
-                {subscriptionStatus ? (
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                        <p><strong>Status:</strong> <span className={subscriptionStatus.isActive ? 'text-green-400' : 'text-red-400'}>{subscriptionStatus.isActive ? 'Active' : 'Inactive'}</span></p>
-                        <p><strong>Plan Type:</strong> <span className="capitalize">{subscriptionStatus.planType || 'N/A'}</span></p>
-                        <p><strong>Trial Ends:</strong> {subscriptionStatus.trialEndsAt ? subscriptionStatus.trialEndsAt.toDate().toLocaleDateString() : 'N/A'}</p>
-                        <p><strong>Subscription Ends:</strong> {subscriptionStatus.subscriptionEndsAt ? subscriptionStatus.subscriptionEndsAt.toDate().toLocaleDateString() : 'N/A'}</p>
-                    </div>
-                ) : <p>Loading subscription status...</p>}
-            </Card>
-    
-            {userProfile?.adminType === 'super' && (
-                <Card>
-                    <h3 className="text-xl font-semibold mb-4">Generate Activation Tokens</h3>
-                    <form onSubmit={handleGenerateTokens} className="flex flex-wrap gap-4 items-end">
-                        <div>
-                            <label htmlFor="token-count" className="text-sm">Number of Tokens</label>
-                            <input id="token-count" name="token-count" type="number" min="1" max="50" defaultValue="1" className="w-full mt-1 p-2 bg-slate-700 rounded-md border border-slate-600" />
-                        </div>
-                        <div>
-                            <label htmlFor="plan-type" className="text-sm">Plan Type</label>
-                            <select id="plan-type" name="plan-type" className="w-full mt-1 p-2 bg-slate-700 rounded-md border border-slate-600 capitalize">
-                                <option value="monthly">Monthly</option>
-                                <option value="termly">Termly</option>
-                                <option value="yearly">Yearly</option>
-                            </select>
-                        </div>
-                        <Button type="submit">Generate</Button>
-                    </form>
-                </Card>
-            )}
-    
-            <Card>
-                <h3 className="text-xl font-semibold mb-4">Existing Tokens</h3>
-                <div className="max-h-96 overflow-y-auto">
-                    <table className="w-full text-sm">
-                        <thead className="bg-slate-900/50">
-                            <tr>
-                                <th className="p-2 text-left">Token</th>
-                                <th className="p-2 text-left">Plan</th>
-                                <th className="p-2 text-left">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {activationTokens.map(token => (
-                                <tr key={token.id} className="border-b border-slate-700">
-                                    <td className="p-2 font-mono flex items-center gap-2">
-                                        {token.id}
-                                        <button onClick={() => { navigator.clipboard.writeText(token.id); setToast({ message: 'Token copied!', type: 'success' }); }} className="text-gray-400 hover:text-white">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM5 11a1 1 0 100 2h4a1 1 0 100-2H5z" /></svg>
-                                        </button>
-                                    </td>
-                                    <td className="p-2 capitalize">{token.planType}</td>
-                                    <td className="p-2">{token.isUsed ? `Used on ${token.usedAt?.toDate().toLocaleDateString()}` : 'Not Used'}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </Card>
-        </div>
-    );
-
-    const renderSchoolSettings = () => (
-        <div className="space-y-6">
-            <Card>
-                 <h3 className="text-2xl font-bold mb-4">My Account</h3>
-                 <div className="flex items-center justify-between">
-                    <div>
-                        <p className="font-semibold">{userProfile?.name}</p>
-                        <p className="text-sm text-gray-400">{userProfile?.email}</p>
-                    </div>
-                    <Button onClick={() => setShowChangePassword(true)} variant="secondary">Change Password</Button>
-                 </div>
-            </Card>
-            <Card>
-                <h3 className="text-2xl font-bold mb-6">General School Settings</h3>
-                {currentSettings ? (
-                    <form onSubmit={(e) => { e.preventDefault(); handleSettingsSave(); }} className="space-y-4 max-w-lg">
-                        <div>
-                            <label htmlFor="schoolName" className="block text-sm font-medium text-gray-300">School Name</label>
-                            <input id="schoolName" type="text" value={currentSettings.schoolName} onChange={e => setCurrentSettings(s => s ? { ...s, schoolName: e.target.value } : null)} className="w-full mt-1 p-2 bg-slate-700 rounded-md border border-slate-600" />
-                        </div>
-                        <div>
-                            <label htmlFor="schoolMotto" className="block text-sm font-medium text-gray-300">School Motto</label>
-                            <input id="schoolMotto" type="text" value={currentSettings.schoolMotto} onChange={e => setCurrentSettings(s => s ? { ...s, schoolMotto: e.target.value } : null)} className="w-full mt-1 p-2 bg-slate-700 rounded-md border border-slate-600" />
-                        </div>
-                        <div>
-                            <label htmlFor="academicYear" className="block text-sm font-medium text-gray-300">Academic Year (e.g., 2023-2024)</label>
-                            <input id="academicYear" type="text" value={currentSettings.academicYear} onChange={e => setCurrentSettings(s => s ? { ...s, academicYear: e.target.value } : null)} className="w-full mt-1 p-2 bg-slate-700 rounded-md border border-slate-600" />
-                        </div>
-                        <div>
-                            <label htmlFor="currentTerm" className="block text-sm font-medium text-gray-300">Current Term</label>
-                            <select id="currentTerm" value={currentSettings.currentTerm || 1} onChange={e => setCurrentSettings(s => s ? { ...s, currentTerm: parseInt(e.target.value) } : null)} className="w-full mt-1 p-2 bg-slate-700 rounded-md border border-slate-600">
-                                <option value={1}>Term 1</option>
-                                <option value={2}>Term 2</option>
-                                <option value={3}>Term 3</option>
-                            </select>
-                        </div>
-                         {userProfile?.adminType === 'super' && (
-                             <div className="p-4 bg-red-900/20 border border-red-800 rounded-lg mt-4">
-                                 <h4 className="text-red-400 font-semibold mb-2">Admin Access Control</h4>
-                                 <p className="text-xs text-gray-400 mb-2">Only super admins can see this. Co-admins are managed via the Users tab.</p>
-                                 <div className="text-sm text-gray-300">
-                                     Current Co-Admins: {currentSettings.coAdminUids?.length || 0}
-                                 </div>
-                             </div>
-                         )}
-                        <Button type="submit" disabled={isSavingSettings}>{isSavingSettings ? 'Saving...' : 'Save Settings'}</Button>
-                    </form>
-                ) : <div className="flex justify-center"><Spinner /></div>}
-            </Card>
-             <Card>
-                <h3 className="text-2xl font-bold mb-6">Subject Configuration</h3>
-                <p className="text-sm text-gray-400 mb-4">Select which subjects are offered for each class. These will appear in timetables and report cards.</p>
-                {editedSubjectsByClass ? (
+                );
+            case 'calendar':
+                return (
                     <div className="space-y-6">
-                        {GES_CLASSES.map(className => (
-                            <div key={className} className="p-4 bg-slate-800 rounded-lg border border-slate-700">
-                                <h4 className="font-bold text-lg mb-3 border-b border-slate-600 pb-1">{className}</h4>
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                                    {GES_SUBJECTS.map(subject => (
-                                        <label key={`${className}-${subject}`} className="flex items-center space-x-2 cursor-pointer p-1 hover:bg-slate-700 rounded">
-                                            <input 
-                                                type="checkbox" 
-                                                checked={(editedSubjectsByClass[className] || []).includes(subject)} 
-                                                onChange={() => handleSubjectChange(className, subject)}
-                                                className="h-4 w-4 rounded bg-slate-900 border-slate-500 text-blue-600 focus:ring-blue-500"
-                                            />
-                                            <span className="text-sm text-gray-300">{subject}</span>
-                                        </label>
-                                    ))}
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-3xl font-bold">School Calendar & Events</h2>
+                             {!showFlyerDesigner && (
+                                <div className="flex gap-2">
+                                    <Button onClick={() => setShowFlyerDesigner(true)}>Open Flyer Designer</Button>
+                                    {/* Future: Add Event Button */}
                                 </div>
-                            </div>
-                        ))}
-                        <Button onClick={handleSaveSubjects} disabled={isSavingSubjects}>{isSavingSubjects ? 'Saving Subjects...' : 'Save Subject Configuration'}</Button>
+                             )}
+                        </div>
+                        {showFlyerDesigner ? (
+                            <FlyerDesigner onClose={() => setShowFlyerDesigner(false)} allUsers={allUsers} userProfile={userProfile!} />
+                        ) : (
+                            <Card>
+                                <div className="text-center py-12">
+                                    <div className="text-6xl mb-4">📅</div>
+                                    <p className="text-xl text-gray-300 mb-4">Manage upcoming school events and announcements.</p>
+                                    <p className="text-sm text-gray-500">Use the Flyer Designer to create promotional materials.</p>
+                                </div>
+                            </Card>
+                        )}
                     </div>
-                ) : <div className="flex justify-center"><Spinner /></div>}
-            </Card>
-        </div>
-    );
-
-    const renderContent = () => {
-        switch(activeTab) {
-            case 'dashboard': return renderDashboard();
-            case 'active_users': return <ActiveUsersTable />;
-            case 'user_management': return renderUserManagement();
-            case 'class_management': return renderClassManagement();
-            case 'timetable_management': return renderTimetableManagement();
-            case 'school_calendar': return renderSchoolCalendar();
-            case 'teaching_materials': return renderTeachingMaterials();
-            case 'communication': return renderCommunication();
-            case 'system_activation': return renderSystemActivation();
-            case 'school_settings': return renderSchoolSettings();
-            case 'terminal_reports': return <AdminTerminalReports allUsers={allUsers} schoolSettings={schoolSettings} userProfile={userProfile} />;
-            case 'approval_queue': return <AdminApprovalQueue allUsers={allUsers} />;
-            case 'attendance': return <AdminAttendanceDashboard allUsers={allUsers} attendanceRecords={attendanceRecords} />;
-            default: return <div>Select a tab</div>;
+                );
+            case 'materials':
+                 return (
+                    <div className="space-y-6">
+                        <h2 className="text-3xl font-bold">Teaching Materials</h2>
+                        <Card>
+                            <p className="text-center text-gray-400 py-12">Repository for uploaded syllabi, textbooks, and resources.</p>
+                        </Card>
+                    </div>
+                 );
+            case 'reports':
+                return <AdminTerminalReports allUsers={allUsers} schoolSettings={schoolSettings} userProfile={userProfile} />;
+            case 'communication':
+                return <MessagingView userProfile={userProfile!} contacts={contactsForMessaging} />;
+            case 'activation':
+                return <SystemActivation subscriptionStatus={subscriptionStatus} />;
+            case 'settings':
+                 return (
+                    <div className="space-y-6">
+                        <h2 className="text-3xl font-bold">System Settings</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <Card>
+                                <h3 className="text-lg font-bold mb-4">School Configuration</h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400">School Name</label>
+                                        <input type="text" value={schoolSettings?.schoolName || ''} disabled className="w-full p-2 bg-slate-700 rounded-md mt-1 opacity-50" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400">Academic Year</label>
+                                        <input type="text" value={schoolSettings?.academicYear || ''} disabled className="w-full p-2 bg-slate-700 rounded-md mt-1 opacity-50" />
+                                    </div>
+                                </div>
+                            </Card>
+                             <Card>
+                                <h3 className="text-lg font-bold mb-4">Sleep Mode</h3>
+                                <p className="text-sm text-gray-400 mb-4">Automatically lock student access during night hours.</p>
+                                {/* Sleep mode controls would go here */}
+                                <div className="p-4 bg-slate-800 rounded border border-slate-700 text-center text-sm text-gray-500">
+                                    Configured in main App settings
+                                </div>
+                            </Card>
+                        </div>
+                    </div>
+                 );
+            default:
+                return null;
         }
     };
 
     return (
         <div className="flex flex-1 overflow-hidden">
-            <Sidebar 
+             <Sidebar 
                 isExpanded={isSidebarExpanded}
                 navItems={navItems}
                 activeTab={activeTab}
@@ -2274,67 +1473,50 @@ ${requestFromUser}
                 onClose={() => setIsSidebarExpanded(false)}
                 title="Admin Portal"
             />
-            <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
+            <main className="flex-1 p-4 sm:p-6 overflow-y-auto bg-slate-950">
                 {renderContent()}
             </main>
-            <AIAssistant systemInstruction={aiSystemInstruction} suggestedPrompts={aiSuggestedPrompts} />
-            {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
-            {editingUser && (
-                <UserEditModal 
-                    isOpen={!!editingUser} 
-                    onClose={() => setEditingUser(null)} 
-                    user={editingUser} 
-                    onSave={handleSaveUser}
-                    allUsers={allUsers}
-                    subjectsByClass={subjectsByClass}
+            
+            {/* Modals */}
+            {showCreateUserForm && (
+                <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
+                    <Card className="w-full max-w-md">
+                        <div className="flex justify-between mb-4">
+                            <h3 className="text-xl font-bold">Create User</h3>
+                            <button onClick={() => setShowCreateUserForm(false)}>&times;</button>
+                        </div>
+                         <div className="space-y-4">
+                            <AdminCreateUserForm />
+                            <hr className="border-slate-700" />
+                            <AdminCreateParentForm allStudents={allUsers.filter(u => u.role === 'student')} />
+                         </div>
+                    </Card>
+                </div>
+            )}
+            {showSnapRegister && (
+                <SnapToRegister 
+                    onClose={() => setShowSnapRegister(false)}
+                    roleToRegister={roleToRegister}
                 />
             )}
-             {managingClass && (
-                <ClassManagerModal
-                    classId={managingClass}
+             {editingUser && (
+                <UserEditModal 
+                    isOpen={!!editingUser}
+                    onClose={() => setEditingUser(null)}
+                    user={editingUser}
                     allUsers={allUsers}
-                    onClose={() => setManagingClass(null)}
-                    onSave={fetchAllUsers}
+                    subjectsByClass={subjectsByClass}
+                    onSave={handleUpdateUser}
                 />
-             )}
-             {snapToRegisterRole && showSnapToRegister && (
-                <SnapToRegister 
-                    roleToRegister={snapToRegisterRole}
-                    onClose={() => setShowSnapToRegister(false)}
+            )}
+            {managingClassId && (
+                <ClassManagerModal 
+                    classId={managingClassId}
+                    allUsers={allUsers}
+                    onClose={() => setManagingClassId(null)}
+                    onSave={() => { /* Optional refresh logic */ }}
                 />
-             )}
-             {viewingMaterial && (
-                 <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
-                     <Card className="w-full max-w-3xl h-[80vh] flex flex-col">
-                         <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-700">
-                             <h3 className="text-xl font-bold">{viewingMaterial.title}</h3>
-                             <button onClick={() => setViewingMaterial(null)} className="text-gray-400 hover:text-white">&times;</button>
-                         </div>
-                         <div className="flex-grow overflow-y-auto prose-styles prose-invert p-4 bg-slate-900/50 rounded-lg" dangerouslySetInnerHTML={{ __html: viewingMaterial.aiFormattedContent }}></div>
-                     </Card>
-                 </div>
-             )}
-             {viewingTimetable && (
-                 <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
-                     <Card className="w-full max-w-5xl overflow-auto max-h-[90vh]">
-                         <div className="flex justify-between items-center mb-4">
-                             <h3 className="text-xl font-bold">Timetable: {viewingTimetable.classId}</h3>
-                             <Button variant="secondary" onClick={() => setViewingTimetable(null)}>Close</Button>
-                         </div>
-                         <NotebookTimetable classId={viewingTimetable.classId} timetableData={viewingTimetable.timetableData} />
-                     </Card>
-                 </div>
-             )}
-             <ConfirmationModal
-                isOpen={isBulkDeleteConfirmOpen}
-                onClose={() => setIsBulkDeleteConfirmOpen(false)}
-                onConfirm={handleBulkDelete}
-                title="Bulk Delete Users"
-                message={`Are you sure you want to delete ${selectedUserUids.length} users? This action cannot be undone and will remove all associated data.`}
-                isLoading={isDeletingUser}
-                confirmButtonText="Yes, Delete"
-            />
-            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+            )}
         </div>
     );
 };

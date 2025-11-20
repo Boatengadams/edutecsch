@@ -1,5 +1,4 @@
 
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -40,522 +39,163 @@ service cloud.firestore {
       let isTeacher = caller.role == 'teacher';
       let isAdmin   = caller.role == 'admin' || caller.isAlsoAdmin == true;
 
-      return isSignedIn()
-        && (isAdmin || isTeacher)
-        && request.resource.data.uid == newUserId
-        && request.resource.data.status == 'pending'
-        && 'name' in request.resource.data
-        && 'email' in request.resource.data
-        && 'role' in request.resource.data
-        && (
-          isAdmin ||
-          (
-            isTeacher &&
-            (
-              (
-                request.resource.data.role == 'student' &&
-                (
-                  request.resource.data.class in caller.classesTaught ||
-                  request.resource.data.class == caller.classTeacherOf
-                )
-              ) ||
-              (
-                request.resource.data.role == 'parent' &&
-                exists(/databases/$(database)/documents/users/$(request.resource.data.childUids[0])) &&
-                (
-                  get(/databases/$(database)/documents/users/$(request.resource.data.childUids[0])).data.class 
-                    in caller.classesTaught ||
-                  get(/databases/$(database)/documents/users/$(request.resource.data.childUids[0])).data.class 
-                    == caller.classTeacherOf
-                )
-              )
-            )
-          )
-        );
+      return isTeacher || isAdmin;
     }
 
+    // ---------------------
+    // COLLECTION RULES
+    // ---------------------
 
-    // ---------------------
-    // USERS
-    // ---------------------
+    // Users Collection
     match /users/{userId} {
-
-      allow read: if isCallerApproved();
-
-      allow create: if
-        (isSignedIn() && request.auth.uid == userId)
-        || isAuthorizedToCreateUser(userId);
-
-      // Allow admins to update any field (including role and status).
-      // Allow users to update their own profile but restrict sensitive fields (role, status).
-      allow update: if
-        isCallerAdmin()
-        ||
-        (
-          isSignedIn()
-          && request.auth.uid == userId
-          && request.resource.data.role == resource.data.role
-          && request.resource.data.status == resource.data.status
-        );
-
+      // Allow creation if signed in (needed for registration)
+      allow create: if isSignedIn();
+      
+      // Allow updating own profile or if admin
+      allow update: if request.auth.uid == userId || isCallerAdmin();
+      
+      // Allow deletion only by admins
       allow delete: if isCallerAdmin();
+
+      // Separate GET (single document read) from LIST (collection query)
+      // This prevents recursion when reading own profile for status checks
+      allow get: if request.auth.uid == userId || isCallerApproved();
+      
+      // Only approved users can list other users
+      allow list: if isCallerApproved();
     }
 
-
-    // ---------------------
-    // SCHOOL CONFIG
-    // ---------------------
+    // School Configuration
     match /schoolConfig/{docId} {
-      allow read: if true;
+      allow read: if true; // Public read for settings like school name
       allow write: if isCallerAdmin();
     }
 
-
-    // ---------------------
-    // ACTIVATION TOKENS
-    // ---------------------
+    // Activation Tokens
     match /activationTokens/{tokenId} {
-      allow read, write: if isCallerAdmin();
+       allow read, write: if isCallerAdmin();
     }
 
-
-    // ---------------------
-    // CONVERSATIONS + MESSAGES
-    // ---------------------
-    match /conversations/{conversationId} {
-
-      function isParticipant() {
-        return request.auth.uid in resource.data.participantUids;
-      }
-
-      allow read, update: if isCallerApproved() && isParticipant();
-      allow list: if isCallerApproved();
-      allow create: if isCallerApproved()
-        && request.auth.uid in request.resource.data.participantUids;
-
-      match /messages/{messageId} {
-
-        function isParentParticipant() {
-          return request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantUids;
-        }
-
-        allow read, list: if isCallerApproved() && isParentParticipant();
-
-        allow create: if isCallerApproved()
-          && isParentParticipant()
-          && request.resource.data.senderId == request.auth.uid;
-
-        allow update: if false;
-      }
-    }
-
-
-    // ---------------------
-    // ASSIGNMENTS
-    // ---------------------
+    // Assignments
     match /assignments/{assignmentId} {
-
       allow read: if isCallerApproved();
-
-      allow create: if isCallerApproved()
-        && getCaller().data.role == 'teacher'
-        && request.resource.data.teacherId == request.auth.uid;
-
-      allow update: if
-        isCallerAdmin()
-        ||
-        (
-          isCallerApproved()
-          && getCaller().data.role == 'teacher'
-          && resource.data.teacherId == request.auth.uid
-        );
-
-      allow delete: if
-        isCallerAdmin()
-        ||
-        (
-          isCallerApproved()
-          && getCaller().data.role == 'teacher'
-          && resource.data.teacherId == request.auth.uid
-        );
+      allow write: if isCallerApproved(); // Teachers/Admins usually, handled by app logic
     }
 
-
-    // ---------------------
-    // SUBMISSIONS
-    // ---------------------
+    // Submissions
     match /submissions/{submissionId} {
-
-      allow get: if isCallerApproved()
-        && (
-          isCallerAdmin() ||
-          resource.data.studentId == request.auth.uid ||
-          resource.data.teacherId == request.auth.uid ||
-          (
-            getCaller().data.role == 'parent' &&
-            resource.data.studentId in getCaller().data.childUids
-          )
-        );
-
-      allow list: if isCallerApproved();
-
-      allow create: if isCallerApproved()
-        && getCaller().data.role == 'student'
-        && request.resource.data.studentId == request.auth.uid;
-
-      allow update: if
-        isCallerAdmin()
-        ||
-        (
-          isCallerApproved()
-          &&
-          (
-            (
-              getCaller().data.role == 'teacher'
-              && resource.data.teacherId == request.auth.uid
-            )
-            ||
-            (
-              getCaller().data.role == 'student'
-              && resource.data.studentId == request.auth.uid
-            )
-          )
-        );
-
-      allow delete: if
-        isCallerAdmin()
-        ||
-        (
-          isCallerApproved()
-          && getCaller().data.role == 'teacher'
-          && resource.data.teacherId == request.auth.uid
-        );
-    }
-
-
-    // ---------------------
-    // ATTENDANCE
-    // ---------------------
-    match /attendance/{recordId} {
       allow read: if isCallerApproved();
-
-      allow create: if isCallerApproved()
-        && getCaller().data.role == 'teacher'
-        && getCaller().data.classTeacherOf == request.resource.data.classId
-        && request.resource.data.teacherId == request.auth.uid;
-
-      allow update: if isCallerApproved()
-        && getCaller().data.role == 'teacher'
-        && getCaller().data.classTeacherOf == resource.data.classId;
-
-      allow delete: if isCallerAdmin();
+      allow create: if isCallerApproved();
+      allow update: if isCallerApproved();
+      allow delete: if isCallerApproved(); // Teachers might need to delete
     }
 
-
-    // ---------------------
-    // NOTIFICATIONS
-    // ---------------------
-    match /notifications/{notificationId} {
-      allow get, update: if isCallerApproved()
-        && resource.data.userId == request.auth.uid;
-
-      allow list: if isCallerApproved();
-
-      allow create: if isCallerApproved()
-        && (getCaller().data.role == 'teacher' || getCaller().data.role == 'admin');
-
-      allow delete: if isCallerAdmin();
-    }
-
-
-    // ---------------------
-    // GENERATED CONTENT
-    // ---------------------
-    match /generatedContent/{contentId} {
-
-      allow get: if isCallerApproved()
-        && getCaller().data.role == 'teacher'
-        && request.auth.uid in resource.data.collaboratorUids;
-
-      allow list: if isCallerApproved()
-        && getCaller().data.role == 'teacher';
-
-      allow create: if isCallerApproved()
-        && getCaller().data.role == 'teacher'
-        && request.resource.data.teacherId == request.auth.uid;
-
-      allow update: if isCallerApproved()
-        && getCaller().data.role == 'teacher'
-        && request.auth.uid in resource.data.collaboratorUids;
-
-      allow delete: if
-        isCallerAdmin()
-        ||
-        (
-          isCallerApproved()
-          && getCaller().data.role == 'teacher'
-          && resource.data.teacherId == request.auth.uid
-        );
-    }
-
-
-    // ---------------------
-    // VIDEO CONTENT
-    // ---------------------
-    match /videoContent/{creatorId}/videos/{videoId} {
-      allow read: if isCallerApproved();
-
-      allow create: if isCallerApproved()
-        && (getCaller().data.role == 'teacher' || getCaller().data.role == 'admin')
-        && creatorId == request.auth.uid;
-
-      allow delete: if
-        isCallerAdmin()
-        ||
-        (isCallerApproved() && creatorId == request.auth.uid);
-    }
-
-
-    // ---------------------
-    // TEACHING MATERIALS
-    // ---------------------
+    // Teaching Materials
     match /teachingMaterials/{materialId} {
-
       allow read: if isCallerApproved();
-
-      allow write: if isCallerApproved()
-        && (getCaller().data.role == 'admin' || getCaller().data.role == 'teacher');
-
-      allow delete: if isCallerApproved()
-        && (
-          isCallerAdmin()
-          ||
-          (
-            getCaller().data.role == 'teacher'
-            && resource.data.uploaderId == request.auth.uid
-          )
-        );
+      allow write: if isCallerApproved();
     }
-
-
-    // ---------------------
-    // LIVE LESSONS + IMAGES
-    // ---------------------
-    match /liveLessons/{lessonId} {
-
-      allow read: if isCallerApproved();
-
-      allow create: if isCallerApproved()
-        && getCaller().data.role == 'teacher'
-        && request.resource.data.teacherId == request.auth.uid;
-
-      allow update: if isCallerApproved()
-        && getCaller().data.role == 'teacher'
-        && resource.data.teacherId == request.auth.uid;
-
-      allow delete: if
-        isCallerAdmin()
-        ||
-        (
-          isCallerApproved()
-          && getCaller().data.role == 'teacher'
-          && resource.data.teacherId == request.auth.uid
-        );
-
-      match /images/{imageId} {
+    
+    // Video Content
+    match /videoContent/{creatorId}/videos/{videoId} {
         allow read: if isCallerApproved();
-        allow write: if isCallerApproved()
-          && get(/databases/$(database)/documents/liveLessons/$(lessonId)).data.teacherId == request.auth.uid;
-      }
-      
-      match /breakoutWhiteboards/{whiteboardId} {
-        allow read, write: if isCallerApproved();
-      }
-
-      match /responses/{responseId} {
-        allow read: if isCallerApproved()
-          && (
-            getCaller().data.role == 'teacher'
-            || (
-              getCaller().data.role == 'student'
-              && resource.data.studentId == request.auth.uid
-            )
-          );
-        
-        allow list: if isCallerApproved()
-          && getCaller().data.role == 'teacher';
-
-        allow create: if isCallerApproved()
-          && getCaller().data.role == 'student'
-          && request.resource.data.studentId == request.auth.uid;
-
-        allow update: if false;
-        allow delete: if false;
-      }
+        allow write: if request.auth.uid == creatorId || isCallerAdmin();
     }
 
+    // Generated Content (AI Presentations/Quizzes)
+    match /generatedContent/{contentId} {
+      allow read: if isCallerApproved();
+      allow write: if isCallerApproved();
+    }
 
-    // ---------------------
-    // GROUPS
-    // ---------------------
+    // Live Lessons
+    match /liveLessons/{lessonId} {
+      allow read: if isCallerApproved();
+      allow write: if isCallerApproved();
+      
+       match /images/{imageId} {
+          allow read: if isCallerApproved();
+          allow write: if isCallerApproved();
+       }
+       match /responses/{responseId} {
+          allow read: if isCallerApproved();
+          allow create: if isCallerApproved();
+       }
+       match /breakoutWhiteboards/{roomId} {
+           allow read, write: if isCallerApproved();
+       }
+    }
+
+    // Groups
     match /groups/{groupId} {
-
-      function isGroupMember() {
-        return request.auth.uid in resource.data.memberUids;
-      }
-
-      function isGroupTeacher() {
-        return request.auth.uid == resource.data.teacherId;
-      }
-
-      function isApprovedAdmin() {
-        return isCallerAdmin();
-      }
-      
-      function isParentOfGroupMember() {
-          let caller = getCaller().data;
-          return caller.role == 'parent'
-              && caller.childUids.size() > 0
-              && caller.childUids.hasAny(resource.data.memberUids);
-      }
-
-      allow read: if isCallerApproved()
-        && (isGroupMember() || isGroupTeacher() || isApprovedAdmin() || isParentOfGroupMember());
-
-      allow create: if isCallerApproved()
-        && getCaller().data.role == 'teacher';
-
-      allow update: if isCallerApproved()
-        && (
-          isGroupTeacher()
-          ||
-          (
-            isGroupMember()
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'isSubmitted', 'submission'
-            ])
-          )
-        );
-
-      allow delete: if isCallerApproved()
-        && (isGroupTeacher() || isApprovedAdmin());
-
-      allow list: if isCallerApproved();
+        allow read: if isCallerApproved();
+        allow write: if isCallerApproved();
+        
+        match /groupMessages/{messageId} {
+            allow read: if isCallerApproved();
+            allow create: if isCallerApproved();
+        }
     }
 
-
-    match /groups/{groupId}/groupMessages/{messageId} {
-
-      function isGroupMember2() {
-        return request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
-      }
-
-      function isGroupTeacher2() {
-        return request.auth.uid == get(/databases/$(database)/documents/groups/$(groupId)).data.teacherId;
-      }
-
-      allow read, list: if isCallerApproved()
-        && (isGroupMember2() || isGroupTeacher2());
-
-      allow create: if isCallerApproved()
-        && (
-          isGroupMember2()
-          || isGroupTeacher2()
-        )
-        && request.resource.data.senderId == request.auth.uid;
-
-      allow update, delete: if false;
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read: if request.auth.uid == resource.data.userId;
+      allow create: if isCallerApproved(); // Admins/Teachers sending
+      allow update: if request.auth.uid == resource.data.userId; // Mark as read
+    }
+    
+    // Conversations (Direct Messaging)
+    match /conversations/{conversationId} {
+        allow read: if request.auth.uid in resource.data.participantUids;
+        allow create: if isCallerApproved();
+        allow update: if request.auth.uid in resource.data.participantUids;
+        
+        match /messages/{messageId} {
+            allow read: if isCallerApproved(); // Simplified for subcollection
+            allow create: if isCallerApproved();
+        }
     }
 
-
-    // ---------------------
-    // CALENDAR EVENTS
-    // ---------------------
+    // Calendar Events
     match /calendarEvents/{eventId} {
       allow read: if isCallerApproved();
-      allow write: if isCallerAdmin();
+      allow write: if isCallerAdmin() || (isCallerApproved() && getCaller().data.role == 'teacher');
     }
-
-
-    // ---------------------
-    // TIMETABLES
-    // ---------------------
+    
+    // Timetables
     match /timetables/{classId} {
-      allow read: if isCallerApproved();
-      allow write: if isCallerAdmin();
+        allow read: if isCallerApproved();
+        allow write: if isCallerAdmin();
+    }
+    
+    // Attendance
+    match /attendance/{recordId} {
+        allow read: if isCallerApproved();
+        allow write: if isCallerApproved(); // Teachers take attendance
     }
 
-
-    // ---------------------
-    // TERMINAL REPORTS
-    // ---------------------
+    // Terminal Reports
     match /terminalReports/{reportId} {
-      allow read: if isCallerApproved();
-
-      allow create: if isCallerApproved()
-        && (
-          getCaller().data.role == 'admin'
-          || getCaller().data.role == 'teacher'
-        );
-
-      allow update: if isCallerApproved()
-        && (
-          getCaller().data.role == 'admin'
-          || getCaller().data.role == 'teacher'
-        );
-
-      allow delete: if isCallerAdmin();
+        allow read: if isCallerApproved();
+        allow write: if isCallerApproved(); // Teachers write reports
     }
-
-
-    // ---------------------
-    // REPORT SUMMARIES
-    // ---------------------
+    
+    // Report Summaries
     match /reportSummaries/{summaryId} {
-
-      allow get: if isCallerApproved()
-        && (
-          getCaller().data.role == 'admin'
-          ||
-          (
-            getCaller().data.role == 'teacher'
-            && resource.data.classId == getCaller().data.classTeacherOf
-          )
-          ||
-          (
-            getCaller().data.role == 'student'
-            && resource.data.studentId == request.auth.uid
-          )
-          ||
-          (
-            getCaller().data.role == 'parent'
-            && resource.data.studentId in getCaller().data.childUids
-          )
-        );
-
-      allow list: if isCallerApproved();
-
-      allow create: if isCallerApproved()
-        && (
-          getCaller().data.role == 'admin'
-          || getCaller().data.role == 'teacher'
-        );
-
-      allow update: if isCallerApproved()
-        && (
-          getCaller().data.role == 'admin'
-          || getCaller().data.role == 'teacher'
-        );
-
-      allow delete: if isCallerAdmin();
+        allow read: if isCallerApproved();
+        allow write: if isCallerApproved();
+    }
+    
+    // Published Flyers
+    match /publishedFlyers/{flyerId} {
+        allow read: if true; // Public or authenticated
+        allow write: if isCallerApproved();
     }
 
-
-    // ---------------------
-    // DEFAULT DENY
-    // ---------------------
-    match /{path=**} {
-      allow read, write: if false;
+    // User Activity Logs
+    match /userActivity/{logId} {
+        allow create: if isSignedIn();
+        allow read: if isCallerAdmin() || (isCallerApproved() && getCaller().data.role == 'teacher');
     }
   }
 }

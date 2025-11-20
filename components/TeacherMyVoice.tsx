@@ -6,6 +6,7 @@ import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
 import ConfirmationModal from './common/ConfirmationModal';
+import { useToast } from './common/Toast';
 
 // Helper functions for audio decoding
 function decode(base64: string): Uint8Array {
@@ -54,19 +55,19 @@ const simpleUuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,
 interface EditVoiceModalProps {
     voice: CustomVoice;
     onClose: () => void;
-    setToast: (toast: { message: string; type: 'success' | 'error' } | null) => void;
     handlePreview: (voiceIdentifier: string, text: string) => void;
     isPlayingPreview: boolean;
 }
 
-const EditVoiceModal: React.FC<EditVoiceModalProps> = ({ voice, onClose, setToast, handlePreview, isPlayingPreview }) => {
+const EditVoiceModal: React.FC<EditVoiceModalProps> = ({ voice, onClose, handlePreview, isPlayingPreview }) => {
+    const { showToast } = useToast();
     const [clarity, setClarity] = useState(50);
     const [pace, setPace] = useState(50);
     const [pitch, setPitch] = useState(50);
     const [emotion, setEmotion] = useState('Neutral');
 
     const handleSaveChanges = () => {
-        setToast({ message: `Voice enhancements for "${voice.name}" have been saved.`, type: 'success' });
+        showToast(`Voice enhancements for "${voice.name}" have been saved.`, 'success');
         onClose();
     };
 
@@ -128,10 +129,10 @@ const EditVoiceModal: React.FC<EditVoiceModalProps> = ({ voice, onClose, setToas
 
 interface TeacherMyVoiceProps {
     userProfile: UserProfile;
-    setToast: (toast: { message: string; type: 'success' | 'error' } | null) => void;
 }
 
-const TeacherMyVoice: React.FC<TeacherMyVoiceProps> = ({ userProfile, setToast }) => {
+const TeacherMyVoice: React.FC<TeacherMyVoiceProps> = ({ userProfile }) => {
+    const { showToast } = useToast();
     const [isPlayingPreview, setIsPlayingPreview] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     
@@ -194,12 +195,12 @@ const TeacherMyVoice: React.FC<TeacherMyVoiceProps> = ({ userProfile, setToast }
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.onend = () => setIsPlayingPreview(null);
                 utterance.onerror = () => {
-                    setToast({ message: "Could not play audio preview.", type: 'error' });
+                    showToast("Could not play audio preview.", 'error');
                     setIsPlayingPreview(null);
                 };
                 window.speechSynthesis.speak(utterance);
             } else {
-                setToast({ message: "Audio playback not supported on this browser.", type: 'error' });
+                showToast("Audio playback not supported on this browser.", 'error');
                 setIsPlayingPreview(null);
             }
         }
@@ -209,9 +210,9 @@ const TeacherMyVoice: React.FC<TeacherMyVoiceProps> = ({ userProfile, setToast }
         setIsSaving(true);
         try {
             await db.collection('users').doc(userProfile.uid).update({ preferredVoice: voiceName });
-            setToast({ message: `Voice '${voiceName}' selected for your presentations.`, type: 'success' });
+            showToast(`Voice '${voiceName}' selected for your presentations.`, 'success');
         } catch (err: any) {
-            setToast({ message: `Failed to save voice preference: ${err.message}`, type: 'error' });
+            showToast(`Failed to save voice preference: ${err.message}`, 'error');
         } finally {
             setIsSaving(false);
         }
@@ -250,10 +251,10 @@ const TeacherMyVoice: React.FC<TeacherMyVoiceProps> = ({ userProfile, setToast }
             await db.collection('users').doc(userProfile.uid).update({
                 customVoices: firebase.firestore.FieldValue.arrayUnion(newVoice),
             });
-            setToast({ message: `Custom voice '${customVoiceName}' is now ready!`, type: 'success' });
+            showToast(`Custom voice '${customVoiceName}' is now ready!`, 'success');
             setTrainingStep('complete');
         } catch (err: any) {
-            setToast({ message: `Failed to save custom voice: ${err.message}`, type: 'error' });
+            showToast(`Failed to save custom voice: ${err.message}`, 'error');
             setTrainingStep('idle');
         }
     };
@@ -279,9 +280,9 @@ const TeacherMyVoice: React.FC<TeacherMyVoiceProps> = ({ userProfile, setToast }
             }
 
             await db.collection('users').doc(userProfile.uid).update(updateData);
-            setToast({ message: `Custom voice '${voiceToDelete.name}' has been deleted.`, type: 'success' });
+            showToast(`Custom voice '${voiceToDelete.name}' has been deleted.`, 'success');
         } catch (err: any) {
-             setToast({ message: `Failed to delete voice: ${err.message}`, type: 'error' });
+             showToast(`Failed to delete voice: ${err.message}`, 'error');
         } finally {
             setIsDeleting(false);
             setVoiceToDelete(null);
@@ -325,7 +326,7 @@ const TeacherMyVoice: React.FC<TeacherMyVoiceProps> = ({ userProfile, setToast }
                                 <h4 className="font-bold">{voice.name}</h4>
                                 <p className="text-xs text-gray-400">Created on: {voice.createdAt.toDate().toLocaleDateString()}</p>
                                 <div className="flex gap-2 mt-3 flex-wrap">
-                                    <Button size="sm" onClick={() => { handlePreviewVoice('Zephyr', `This is a sample preview of your custom voice, ${voice.name}.`); setToast({message: "Custom voice preview uses a standard voice for demonstration.", type: "success"})}} disabled={!!isPlayingPreview}>
+                                    <Button size="sm" onClick={() => { handlePreviewVoice('Zephyr', `This is a sample preview of your custom voice, ${voice.name}.`); showToast("Custom voice preview uses a standard voice for demonstration.", "success")}} disabled={!!isPlayingPreview}>
                                         {isPlayingPreview === voice.id ? <Spinner/> : 'Preview'}
                                     </Button>
                                     <Button size="sm" variant="secondary" onClick={() => handleSelectVoice(voice.id)} disabled={isSaving || userProfile.preferredVoice === voice.id}>
@@ -395,7 +396,6 @@ const TeacherMyVoice: React.FC<TeacherMyVoiceProps> = ({ userProfile, setToast }
                 <EditVoiceModal 
                     voice={editingVoice}
                     onClose={() => setEditingVoice(null)}
-                    setToast={setToast}
                     handlePreview={handlePreviewVoice}
                     isPlayingPreview={!!isPlayingPreview}
                 />

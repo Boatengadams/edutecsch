@@ -1,18 +1,18 @@
+
 import React, { useState, useEffect, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useAuthentication, AuthenticationContext } from './hooks/useAuth';
-import { firebaseAuth, db } from './services/firebase';
+import { firebaseAuth, db, firebase } from './services/firebase';
 import type { UserProfile, SchoolSettings, SubscriptionStatus, UserRole } from './types';
-import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
 import AuthForm from './components/AuthForm';
 import RoleSelector from './components/RoleSelector';
 import TeacherView from './components/TeacherView';
 import StudentView from './components/StudentView';
+// FIX: Changed to named imports to resolve "no default export" error.
 import { AdminView } from './components/AdminView';
-import ParentView from './components/ParentView';
+import { ParentView } from './components/ParentView';
 import Spinner from './components/common/Spinner';
-import Card from './components/common/Card';
 import Button from './components/common/Button';
 import CursorFollower from './components/common/CursorFollower';
 import NotificationsBell from './components/common/NotificationsBell';
@@ -20,7 +20,9 @@ import GlobalSearch from './components/common/GlobalSearch';
 import PendingApproval from './components/PendingApproval';
 import SystemActivation from './components/SystemActivation';
 import SystemLocked from './components/SystemLocked';
+import SleepModeScreen from './components/SleepModeScreen';
 import { usePresence } from './hooks/usePresence';
+import { ToastProvider } from './components/common/Toast';
 
 const AuthenticationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<firebase.User | null>(null);
@@ -109,6 +111,27 @@ const AuthenticationProvider: React.FC<{ children: ReactNode }> = ({ children })
   );
 };
 
+const isSleepTime = (config: SchoolSettings['sleepModeConfig']) => {
+    if (!config || !config.enabled) return false;
+    
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    
+    const [sleepH, sleepM] = config.sleepTime.split(':').map(Number);
+    const [wakeH, wakeM] = config.wakeTime.split(':').map(Number);
+    
+    const sleepMinutes = sleepH * 60 + sleepM;
+    const wakeMinutes = wakeH * 60 + wakeM;
+    
+    // Check if interval crosses midnight (e.g. 21:00 to 05:00)
+    if (sleepMinutes > wakeMinutes) {
+        return currentMinutes >= sleepMinutes || currentMinutes < wakeMinutes;
+    } else {
+        // Same day interval (e.g. 01:00 to 05:00)
+        return currentMinutes >= sleepMinutes && currentMinutes < wakeMinutes;
+    }
+};
+
 const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (isExpanded: boolean) => void;}> = ({isSidebarExpanded, setIsSidebarExpanded}) => {
     const { user, userProfile, loading, schoolSettings, subscriptionStatus } = useAuthentication();
     const [showGlobalSearch, setShowGlobalSearch] = useState(false);
@@ -154,8 +177,15 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
         return <PendingApproval />;
     }
 
-    const roleToRender = activeRoleOverride || userProfile.role;
+    // Sleep Mode Check
     const primaryRole = userProfile.role;
+    if (primaryRole === 'student' && schoolSettings?.sleepModeConfig?.enabled) {
+        if (isSleepTime(schoolSettings.sleepModeConfig)) {
+            return <SleepModeScreen wakeTime={schoolSettings.sleepModeConfig.wakeTime} />;
+        }
+    }
+
+    const roleToRender = activeRoleOverride || userProfile.role;
     const canSwitch = (primaryRole === 'admin' && userProfile.isAlsoTeacher) || (primaryRole === 'teacher' && userProfile.isAlsoAdmin);
 
     const handleRoleSwitch = () => {
@@ -166,6 +196,24 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
         } else if (primaryRole === 'teacher') {
             setActiveRoleOverride('admin');
         }
+    };
+    
+    const handleSignOut = async () => {
+        if (userProfile) {
+             try {
+                await db.collection('userActivity').add({
+                    userId: userProfile.uid,
+                    userName: userProfile.name || 'Unknown User',
+                    userRole: userProfile.role,
+                    userClass: userProfile.class || userProfile.classTeacherOf || 'N/A',
+                    action: 'logout',
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            } catch (e) {
+                console.error("Error logging logout", e);
+            }
+        }
+        firebaseAuth.signOut();
     };
 
     const Header = () => (
@@ -194,7 +242,7 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
                 </button>
                 <NotificationsBell />
                 <div className="h-8 w-px bg-slate-700 mx-1 hidden sm:block"></div>
-                <Button size="sm" variant="ghost" onClick={() => firebaseAuth.signOut()} className="text-red-400 hover:text-red-300 hover:bg-red-400/10">
+                <Button size="sm" variant="ghost" onClick={handleSignOut} className="text-red-400 hover:text-red-300 hover:bg-red-400/10">
                     <span className="hidden sm:inline">Sign Out</span>
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 sm:hidden"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>
                 </Button>
@@ -238,7 +286,9 @@ export const App: React.FC = () => {
 
   return (
     <AuthenticationProvider>
-      <AppContent isSidebarExpanded={isSidebarExpanded} setIsSidebarExpanded={setIsSidebarExpanded} />
+        <ToastProvider>
+            <AppContent isSidebarExpanded={isSidebarExpanded} setIsSidebarExpanded={setIsSidebarExpanded} />
+        </ToastProvider>
     </AuthenticationProvider>
   );
 };

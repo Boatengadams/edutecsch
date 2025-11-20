@@ -1,8 +1,25 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, createContext, useContext, useState, ReactNode } from 'react';
 
-interface ToastProps {
+interface ToastData {
   message: string;
   type: 'success' | 'error';
+}
+
+interface ToastContextType {
+  showToast: (message: string, type: 'success' | 'error') => void;
+}
+
+const ToastContext = createContext<ToastContextType | undefined>(undefined);
+
+export const useToast = () => {
+  const context = useContext(ToastContext);
+  if (!context) {
+    throw new Error('useToast must be used within a ToastProvider');
+  }
+  return context;
+};
+
+interface ToastProps extends ToastData {
   onClose: () => void;
 }
 
@@ -46,6 +63,25 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
         </svg>
       </button>
     </div>
+  );
+};
+
+export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [toast, setToast] = useState<ToastData | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+  };
+
+  const closeToast = () => {
+    setToast(null);
+  };
+
+  return (
+    <ToastContext.Provider value={{ showToast }}>
+      {children}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={closeToast} />}
+    </ToastContext.Provider>
   );
 };
 

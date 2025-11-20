@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { db, firebase } from '../services/firebase';
 import { LiveLesson, LiveLessonResponse, BreakoutWhiteboard, DrawingElement, Point, UserProfile, DrawingToolType, SavedWhiteboard } from '../types';
@@ -6,6 +5,7 @@ import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
 import { useLiveLessonAudio } from '../hooks/useLiveLessonAudio';
+import { useToast } from './common/Toast';
 
 interface TeacherLiveClassroomProps {
   lessonId: string;
@@ -13,7 +13,8 @@ interface TeacherLiveClassroomProps {
   onClose: () => void;
 }
 
-const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ lessonId, userProfile, onClose }) => {
+export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ lessonId, userProfile, onClose }) => {
+  const { showToast } = useToast();
   const [lesson, setLesson] = useState<LiveLesson | null>(null);
   const [slideImages, setSlideImages] = useState<Record<string, { imageUrl: string; imageStyle: string }>>({});
   const [responses, setResponses] = useState<LiveLessonResponse[]>([]);
@@ -435,7 +436,7 @@ const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ lessonId, u
 
             } catch (err) {
                 console.error("Screen sharing failed:", err);
-                // setToast({ message: "Screen sharing failed to start.", type: 'error' });
+                showToast("Screen sharing failed to start.", 'error');
             }
         }
     };
@@ -747,5 +748,3 @@ const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ lessonId, u
     </div>
   );
 };
-
-export default TeacherLiveClassroom;
