@@ -25,6 +25,7 @@ import { useRejectUser } from '../hooks/useRejectUser';
 import AdminCreateUserForm from './AdminCreateUserForm';
 import AdminCreateParentForm from './AdminCreateParentForm';
 import AdminAttendanceDashboard from './AdminAttendanceDashboard';
+import html2canvas from 'html2canvas';
 
 interface ActiveUserStatus {
     uid: string;
@@ -35,6 +36,7 @@ interface ActiveUserStatus {
     class: string;
 }
 
+// ... (ActiveUsersTable component remains the same)
 const ActiveUsersTable: React.FC = () => {
     const [users, setUsers] = useState<ActiveUserStatus[]>([]);
     const [loading, setLoading] = useState(true);
@@ -152,7 +154,7 @@ const ActiveUsersTable: React.FC = () => {
     );
 };
 
-
+// ... (AdminTerminalReports, GeneratedTimetable, getFileType, ClassManagerModal, fileToBase64 remain the same)
 const AdminTerminalReports: React.FC<{ allUsers: UserProfile[], schoolSettings: SchoolSettings | null, userProfile: UserProfile | null }> = ({ allUsers, schoolSettings, userProfile }) => {
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -519,11 +521,6 @@ const ClassManagerModal: React.FC<ClassManagerModalProps> = ({ classId, allUsers
     );
 };
 
-interface AdminViewProps {
-  isSidebarExpanded: boolean;
-  setIsSidebarExpanded: (isExpanded: boolean) => void;
-}
-
 const fileToBase64 = (file: File): Promise<{ mimeType: string, data: string }> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -536,6 +533,441 @@ const fileToBase64 = (file: File): Promise<{ mimeType: string, data: string }> =
         reader.onerror = (error) => reject(error);
     });
 };
+
+// Reusable component to preview uploaded images
+const ImagePreview: React.FC<{ file: File; onRemove?: () => void }> = ({ file, onRemove }) => {
+  const [preview, setPreview] = useState<string | null>(null);
+  useEffect(() => {
+    const reader = new FileReader();
+    reader.onloadend = () => setPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  }, [file]);
+
+  if (!preview) return <div className="w-16 h-16 bg-slate-800 rounded animate-pulse" />;
+
+  return (
+    <div className="relative w-16 h-16 group">
+      <img src={preview} alt="Preview" className="w-full h-full object-cover rounded border border-slate-600" />
+      {onRemove && (
+        <button onClick={onRemove} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+          &times;
+        </button>
+      )}
+    </div>
+  );
+};
+
+interface FlyerDesignerProps {
+    onClose: () => void;
+}
+
+const FlyerDesigner: React.FC<FlyerDesignerProps> = ({ onClose }) => {
+    // Metadata State
+    const [flyerTitle, setFlyerTitle] = useState('');
+    const [eventType, setEventType] = useState('Academic');
+    const [locality, setLocality] = useState('');
+    const [date, setDate] = useState('');
+    const [description, setDescription] = useState('');
+    
+    // Assets State
+    const [mainImage, setMainImage] = useState<File | null>(null);
+    const [secondaryImages, setSecondaryImages] = useState<File[]>([]);
+    const [customFont, setCustomFont] = useState('Inter');
+    const [customColorScheme, setCustomColorScheme] = useState('#3b82f6');
+
+    // AI & Generation State
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [isGeneratingBackground, setIsGeneratingBackground] = useState(false);
+    const [generatedPlan, setGeneratedPlan] = useState<{ prompt: string; tasks: string } | null>(null);
+    const [flyerBackgroundUrl, setFlyerBackgroundUrl] = useState<string | null>(null);
+    
+    // Refs
+    const flyerRef = useRef<HTMLDivElement>(null);
+    const mainImageInputRef = useRef<HTMLInputElement>(null);
+    const secondaryImageInputRef = useRef<HTMLInputElement>(null);
+
+    const fonts = ['Inter', 'Kalam', 'Roboto', 'Playfair Display', 'Montserrat', 'Lato', 'Open Sans'];
+    const eventTypes = ['Academic', 'Sports', 'Cultural', 'Religious', 'Meeting', 'Holiday', 'Fundraiser', 'Competition'];
+
+    const handleGeneratePlan = async () => {
+        if (!flyerTitle || !eventType) {
+            alert("Please enter at least an Event Title and Type.");
+            return;
+        }
+
+        setIsAnalyzing(true);
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            
+            const prompt = `
+# ROLE: Multimodal Design Assistant for Admin Portal
+# DESCRIPTION: Generates flyer background prompt + editing instructions for school event flyers.
+
+You are the Multimodal Design Assistant for the *Admin Portal* of a School Management Web App.  
+Your job is to convert structured event metadata into:
+
+1) A high-quality Image Generation Prompt  
+2) A technical Image Editing & Composition Task List  
+
+You must ALWAYS output **exactly these two sections** — nothing more, nothing less.
+
+-----------------------------------------------------
+INPUT VARIABLES:
+-----------------------------------------------------
+[EVENT_TITLE]: ${flyerTitle}
+[EVENT_TYPE]: ${eventType}
+[LOCALITY]: ${locality || 'School Premises'}
+[MAIN_IMAGE_ID]: ${mainImage ? 'User Uploaded Main Image' : 'None'}
+[SECONDARY_IMAGES_COUNT]: ${secondaryImages.length}
+[CUSTOM_FONT]: ${customFont}
+[CUSTOM_COLOR_SCHEME]: ${customColorScheme}
+
+-----------------------------------------------------
+REQUIRED OUTPUT FORMAT
+-----------------------------------------------------
+
+# 1. Image Generation Prompt
+Create a single, detailed paragraph (max 200 words) describing the ideal flyer background.
+
+Must include:
+* Aesthetic theme combining [EVENT_TITLE], [EVENT_TYPE], [LOCALITY]
+* Full-page flyer layout, rule of thirds, visual hierarchy
+* Cinematic or soft-diffused lighting instructions
+* Ultra-high-quality terms: 8K, HDR, print-ready sharpness
+* Artistic direction (e.g., retro, modern academic, minimalistic, futuristic)
+* Integration of [CUSTOM_FONT] and [CUSTOM_COLOR_SCHEME] as part of the design logic
+
+The response must be ONE paragraph only.
+
+-----------------------------------------------------
+
+# 2. Image Editing & Composition Tasks
+Provide a numbered list of exact technical steps for the flyer-builder engine:
+
+1. Load the primary image using [MAIN_IMAGE_ID].  
+2. Apply precise facial realism enhancement (clarity, skin texture accuracy).  
+3. Remove original background and replace with the theme created in Section 1.  
+4. Apply global color harmonization based on [CUSTOM_COLOR_SCHEME].  
+5. Normalize brightness, contrast, and vibrance across all image layers.  
+6. Set the main image as the primary focal point.  
+7. Insert and position [SECONDARY_IMAGES_COUNT] supplemental images using balanced grid spacing.  
+8. Build a professional flyer layout with title, information, and footer zones.  
+9. Add the event title using [EVENT_TITLE] + [CUSTOM_FONT].  
+10. Place placeholder text areas for date, venue, and extra event data.  
+11. Ensure all text has strong contrast for readability.  
+12. Render the final flyer as a high-resolution, 300 DPI print-ready output.  
+13. Optimize for both digital display and physical printing.
+            `;
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-pro-preview',
+                contents: prompt
+            });
+
+            const text = response.text;
+            
+            // Simple parsing logic
+            const promptMatch = text.match(/# 1\. Image Generation Prompt\n([\s\S]*?)\n# 2\./);
+            const tasksMatch = text.match(/# 2\. Image Editing & Composition Tasks\n([\s\S]*)/);
+
+            const extractedPrompt = promptMatch ? promptMatch[1].trim() : "A high quality school event background.";
+            const extractedTasks = tasksMatch ? tasksMatch[1].trim() : "1. Render flyer.";
+
+            setGeneratedPlan({ prompt: extractedPrompt, tasks: extractedTasks });
+            
+        } catch (error) {
+            console.error("Error generating plan:", error);
+            alert("Failed to generate design plan.");
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
+    const handleRenderFlyer = async () => {
+        if (!generatedPlan) return;
+        setIsGeneratingBackground(true);
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            
+            // Use the AI generated prompt for the image
+            const response = await ai.models.generateImages({
+                model: 'imagen-4.0-generate-001',
+                prompt: generatedPlan.prompt,
+                config: { numberOfImages: 1, aspectRatio: '3:4' }
+            });
+            
+            const base64ImageBytes = response.generatedImages[0].image.imageBytes;
+            setFlyerBackgroundUrl(`data:image/png;base64,${base64ImageBytes}`);
+
+        } catch (error) {
+            console.error("Error generating background:", error);
+            alert("Failed to generate background image.");
+        } finally {
+            setIsGeneratingBackground(false);
+        }
+    };
+
+    const handleDownloadFlyer = async () => {
+        if (flyerRef.current) {
+            try {
+                const canvas = await html2canvas(flyerRef.current, { useCORS: true, scale: 2, backgroundColor: null });
+                const link = document.createElement('a');
+                link.download = `Flyer-${flyerTitle || 'Event'}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            } catch (error) {
+                console.error("Error downloading flyer:", error);
+            }
+        }
+    };
+
+    // Helper to read main image for display
+    const [mainImagePreview, setMainImagePreview] = useState<string | null>(null);
+    useEffect(() => {
+        if (mainImage) {
+            const reader = new FileReader();
+            reader.onloadend = () => setMainImagePreview(reader.result as string);
+            reader.readAsDataURL(mainImage);
+        } else {
+            setMainImagePreview(null);
+        }
+    }, [mainImage]);
+    
+    // Helper to read secondary images
+    const [secondaryImagePreviews, setSecondaryImagePreviews] = useState<string[]>([]);
+    useEffect(() => {
+        const loadImages = async () => {
+            const promises = secondaryImages.map(file => new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(file);
+            }));
+            const results = await Promise.all(promises);
+            setSecondaryImagePreviews(results);
+        };
+        loadImages();
+    }, [secondaryImages]);
+
+
+    return (
+        <div className="flex flex-col h-full animate-fade-in-up">
+            {/* Header / Toolbar */}
+            <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-700">
+                 <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">Multimodal Design Assistant</h3>
+                 <div className="flex gap-3">
+                     <Button variant="secondary" onClick={onClose}>Close Designer</Button>
+                     <Button onClick={handleDownloadFlyer} disabled={!flyerBackgroundUrl}>Download High-Res</Button>
+                 </div>
+            </div>
+
+            <div className="flex flex-col lg:flex-row gap-6 h-full overflow-hidden">
+                
+                {/* Left Panel: Controls */}
+                <div className="w-full lg:w-1/3 flex flex-col gap-6 overflow-y-auto pr-2 custom-scrollbar pb-10">
+                    
+                    {/* Step 1: Metadata */}
+                    <Card className="border-l-4 border-blue-500">
+                        <h4 className="font-bold text-lg mb-4 text-blue-300">1. Event Metadata</h4>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">Event Title</label>
+                                <input type="text" value={flyerTitle} onChange={e => setFlyerTitle(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600 text-sm" placeholder="e.g. Annual Science Fair" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1">Event Type</label>
+                                    <select value={eventType} onChange={e => setEventType(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600 text-sm">
+                                        {eventTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1">Date</label>
+                                    <input type="text" value={date} onChange={e => setDate(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600 text-sm" placeholder="e.g. July 20th" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">Location / Locality</label>
+                                <input type="text" value={locality} onChange={e => setLocality(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600 text-sm" placeholder="e.g. Main Auditorium" />
+                            </div>
+                        </div>
+                    </Card>
+
+                    {/* Step 2: Assets */}
+                    <Card className="border-l-4 border-purple-500">
+                        <h4 className="font-bold text-lg mb-4 text-purple-300">2. Visual Assets</h4>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">Main Image (Focal Point)</label>
+                                <div className="flex items-center gap-3">
+                                    <Button size="sm" variant="secondary" onClick={() => mainImageInputRef.current?.click()}>Upload Main</Button>
+                                    <input ref={mainImageInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setMainImage(e.target.files?.[0] || null)} />
+                                    {mainImage && <ImagePreview file={mainImage} onRemove={() => setMainImage(null)} />}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">Secondary Images (Grid)</label>
+                                <div className="flex items-center gap-3 flex-wrap">
+                                    <Button size="sm" variant="secondary" onClick={() => secondaryImageInputRef.current?.click()}>Upload Support</Button>
+                                    <input ref={secondaryImageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => setSecondaryImages(prev => [...prev, ...(Array.from(e.target.files || []))])} />
+                                    {secondaryImages.map((img, idx) => (
+                                        <ImagePreview key={idx} file={img} onRemove={() => setSecondaryImages(prev => prev.filter((_, i) => i !== idx))} />
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </Card>
+
+                    {/* Step 3: Styling */}
+                    <Card className="border-l-4 border-green-500">
+                        <h4 className="font-bold text-lg mb-4 text-green-300">3. Design Logic</h4>
+                        <div className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1">Font Family</label>
+                                    <select value={customFont} onChange={e => setCustomFont(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600 text-sm" style={{ fontFamily: customFont }}>
+                                        {fonts.map(f => <option key={f} value={f}>{f}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1">Color Scheme</label>
+                                    <div className="flex gap-2">
+                                        <input type="color" value={customColorScheme} onChange={e => setCustomColorScheme(e.target.value)} className="h-9 w-9 rounded cursor-pointer bg-transparent border-0" />
+                                        <input type="text" value={customColorScheme} onChange={e => setCustomColorScheme(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600 text-sm" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </Card>
+
+                    <div className="pt-4">
+                        <Button onClick={handleGeneratePlan} disabled={isAnalyzing} className="w-full py-3 text-lg shadow-lg">
+                            {isAnalyzing ? 'Analysing Design Strategy...' : 'Generate Design Plan'}
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Right Panel: AI Output & Preview */}
+                <div className="w-full lg:w-2/3 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
+                    
+                    {/* AI Plan Output */}
+                    {generatedPlan && (
+                        <div className="bg-slate-800/80 p-6 rounded-xl border border-slate-600 animate-fade-in-short">
+                             <h4 className="text-xl font-bold mb-4 flex items-center gap-2">
+                                <span className="text-2xl">🤖</span> AI Design Strategy
+                             </h4>
+                             
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                 <div>
+                                     <h5 className="font-semibold text-blue-400 mb-2 text-sm uppercase tracking-wider">1. Image Generation Prompt</h5>
+                                     <p className="text-sm text-gray-300 italic bg-slate-900/50 p-3 rounded-lg leading-relaxed">
+                                         "{generatedPlan.prompt}"
+                                     </p>
+                                 </div>
+                                 <div>
+                                     <h5 className="font-semibold text-green-400 mb-2 text-sm uppercase tracking-wider">2. Composition Tasks</h5>
+                                     <div className="text-sm text-gray-300 bg-slate-900/50 p-3 rounded-lg h-32 overflow-y-auto whitespace-pre-wrap">
+                                         {generatedPlan.tasks}
+                                     </div>
+                                 </div>
+                             </div>
+
+                             <div className="mt-6 flex justify-center">
+                                 <Button onClick={handleRenderFlyer} disabled={isGeneratingBackground} className="px-8">
+                                     {isGeneratingBackground ? 'Rendering Assets...' : 'Initialize Flyer Engine'}
+                                 </Button>
+                             </div>
+                        </div>
+                    )}
+
+                    {/* Flyer Canvas (Simulation of the Engine) */}
+                    <div className="flex-grow flex justify-center bg-slate-900/50 rounded-xl border-2 border-dashed border-slate-700 p-8 relative min-h-[600px]">
+                        {!flyerBackgroundUrl && !isGeneratingBackground && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
+                                <p className="text-lg">Preview Canvas</p>
+                                <p className="text-sm">Generate a plan and render to see the result.</p>
+                            </div>
+                        )}
+                        
+                        {isGeneratingBackground && (
+                             <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-slate-900/80 backdrop-blur-sm">
+                                <Spinner />
+                                <p className="mt-4 text-blue-300 animate-pulse">Generating high-fidelity background...</p>
+                            </div>
+                        )}
+
+                        {flyerBackgroundUrl && (
+                            <div 
+                                ref={flyerRef}
+                                className="relative shadow-2xl overflow-hidden flex flex-col text-center"
+                                style={{ 
+                                    width: '450px', 
+                                    height: '600px', // A4 Ratio roughly
+                                    fontFamily: customFont,
+                                    color: '#fff' // Default text color, overrides below
+                                }} 
+                            >
+                                {/* Layer 0: Background */}
+                                <img src={flyerBackgroundUrl} alt="Background" className="absolute inset-0 w-full h-full object-cover z-0" />
+                                
+                                {/* Layer 1: Gradient Overlay for readability */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/60 z-10 mix-blend-multiply"></div>
+
+                                {/* Layer 2: Content */}
+                                <div className="relative z-20 flex flex-col h-full p-8 justify-between">
+                                    
+                                    {/* Header Zone */}
+                                    <div className="mt-4">
+                                        <h2 className="text-xl font-light tracking-[0.2em] uppercase opacity-90">{locality}</h2>
+                                        <h1 className="text-5xl font-black mt-2 leading-tight drop-shadow-lg" style={{ color: customColorScheme, textShadow: '2px 2px 10px rgba(0,0,0,0.5)' }}>
+                                            {flyerTitle}
+                                        </h1>
+                                        <div className="h-1 w-24 mx-auto mt-4" style={{ backgroundColor: customColorScheme }}></div>
+                                    </div>
+
+                                    {/* Focal Point Zone */}
+                                    {mainImagePreview && (
+                                        <div className="flex-grow flex items-center justify-center my-4 relative">
+                                            <div className="relative p-1 rounded-full" style={{ border: `2px solid ${customColorScheme}` }}>
+                                                <img src={mainImagePreview} alt="Main" className="w-48 h-48 rounded-full object-cover shadow-2xl border-4 border-white" />
+                                            </div>
+                                            {/* Decorative elements */}
+                                            <div className="absolute top-1/2 left-4 w-12 h-12 border-t-2 border-l-2 border-white opacity-50"></div>
+                                            <div className="absolute bottom-1/2 right-4 w-12 h-12 border-b-2 border-r-2 border-white opacity-50"></div>
+                                        </div>
+                                    )}
+
+                                    {/* Info Zone */}
+                                    <div className="bg-white/10 backdrop-blur-md p-6 rounded-xl border border-white/20 shadow-lg">
+                                        <p className="text-2xl font-bold mb-1">{date || 'Upcoming Event'}</p>
+                                        <p className="text-sm opacity-80 uppercase tracking-wider">{eventType}</p>
+                                        
+                                        {/* Secondary Images Strip */}
+                                        {secondaryImagePreviews.length > 0 && (
+                                            <div className="flex justify-center gap-2 mt-4 overflow-hidden">
+                                                {secondaryImagePreviews.slice(0, 3).map((src, idx) => (
+                                                    <img key={idx} src={src} className="w-12 h-12 rounded-md object-cover border border-white/30" alt="Sec" />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="mt-4 text-xs opacity-60 font-sans">
+                                        UTOPIA INTERNATIONAL SCHOOL
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+interface AdminViewProps {
+  isSidebarExpanded: boolean;
+  setIsSidebarExpanded: (isExpanded: boolean) => void;
+}
 
 export const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
     const { user, userProfile, schoolSettings, subscriptionStatus } = useAuthentication();
@@ -578,7 +1010,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSi
     const [loadingMessage, setLoadingMessage] = useState('');
     const [viewingMaterial, setViewingMaterial] = useState<TeachingMaterial | null>(null);
 
-
+    const [calendarSubTab, setCalendarSubTab] = useState<'list' | 'flyer'>('list');
     const [showEventForm, setShowEventForm] = useState(false);
     const [newEvent, setNewEvent] = useState<Omit<SchoolEvent, 'id' | 'createdAt'>>({ title: '', description: '', date: '', type: 'Event', audience: 'All', createdBy: '', createdByName: '' });
 
@@ -643,6 +1075,9 @@ export const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSi
         return { email, password };
     };
 
+    // ... (rest of logic for fetching users, etc.)
+    
+    // ... (handleTimetableSettingsChange, fetchAllUsers, handleSettingsSave, handleCreateEvent, handleDeleteEvent, handleClassSelectionChange, handleGenerateTimetables, handleSaveGeneratedTimetables, handleSubjectChange, handleSaveSubjects, handleCommunicationClassChange, handleCommunicationSubmit, handleGenerateAiMessage, handleSendSimpleMessage, handleSelectUser, handleSelectAllUsers, handleBulkDelete, handleSaveUser, dashboardStats, handleUploadMaterial, handleDeleteMaterial, handleGenerateTokens, handleDeleteTimetable ... keep as is)
     const handleTimetableSettingsChange = (field: keyof typeof timetableSettings, value: string | number) => {
         setTimetableSettings(prev => ({ ...prev, [field]: value }));
     };
@@ -821,7 +1256,9 @@ export const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSi
                 : [...prev, className]
         );
     };
-
+    
+    // ... (handleGenerateTimetables code is long, but unchanged, so omitting for brevity in snippet if possible, but since I must provide full file content if I change it...)
+    // I will include the full content of handleGenerateTimetables to be safe.
     const handleGenerateTimetables = async () => {
         if (classesForGeneration.length === 0) {
             alert("Please select at least one class to generate a timetable for.");
@@ -1286,75 +1723,99 @@ ${requestFromUser}
 
     const renderSchoolCalendar = () => (
         <Card>
-            <h3 className="text-2xl font-bold mb-6">School Calendar & Events</h3>
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-bold">School Calendar</h3>
+                <div className="flex border border-slate-600 rounded overflow-hidden">
+                    <button 
+                        onClick={() => setCalendarSubTab('list')} 
+                        className={`px-4 py-2 text-sm font-medium transition-colors ${calendarSubTab === 'list' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:bg-slate-700'}`}
+                    >
+                        Events List
+                    </button>
+                    <button 
+                        onClick={() => setCalendarSubTab('flyer')} 
+                        className={`px-4 py-2 text-sm font-medium transition-colors ${calendarSubTab === 'flyer' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-gray-400 hover:bg-slate-700'}`}
+                    >
+                        Flyer Designer
+                    </button>
+                </div>
+            </div>
             
-            {/* Event Creation Form */}
-            <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 mb-8">
-                <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-400"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                    Create New Event
-                </h4>
-                <form onSubmit={handleCreateEvent} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">Event Title</label>
-                            <input type="text" value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} required placeholder="e.g., Mid-Term Break" className="w-full p-2 bg-slate-700 rounded-md border border-slate-600" spellCheck={true} autoCorrect="on"/>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">Date</label>
-                            <input type="date" value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} required className="w-full p-2 bg-slate-700 rounded-md border border-slate-600"/>
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">Description</label>
-                        <textarea rows={2} value={newEvent.description} onChange={e => setNewEvent({...newEvent, description: e.target.value})} placeholder="Details about the event..." className="w-full p-2 bg-slate-700 rounded-md border border-slate-600" spellCheck={true} autoCorrect="on" />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                             <label className="block text-sm font-medium text-gray-300 mb-1">Event Type</label>
-                             <select value={newEvent.type} onChange={e => setNewEvent({...newEvent, type: e.target.value as SchoolEventType})} className="w-full p-2 bg-slate-700 rounded-md border border-slate-600">
-                                 {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                             </select>
-                        </div>
-                        <div>
-                             <label className="block text-sm font-medium text-gray-300 mb-1">Audience</label>
-                             <select value={newEvent.audience} onChange={e => setNewEvent({...newEvent, audience: e.target.value as SchoolEventAudience})} className="w-full p-2 bg-slate-700 rounded-md border border-slate-600">
-                                 {EVENT_AUDIENCE.map(a => <option key={a} value={a}>{a}</option>)}
-                             </select>
-                        </div>
-                    </div>
-                    <div className="flex justify-end pt-2">
-                        <Button type="submit">Create Event</Button>
-                    </div>
-                </form>
-            </div>
-
-            {/* Event List */}
-            <h4 className="text-lg font-semibold mb-4">Upcoming Events</h4>
-            <div className="space-y-3">
-                {events.length > 0 ? events.map(event => (
-                    <div key={event.id} className="p-4 bg-slate-800 rounded-lg border border-slate-700 flex justify-between items-start group">
-                        <div>
-                            <div className="flex items-center gap-2 mb-1">
-                                <h5 className="font-bold text-lg text-slate-200">{event.title}</h5>
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                    event.type === 'Holiday' ? 'bg-green-900 text-green-300' :
-                                    event.type === 'Exam' ? 'bg-red-900 text-red-300' :
-                                    'bg-blue-900 text-blue-300'
-                                }`}>{event.type}</span>
+            {calendarSubTab === 'list' && (
+                <div className="animate-fade-in-short">
+                    {/* Event Creation Form */}
+                    <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 mb-8">
+                        <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-400"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                            Create New Event
+                        </h4>
+                        <form onSubmit={handleCreateEvent} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-1">Event Title</label>
+                                    <input type="text" value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} required placeholder="e.g., Mid-Term Break" className="w-full p-2 bg-slate-700 rounded-md border border-slate-600" spellCheck={true} autoCorrect="on"/>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-1">Date</label>
+                                    <input type="date" value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} required className="w-full p-2 bg-slate-700 rounded-md border border-slate-600"/>
+                                </div>
                             </div>
-                            <p className="text-sm text-gray-400 mb-2">{new Date(event.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                            <p className="text-sm text-slate-300">{event.description}</p>
-                            <p className="text-xs text-gray-500 mt-2">Visible to: {event.audience}</p>
-                        </div>
-                        <button onClick={() => handleDeleteEvent(event.id)} className="text-slate-500 hover:text-red-400 p-2 transition-colors opacity-0 group-hover:opacity-100" title="Delete Event">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
-                        </button>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-1">Description</label>
+                                <textarea rows={2} value={newEvent.description} onChange={e => setNewEvent({...newEvent, description: e.target.value})} placeholder="Details about the event..." className="w-full p-2 bg-slate-700 rounded-md border border-slate-600" spellCheck={true} autoCorrect="on" />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-1">Event Type</label>
+                                    <select value={newEvent.type} onChange={e => setNewEvent({...newEvent, type: e.target.value as SchoolEventType})} className="w-full p-2 bg-slate-700 rounded-md border border-slate-600">
+                                        {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-1">Audience</label>
+                                    <select value={newEvent.audience} onChange={e => setNewEvent({...newEvent, audience: e.target.value as SchoolEventAudience})} className="w-full p-2 bg-slate-700 rounded-md border border-slate-600">
+                                        {EVENT_AUDIENCE.map(a => <option key={a} value={a}>{a}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="flex justify-end pt-2">
+                                <Button type="submit">Create Event</Button>
+                            </div>
+                        </form>
                     </div>
-                )) : (
-                    <p className="text-gray-500 text-center py-8">No events scheduled.</p>
-                )}
-            </div>
+
+                    {/* Event List */}
+                    <h4 className="text-lg font-semibold mb-4">Upcoming Events</h4>
+                    <div className="space-y-3">
+                        {events.length > 0 ? events.map(event => (
+                            <div key={event.id} className="p-4 bg-slate-800 rounded-lg border border-slate-700 flex justify-between items-start group">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <h5 className="font-bold text-lg text-slate-200">{event.title}</h5>
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                            event.type === 'Holiday' ? 'bg-green-900 text-green-300' :
+                                            event.type === 'Exam' ? 'bg-red-900 text-red-300' :
+                                            'bg-blue-900 text-blue-300'
+                                        }`}>{event.type}</span>
+                                    </div>
+                                    <p className="text-sm text-gray-400 mb-2">{new Date(event.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                    <p className="text-sm text-slate-300">{event.description}</p>
+                                    <p className="text-xs text-gray-500 mt-2">Visible to: {event.audience}</p>
+                                </div>
+                                <button onClick={() => handleDeleteEvent(event.id)} className="text-slate-500 hover:text-red-400 p-2 transition-colors opacity-0 group-hover:opacity-100" title="Delete Event">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                                </button>
+                            </div>
+                        )) : (
+                            <p className="text-gray-500 text-center py-8">No events scheduled.</p>
+                        )}
+                    </div>
+                </div>
+            )}
+            
+            {calendarSubTab === 'flyer' && (
+                <FlyerDesigner onClose={() => setCalendarSubTab('list')} />
+            )}
         </Card>
     );
 
@@ -1425,7 +1886,7 @@ ${requestFromUser}
                                 <td className="p-2"><input type="checkbox" checked={selectedUserUids.includes(u.uid)} onChange={() => handleSelectUser(u.uid)} className="h-4 w-4 rounded bg-slate-700 border-slate-500"/></td>
                                 <td className="px-4 py-2">
                                     <div className="font-semibold">{u.name}</div>
-                                    <div className="text-xs text-gray-400">{creds.email}</div>
+                                    <div className="text-xs text-gray-400 font-mono">{creds.email}</div>
                                     {u.role === 'student' && (
                                         <div className="text-xs text-yellow-400 font-mono mt-1">
                                             Pass: {creds.password}
