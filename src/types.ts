@@ -295,6 +295,7 @@ export interface Assignment {
     attachmentURL: string; attachmentName: string; subject: string;
     type?: AssignmentType; // Can be 'Theory' or 'Objective'
     quiz?: Quiz | null; // For objective assignments
+    scheduledAt?: firebase.firestore.Timestamp | null; // New field for scheduled assignments
 }
 
 export interface Correction {

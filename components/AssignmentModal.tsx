@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { db, storage, firebase } from '../services/firebase';
 import type { Assignment, UserProfile, SubjectsByClass, AssignmentType, Quiz, QuizQuestion } from '../types';
@@ -17,12 +18,20 @@ interface AssignmentModalProps {
   teacherSubjectsByClass: UserProfile['subjectsByClass'];
 }
 
+// Helper for date inputs
+const formatDateForInput = (date: Date) => {
+    const offset = date.getTimezoneOffset();
+    const adjusted = new Date(date.getTime() - (offset*60*1000));
+    return adjusted.toISOString().slice(0, 16);
+}
+
 const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assignment, classes, user, userProfile, teacherSubjectsByClass }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [classId, setClassId] = useState(classes[0] || '');
   const [subject, setSubject] = useState('');
   const [dueDate, setDueDate] = useState('');
+  const [scheduledAt, setScheduledAt] = useState(''); // New state for schedule
   const [file, setFile] = useState<File | null>(null);
   const [existingAttachment, setExistingAttachment] = useState({ name: '', url: '' });
   const [assignmentType, setAssignmentType] = useState<AssignmentType>('Theory');
@@ -51,6 +60,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
             setDescription(assignment.description);
             setClassId(assignment.classId);
             setDueDate(assignment.dueDate || '');
+            setScheduledAt(assignment.scheduledAt ? formatDateForInput(assignment.scheduledAt.toDate()) : '');
             setExistingAttachment({ name: assignment.attachmentName, url: assignment.attachmentURL });
             setSubject(assignment.subject || '');
             setAssignmentType(assignment.type || 'Theory');
@@ -66,6 +76,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
             setTopicForAI('');
             setClassId(classes[0] || '');
             setDueDate('');
+            setScheduledAt('');
             setFile(null);
             setExistingAttachment({ name: '', url: '' });
             setSubject('');
@@ -229,6 +240,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
         teacherId: user.uid,
         teacherName: userProfile.name,
         dueDate: dueDate || null,
+        scheduledAt: scheduledAt ? firebase.firestore.Timestamp.fromDate(new Date(scheduledAt)) : null,
       };
 
       if (assignmentType === 'Objective') {
@@ -380,11 +392,17 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
                     </div>
                 )}
 
-
-                <div>
-                    <label htmlFor="dueDate" className="block text-sm font-medium text-gray-300">Due Date (Optional)</label>
-                    <input id="dueDate" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full mt-1 p-2 rounded bg-slate-700 border border-slate-600" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label htmlFor="dueDate" className="block text-sm font-medium text-gray-300">Due Date (Optional)</label>
+                        <input id="dueDate" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full mt-1 p-2 rounded bg-slate-700 border border-slate-600" />
                     </div>
+                    <div>
+                        <label htmlFor="scheduledAt" className="block text-sm font-medium text-gray-300">Schedule Publication (Optional)</label>
+                        <input id="scheduledAt" type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} className="w-full mt-1 p-2 rounded bg-slate-700 border border-slate-600 text-sm" />
+                         <p className="text-xs text-gray-400 mt-1">Students won't see this until the set time.</p>
+                    </div>
+                </div>
 
                 <div>
                     <label className="block text-sm font-medium text-gray-300">Attachment (Optional)</label>

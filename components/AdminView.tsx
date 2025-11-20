@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { db, functions, storage, firebase, rtdb } from '../services/firebase';
 import { 
@@ -43,11 +42,14 @@ const ActiveUsersTable: React.FC = () => {
     const [users, setUsers] = useState<ActiveUserStatus[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [retryCount, setRetryCount] = useState(0);
 
     useEffect(() => {
+        setLoading(true);
         const statusRef = rtdb.ref('/status');
         
         const onValueChange = (snapshot: firebase.database.DataSnapshot) => {
+            setError(''); // Clear any previous errors on successful data
             const data = snapshot.val();
             if (data) {
                 const activeUsersArray = Object.keys(data).map(key => ({
@@ -70,7 +72,7 @@ const ActiveUsersTable: React.FC = () => {
 
         const onError = (err: Error) => {
             console.error("RTDB Error:", err);
-            setError("Failed to load active users. Check your internet connection.");
+            setError(`Connection Error: ${err.message}`);
             setLoading(false);
         };
 
@@ -80,18 +82,24 @@ const ActiveUsersTable: React.FC = () => {
         const timeoutId = setTimeout(() => {
             setLoading((isLoading) => {
                 if (isLoading) {
-                    setError("Connection timed out.");
+                    setError("Connection timed out. The server may be unreachable.");
                     return false;
                 }
                 return isLoading;
             });
-        }, 10000);
+        }, 15000);
 
         return () => {
             statusRef.off('value', onValueChange);
             clearTimeout(timeoutId);
         };
-    }, []);
+    }, [retryCount]);
+
+    const handleRetry = () => {
+        setError('');
+        setLoading(true);
+        setRetryCount(p => p + 1);
+    };
 
     if (loading) return <div className="flex justify-center p-12"><Spinner /></div>;
     
@@ -99,11 +107,21 @@ const ActiveUsersTable: React.FC = () => {
         <Card>
             <div className="flex justify-between items-center mb-6">
                 <h3 className="text-2xl font-bold">Active Users Monitor</h3>
-                <div className="text-sm text-gray-400">
-                    <span className="font-bold text-green-400">{users.filter(u => u.state === 'online').length}</span> Online Now
+                <div className="flex items-center gap-4">
+                    <div className="text-sm text-gray-400">
+                        <span className="font-bold text-green-400">{users.filter(u => u.state === 'online').length}</span> Online Now
+                    </div>
+                    <Button size="sm" variant="secondary" onClick={handleRetry} title="Refresh Connection">
+                        Refresh
+                    </Button>
                 </div>
             </div>
-            {error && <div className="p-4 mb-4 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-center">{error}</div>}
+            {error && (
+                <div className="p-4 mb-4 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-center flex flex-col items-center gap-2">
+                    <p>{error}</p>
+                    <Button size="sm" variant="secondary" onClick={handleRetry}>Retry Connection</Button>
+                </div>
+            )}
             <div className="overflow-x-auto">
                 <table className="min-w-full text-sm text-left text-gray-400">
                     <thead className="text-xs text-gray-200 uppercase bg-slate-700">

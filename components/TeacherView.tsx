@@ -1238,17 +1238,17 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
 
 
     const navItems = [
-        { key: 'dashboard', label: 'Dashboard', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h12A2.25 2.25 0 0 0 20.25 14.25V3M3.75 21h16.5M16.5 3.75h.008v.008H16.5V3.75Z" /></svg> },
-        { key: 'my_students', label: 'My Students', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-7.962a9.348 9.348 0 0 0-1.25-4.433-9.338 9.338 0 0 0-4.088-3.952m-13.5 7.962a9.348 9.348 0 0 0 1.25 4.433m11-4.433c0 1.631-1.314 2.945-2.945 2.945-1.631 0-2.945-1.314-2.945-2.945s1.314-2.945 2.945-2.945 2.945 1.314 2.945 2.945Z" /></svg> },
-        { key: 'assignments', label: 'Assignments', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg> },
-        { key: 'live_lesson', label: <span className="flex items-center">Live Lesson {activeLiveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0-2.51 2.225.515-3.572-3.108-3.108l4.286-1.071L12 3l2.225 4.515 4.286 1.07L15.215 11.7l.515 3.572Z" /></svg> },
-        { key: 'group_work', label: 'Group Work', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" /></svg> },
-        { key: 'messages', label: <span className="flex items-center justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm1.707 2.293a1 1 0 00-1.414 1.414l5 5a1 1 0 001.414 0l5-5a1 1 0 10-1.414-1.414L10 10.586 3.707 7.293z" /></svg> },
-        { key: 'my_library', label: 'My Library', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg> },
-        { key: 'attendance', label: 'Attendance', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
-        { key: 'terminal_reports', label: 'Terminal Reports', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg> },
-        { key: 'past_questions', label: 'BECE Questions', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg> },
-        { key: 'student_activity', label: 'Student Activity', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
+        { key: 'dashboard', label: 'Dashboard', icon: '📊' },
+        { key: 'my_students', label: 'My Students', icon: '👨‍🎓' },
+        { key: 'assignments', label: 'Assignments', icon: '📝' },
+        { key: 'live_lesson', label: <span className="flex items-center">Live Lesson {activeLiveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: '🔴' },
+        { key: 'group_work', label: 'Group Work', icon: '👥' },
+        { key: 'messages', label: <span className="flex items-center justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: '💬' },
+        { key: 'my_library', label: 'My Library', icon: '📚' },
+        { key: 'attendance', label: 'Attendance', icon: '📅' },
+        { key: 'terminal_reports', label: 'Terminal Reports', icon: '📄' },
+        { key: 'past_questions', label: 'BECE Questions', icon: '❓' },
+        { key: 'student_activity', label: 'Student Activity', icon: '🕒' },
     ];
     
     if (!user || !userProfile) {
@@ -1325,41 +1325,56 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
 
                         {/* Grid Section */}
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                            {filteredAssignments.map(assignment => (
-                                <Card key={assignment.id} className="flex flex-col" fullHeight={false}>
-                                    <div className="flex justify-between items-start gap-2 mb-3">
-                                        <div>
-                                            <h3 className="font-bold text-lg line-clamp-1" title={assignment.title}>{assignment.title}</h3>
-                                            <div className="flex gap-2 mt-1 flex-wrap">
-                                                <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-gray-300">{assignment.classId}</span>
-                                                <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-gray-300">{assignment.subject}</span>
+                            {filteredAssignments.map(assignment => {
+                                const isScheduled = assignment.scheduledAt && assignment.scheduledAt.toDate() > new Date();
+                                return (
+                                    <Card key={assignment.id} className="flex flex-col" fullHeight={false}>
+                                        <div className="flex justify-between items-start gap-2 mb-3">
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="font-bold text-lg line-clamp-1" title={assignment.title}>{assignment.title}</h3>
+                                                    {isScheduled && (
+                                                        <span className="bg-blue-500/20 text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-500/30">
+                                                            SCHEDULED
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="flex gap-2 mt-1 flex-wrap">
+                                                    <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-gray-300">{assignment.classId}</span>
+                                                    <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-gray-300">{assignment.subject}</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-1 shrink-0">
+                                                <button onClick={() => handleEditAssignment(assignment)} className="p-1.5 text-blue-400 hover:bg-blue-400/10 rounded transition-colors" title="Edit">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" /><path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" /></svg>
+                                                </button>
+                                                <button onClick={() => handleDeleteAssignment(assignment.id)} className="p-1.5 text-red-400 hover:bg-red-400/10 rounded transition-colors" title="Delete">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" /></svg>
+                                                </button>
                                             </div>
                                         </div>
-                                        <div className="flex gap-1 shrink-0">
-                                            <button onClick={() => handleEditAssignment(assignment)} className="p-1.5 text-blue-400 hover:bg-blue-400/10 rounded transition-colors" title="Edit">
-                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" /><path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" /></svg>
-                                            </button>
-                                            <button onClick={() => handleDeleteAssignment(assignment.id)} className="p-1.5 text-red-400 hover:bg-red-400/10 rounded transition-colors" title="Delete">
-                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" /></svg>
-                                            </button>
+                                        
+                                        <div className="flex-grow mb-4">
+                                            <p className="text-sm text-gray-400 line-clamp-3">{assignment.description}</p>
+                                            {isScheduled && (
+                                                <p className="text-xs text-blue-300 mt-2">
+                                                    Will publish on: {assignment.scheduledAt?.toDate().toLocaleString()}
+                                                </p>
+                                            )}
                                         </div>
-                                    </div>
-                                    
-                                    <div className="flex-grow mb-4">
-                                        <p className="text-sm text-gray-400 line-clamp-3">{assignment.description}</p>
-                                    </div>
 
-                                    <div className="pt-4 border-t border-slate-700/50 flex flex-col gap-3">
-                                        <div className="flex justify-between items-center text-xs text-gray-400">
-                                            <span>Due: <span className="text-yellow-400">{assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'No Date'}</span></span>
-                                            <span>{assignment.type || 'Theory'}</span>
+                                        <div className="pt-4 border-t border-slate-700/50 flex flex-col gap-3">
+                                            <div className="flex justify-between items-center text-xs text-gray-400">
+                                                <span>Due: <span className="text-yellow-400">{assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'No Date'}</span></span>
+                                                <span>{assignment.type || 'Theory'}</span>
+                                            </div>
+                                            <Button size="sm" className="w-full" onClick={() => setViewingSubmissionsFor(assignment)}>
+                                                View Submissions ({submissions.filter(s => s.assignmentId === assignment.id).length})
+                                            </Button>
                                         </div>
-                                        <Button size="sm" className="w-full" onClick={() => setViewingSubmissionsFor(assignment)}>
-                                            View Submissions ({submissions.filter(s => s.assignmentId === assignment.id).length})
-                                        </Button>
-                                    </div>
-                                </Card>
-                            ))}
+                                    </Card>
+                                );
+                            })}
                         </div>
                     </div>
                 );

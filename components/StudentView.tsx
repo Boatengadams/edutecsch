@@ -68,7 +68,13 @@ const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, setIsSideb
             .where('classId', '==', userProfile.class)
             .orderBy('createdAt', 'desc');
         unsubscribers.push(assignQuery.onSnapshot(snap => {
-            setAssignments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Assignment)));
+            const fetched = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Assignment));
+            const now = new Date();
+            // Filter out assignments scheduled for the future
+            const visibleAssignments = fetched.filter(a => 
+                !a.scheduledAt || a.scheduledAt.toDate() <= now
+            );
+            setAssignments(visibleAssignments);
         }));
     }
 
