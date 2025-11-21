@@ -317,6 +317,33 @@ const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, setIsSideb
             
             if (viewingAssignment.type === 'Objective') {
                 submissionData.answers = answersToSave;
+                
+                // Auto-grade logic for Objective assignments
+                if (viewingAssignment.quiz) {
+                    let correctCount = 0;
+                    viewingAssignment.quiz.quiz.forEach((q, index) => {
+                        if (answersToSave[index] === q.correctAnswer) {
+                            correctCount++;
+                        }
+                    });
+                    
+                    const totalQuestions = viewingAssignment.quiz.quiz.length;
+                    const percentage = (correctCount / totalQuestions) * 100;
+                    submissionData.grade = `${correctCount} / ${totalQuestions}`;
+                    submissionData.status = 'Graded'; // Automatically graded
+
+                    // Generate feedback string
+                    let feedbackMsg = "";
+                    if (percentage === 100) feedbackMsg = "Excellent work! 🌟";
+                    else if (percentage >= 80) feedbackMsg = "Well done! 👏";
+                    else if (percentage >= 50) feedbackMsg = "Good effort, keep it up! 👍";
+                    else feedbackMsg = "Don't give up, please review the material. 💪";
+                    
+                    if (percentage < 100) {
+                        feedbackMsg += " Please do corrections for the wrong answers.";
+                    }
+                    submissionData.feedback = feedbackMsg;
+                }
             } else {
                 submissionData.text = textSubmission;
             }
