@@ -767,6 +767,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             const quizQuestion = content.quiz?.quiz[index];
             return {
                 boardContent: `<h3>${slide.title}</h3><ul>${slide.content.map(p => `<li>${p}</li>`).join('')}</ul>`,
+                audioUrl: slide.audioUrl, // Ensure audioUrl is passed
                 question: quizQuestion ? {
                     id: `${content.id || 'new'}_q${index}`,
                     text: quizQuestion.question,
@@ -787,6 +788,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             lessonPlan: lessonPlan,
             currentBoardContent: lessonPlan[0].boardContent,
             currentQuestion: lessonPlan[0].question,
+            currentAudioUrl: lessonPlan[0].audioUrl, // Initialize with first slide's audio
         };
 
         // If starting from a saved presentation, link it
@@ -1194,7 +1196,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                                 </div>
                                  <div className="mt-4 pt-2 flex justify-between items-center border-t border-slate-700/50">
                                     <div className="flex flex-col">
-                                        <span className="text-xs text-yellow-400">Due: {assignment.dueDate || 'Not set'}</p>
+                                        <span className="text-xs text-yellow-400">Due: {assignment.dueDate || 'Not set'}</span>
                                         {isScheduled && <span className="text-xs bg-purple-900/50 text-purple-300 px-1.5 py-0.5 rounded border border-purple-500/30 mt-1 w-fit">Scheduled for {assignment.scheduledAt?.toDate().toLocaleDateString()}</span>}
                                     </div>
                                     <Button size="sm" onClick={() => setViewingSubmissionsFor(assignment)}>
@@ -1574,7 +1576,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                     editingGroup={editingGroup}
                 />
              )}
-              {viewingGroup && <GroupDetailsModal group={viewingGroup} onClose={() => setViewingGroup(null)} />} 
+              {viewingGroup && <GroupDetailsModal group={viewingGroup} onClose={() => setViewingGroup(null)} />}
                <ConfirmationModal
                 isOpen={!!groupToDelete}
                 onClose={() => setGroupToDelete(null)}
