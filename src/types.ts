@@ -56,7 +56,6 @@ export interface UserProfile {
   
   // Role-specific
   class?: string; // For students
-  // FIX: Added parentUids to student profile to track linked parent accounts.
   parentUids?: string[]; // For students
   classesTaught?: string[]; // For teachers
   subjectsTaught?: string[]; // For teachers
@@ -127,7 +126,7 @@ export interface WellbeingEntry {
 // --- LIVE LESSON ---
 export interface Point { x: number; y: number; }
 
-export type DrawingToolType = 'pen' | 'eraser' | 'rect' | 'circle' | 'text';
+export type DrawingToolType = 'pen' | 'eraser' | 'rect' | 'circle' | 'text' | 'line';
 
 export interface DrawingElement {
     id?: string;
@@ -144,12 +143,27 @@ export interface DrawingElement {
 
 export interface LiveLessonStep {
   boardContent: string;
+  audioUrl?: string; // Pre-generated audio for this step
   question: {
     id: string;
     text: string;
     options: string[];
     correctAnswer: string;
   } | null;
+}
+
+export type LiveActionType = 'poll' | 'direct_question' | 'explanation' | 'celebration';
+
+export interface LiveAction {
+    id: string;
+    type: LiveActionType;
+    text: string; // The question or explanation text
+    options?: string[]; // For polls (e.g. ["Yes", "No"])
+    targetStudentId?: string; // If set, only this student sees it (Direct Question)
+    targetStudentName?: string;
+    timestamp: number;
+    // Context for AI generation
+    relatedSlideContent?: string; 
 }
 
 export interface LiveLesson {
@@ -166,8 +180,11 @@ export interface LiveLesson {
   lessonPlan: LiveLessonStep[];
   // Denormalized for easy student access
   currentBoardContent: string;
+  currentAudioUrl?: string; // URL of the audio file for the current step
   currentQuestion: LiveLessonStep['question'] | null;
   sourcePresentationId?: string;
+  
+  activeAction?: LiveAction | null; // The current transient event (Poll/Question)
   
   drawingData?: DrawingElement[];
   pointerPosition?: { x: number; y: number } | null;
@@ -182,6 +199,8 @@ export interface LiveLesson {
           students: {uid: string, name: string}[];
       } 
   } | null;
+  
+  raisedHands?: string[]; // UIDs of students with raised hands
 }
 
 export interface BreakoutWhiteboard {
@@ -202,9 +221,11 @@ export interface LiveLessonResponse {
   lessonId: string;
   studentId: string;
   studentName: string;
-  questionId: string;
+  questionId?: string;
+  actionId?: string; // Links response to a specific LiveAction
   answer: string;
-  isCorrect: boolean;
+  confusionPoint?: string; // Specific text they clicked on if they said "No"
+  isCorrect?: boolean;
   timestamp: firebase.firestore.Timestamp;
 }
 
@@ -295,7 +316,7 @@ export interface Assignment {
     attachmentURL: string; attachmentName: string; subject: string;
     type?: AssignmentType; // Can be 'Theory' or 'Objective'
     quiz?: Quiz | null; // For objective assignments
-    scheduledAt?: firebase.firestore.Timestamp | null; // New field for scheduled assignments
+    scheduledAt?: firebase.firestore.Timestamp | null;
 }
 
 export interface Correction {
@@ -396,6 +417,7 @@ export interface Slide {
   content: string[];
   imageUrl: string;
   imageStyle?: 'contain' | 'cover';
+  audioUrl?: string;
 }
 export interface Presentation {
   slides: Slide[];

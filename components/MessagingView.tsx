@@ -5,34 +5,7 @@ import { UserProfile, Conversation, Message } from '../types';
 import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
-import CameraModal from './common/CameraModal';
-import { useOnlineStatus } from '../hooks/useOnlineStatus';
-
-// Helper to convert dataURL to File object
-const dataURLtoFile = (dataurl: string, filename: string): File => {
-    const arr = dataurl.split(',');
-    const mimeMatch = arr[0].match(/:(.*?);/);
-    if (!mimeMatch) throw new Error('Invalid data URL');
-    const mime = mimeMatch[1];
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) {
-        u8arr[n] = bstr.charCodeAt(n);
-    }
-    return new File([u8arr], filename, { type: mime });
-};
-
-// Helper to get a preview URL from a File object
-const fileToDataUrl = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
-};
-
+import ChatInput from './common/ChatInput';
 
 interface MessagingViewProps {
   userProfile: UserProfile;
@@ -43,20 +16,12 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [imageToSend, setImageToSend] = useState<{ file: File | null; preview: string | null }>({ file: null, preview: null });
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [showNewMessageModal, setShowNewMessageModal] = useState(false);
-  const [showCamera, setShowCamera] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
-
-  // Contact Online Status
-  const contactUids = useMemo(() => contacts.map(c => c.uid), [contacts]);
-  const onlineStatusMap = useOnlineStatus(contactUids);
 
   // Fetch conversations
   useEffect(() => {
@@ -104,60 +69,71 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isSending]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if ((!newMessage.trim() && !imageToSend.file) || !activeConversationId || isSending) return;
+  const handleSendMessage = async (messageContent: { text: string; image: File | null; audio: Blob | null }) => {
+    if (!activeConversationId || isSending) return;
     
     setIsSending(true);
-    const conversationRef = db.collection('conversations').doc(activeConversationId);
-    const messageRef = conversationRef.collection('messages').doc();
+    try {
+        const conversationRef = db.collection('conversations').doc(activeConversationId);
+        const messageRef = conversationRef.collection('messages').doc();
 
-    const conversationDoc = await conversationRef.get();
-    if (!conversationDoc.exists) {
+        const conversationDoc = await conversationRef.get();
+        if (!conversationDoc.exists) return;
+        const conversationData = conversationDoc.data() as Conversation;
+
+        const messageData: Partial<Message> = {
+          senderId: userProfile.uid,
+          senderName: userProfile.name,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
+          readBy: [],
+        };
+        
+        if (messageContent.text.trim()) {
+            messageData.text = messageContent.text;
+        }
+
+        if (messageContent.image) {
+            const storagePath = `direct_messages/${activeConversationId}/${messageRef.id}-${messageContent.image.name}`;
+            const storageRef = storage.ref(storagePath);
+            await storageRef.put(messageContent.image);
+            messageData.imageUrl = await storageRef.getDownloadURL();
+            messageData.storagePath = storagePath;
+        }
+        
+        if (messageContent.audio) {
+             const storagePath = `direct_messages/${activeConversationId}/${messageRef.id}-audio.webm`;
+             const storageRef = storage.ref(storagePath);
+             await storageRef.put(messageContent.audio);
+             messageData.audioUrl = await storageRef.getDownloadURL();
+             messageData.audioStoragePath = storagePath;
+        }
+        
+        const batch = db.batch();
+        batch.set(messageRef, messageData);
+        
+        const otherParticipantUid = conversationData.participantUids.find(uid => uid !== userProfile.uid);
+        if (otherParticipantUid) {
+            let lastMsgText = messageData.text || '';
+            if (messageData.imageUrl) lastMsgText = '[Photo] ' + lastMsgText;
+            if (messageData.audioUrl) lastMsgText = '[Audio] ' + lastMsgText;
+
+            batch.update(conversationRef, {
+                lastMessage: {
+                    text: lastMsgText,
+                    senderId: userProfile.uid,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                },
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                [`unreadCount.${otherParticipantUid}`]: firebase.firestore.FieldValue.increment(1)
+            });
+        }
+        
+        await batch.commit();
+    } catch (err) {
+        console.error("Error sending message:", err);
+    } finally {
         setIsSending(false);
-        return;
-    };
-    const conversationData = conversationDoc.data() as Conversation;
-
-    const messageData: Partial<Message> = {
-      senderId: userProfile.uid,
-      senderName: userProfile.name,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
-      readBy: [],
-    };
-    
-    if (newMessage.trim()) {
-        messageData.text = newMessage;
     }
-
-    if (imageToSend.file) {
-        const storagePath = `direct_messages/${activeConversationId}/${messageRef.id}-${imageToSend.file.name}`;
-        const storageRef = storage.ref(storagePath);
-        await storageRef.put(imageToSend.file);
-        messageData.imageUrl = await storageRef.getDownloadURL();
-        messageData.storagePath = storagePath;
-    }
-    
-    const batch = db.batch();
-    batch.set(messageRef, messageData);
-    
-    const otherParticipantUid = conversationData.participantUids.find(uid => uid !== userProfile.uid);
-    if (otherParticipantUid) {
-        batch.update(conversationRef, {
-            lastMessage: {
-                text: messageData.imageUrl ? '[Photo]' : messageData.text,
-                senderId: userProfile.uid,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            },
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            [`unreadCount.${otherParticipantUid}`]: firebase.firestore.FieldValue.increment(1)
-        });
-    }
-    
-    await batch.commit();
-    setNewMessage('');
-    setImageToSend({ file: null, preview: null });
-    setIsSending(false);
   };
   
   const handleStartNewConversation = async (contact: UserProfile) => {
@@ -184,20 +160,6 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
         const newDocRef = await db.collection('conversations').add(newConversationData);
         setActiveConversationId(newDocRef.id);
     }
-  };
-  
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const preview = await fileToDataUrl(file);
-      setImageToSend({ file, preview });
-    }
-  };
-
-  const handleCameraCapture = (dataUrl: string) => {
-    const file = dataURLtoFile(dataUrl, `capture-${Date.now()}.jpg`);
-    setImageToSend({ file, preview: dataUrl });
-    setShowCamera(false);
   };
   
   const activeConversation = conversations.find(c => c.id === activeConversationId);
@@ -232,22 +194,15 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
                             const otherUserUid = conv.participantUids.find(uid => uid !== userProfile.uid);
                             const otherUser = otherUserUid ? conv.participantInfo[otherUserUid] : null;
                             const unread = conv.unreadCount?.[userProfile.uid] || 0;
-                            // Check if the other user is online. Since we only track contacts, this might only
-                            // show status if they are in the contacts list passed to this component.
-                            const isOnline = otherUserUid ? onlineStatusMap[otherUserUid] === 'online' : false;
-                            
                             return (
                                 <button key={conv.id} onClick={() => setActiveConversationId(conv.id)}
                                     className={`w-full text-left p-3 rounded-md transition-colors ${activeConversationId === conv.id ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}>
                                     <div className="flex justify-between items-start">
-                                        <div className="flex-grow min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <p className="font-bold truncate">{otherUser?.name || 'Unknown User'}</p>
-                                                <span className={`inline-block w-2 h-2 rounded-full ${isOnline ? 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)]' : 'bg-gray-500'}`} title={isOnline ? "Online" : "Offline"}></span>
-                                            </div>
-                                            <p className="text-xs text-gray-400 truncate">{conv.lastMessage?.text}</p>
+                                        <div>
+                                            <p className="font-bold">{otherUser?.name || 'Unknown User'}</p>
+                                            <p className="text-xs text-gray-400 truncate max-w-[150px]">{conv.lastMessage?.text}</p>
                                         </div>
-                                        {unread > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center flex-shrink-0 ml-2">{unread}</span>}
+                                        {unread > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center flex-shrink-0">{unread}</span>}
                                     </div>
                                 </button>
                             );
@@ -258,22 +213,9 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
             <div className="md:col-span-2 flex flex-col h-full">
                 {activeConversationId && otherParticipantInfo ? (
                     <>
-                        <div className="p-3 border-b border-slate-700 flex-shrink-0 flex items-center justify-between">
-                            <div>
-                                <h4 className="font-bold">{otherParticipantInfo.name}</h4>
-                                <p className="text-xs text-gray-400 capitalize">{otherParticipantInfo.role}</p>
-                            </div>
-                            {/* Also show status in the header if available */}
-                             {(() => {
-                                const otherUid = activeConversation?.participantUids.find(uid => uid !== userProfile.uid);
-                                const isOnline = otherUid ? onlineStatusMap[otherUid] === 'online' : false;
-                                return (
-                                    <div className="flex items-center gap-2">
-                                        <span className={`inline-block w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' : 'bg-gray-500'}`}></span>
-                                        <span className="text-xs text-gray-400">{isOnline ? 'Online' : 'Offline'}</span>
-                                    </div>
-                                );
-                            })()}
+                        <div className="p-3 border-b border-slate-700 flex-shrink-0">
+                            <h4 className="font-bold">{otherParticipantInfo.name}</h4>
+                            <p className="text-xs text-gray-400 capitalize">{otherParticipantInfo.role}</p>
                         </div>
                         <div className="flex-grow overflow-y-auto p-4 space-y-4">
                             {loadingMessages ? <div className="flex justify-center items-center h-full"><Spinner /></div> : messages.map(msg => (
@@ -281,27 +223,14 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
                                     <span className="text-xs text-gray-400 font-bold mx-1">{msg.senderId === userProfile.uid ? 'You' : msg.senderName}</span>
                                     <div className={`p-2 rounded-lg max-w-sm break-words ${msg.senderId === userProfile.uid ? 'bg-blue-600 text-white' : 'bg-slate-700'}`}>
                                         {msg.imageUrl && <img src={msg.imageUrl} alt="Sent attachment" className="rounded-md max-w-xs mb-1" />}
+                                        {msg.audioUrl && <audio src={msg.audioUrl} controls className="mb-1 max-w-full" />}
                                         {msg.text && <p className="text-sm px-1">{msg.text}</p>}
                                     </div>
                                 </div>
                             ))}
                             <div ref={messagesEndRef} />
                         </div>
-                        <form onSubmit={handleSendMessage} className="p-2 flex flex-col gap-2 flex-shrink-0">
-                           {imageToSend.preview && (
-                                <div className="relative w-24 h-24 p-1">
-                                    <img src={imageToSend.preview} alt="Preview" className="w-full h-full object-cover rounded-md" />
-                                    <button type="button" onClick={() => setImageToSend({ file: null, preview: null })} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center">&times;</button>
-                                </div>
-                            )}
-                            <div className="flex gap-2 items-center">
-                                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
-                                <Button type="button" variant="secondary" size="sm" onClick={() => setShowCamera(true)}>📷</Button>
-                                <Button type="button" variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>📎</Button>
-                                <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type a message..." className="flex-grow p-2 bg-slate-800 rounded-md border border-slate-600"/>
-                                <Button type="submit" disabled={isSending || (!newMessage.trim() && !imageToSend.file)}>{isSending ? '...' : 'Send'}</Button>
-                            </div>
-                        </form>
+                        <ChatInput onSendMessage={handleSendMessage} isSending={isSending} />
                     </>
                 ) : (
                     <div className="flex items-center justify-center h-full text-gray-500">
@@ -319,24 +248,18 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
                     </div>
                     <input type="search" placeholder="Search contacts..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full p-2 bg-slate-700 rounded-md border border-slate-600 mb-4"/>
                     <div className="flex-grow overflow-y-auto space-y-2">
-                        {filteredContacts.map(contact => {
-                            const isOnline = onlineStatusMap[contact.uid] === 'online';
-                            return (
-                            <button key={contact.uid} onClick={() => handleStartNewConversation(contact)} className="w-full text-left p-3 bg-slate-700 rounded-md hover:bg-slate-600 flex justify-between items-center">
-                                <div>
-                                    <p className="font-semibold">{contact.name}</p>
-                                    <p className="text-xs text-gray-400 capitalize">{contact.role}</p>
-                                </div>
-                                <span className={`inline-block w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)]' : 'bg-gray-500'}`}></span>
+                        {filteredContacts.map(contact => (
+                            <button key={contact.uid} onClick={() => handleStartNewConversation(contact)} className="w-full text-left p-3 bg-slate-700 rounded-md hover:bg-slate-600">
+                                <p className="font-semibold">{contact.name}</p>
+                                <p className="text-xs text-gray-400 capitalize">{contact.role}</p>
                             </button>
-                        )})}
+                        ))}
                          {filteredContacts.length === 0 && <p className="text-center text-gray-500 text-sm p-4">No contacts found.</p>}
                     </div>
                 </Card>
             </div>
         )}
     </Card>
-    {showCamera && <CameraModal onCapture={handleCameraCapture} onClose={() => setShowCamera(false)} />}
     </>
   );
 };

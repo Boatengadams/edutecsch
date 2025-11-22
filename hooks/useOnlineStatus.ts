@@ -50,3 +50,45 @@ export const useOnlineStatus = (uids: string[]) => {
 
   return statusMap;
 };
+
+// New hook for Admins to see everyone
+export interface OnlineUser {
+    uid: string;
+    state: 'online' | 'offline';
+    last_changed: number;
+    name?: string;
+    role?: string;
+    class?: string;
+}
+
+export const useAllOnlineUsers = () => {
+    const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+
+    useEffect(() => {
+        const ref = rtdb.ref('/status');
+        
+        // Order by state to easily find 'online' users, though we filter client side for flexibility
+        const listener = ref.on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (!data) {
+                setOnlineUsers([]);
+                return;
+            }
+
+            const users: OnlineUser[] = Object.keys(data).map(key => ({
+                uid: key,
+                ...data[key]
+            }));
+
+            // Filter only those currently online
+            const active = users.filter(u => u.state === 'online');
+            setOnlineUsers(active);
+        });
+
+        return () => {
+            ref.off('value', listener);
+        };
+    }, []);
+
+    return onlineUsers;
+};

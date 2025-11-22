@@ -8,7 +8,7 @@ import 'firebase/compat/auth';
 import AuthForm from './components/AuthForm';
 import RoleSelector from './components/RoleSelector';
 import TeacherView from './components/TeacherView';
-import StudentView from './components/StudentView';
+import { StudentView } from './components/StudentView';
 // FIX: Changed to named imports to resolve "no default export" error.
 import { AdminView } from './components/AdminView';
 import { ParentView } from './components/ParentView';

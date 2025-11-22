@@ -4,7 +4,7 @@ import { useAuthentication } from '../hooks/useAuth';
 import { db, storage, functions, firebase } from '../services/firebase';
 // FIX: GES_STANDARD_CURRICULUM is a value, so it's imported separately from the types.
 import { GES_STANDARD_CURRICULUM } from '../types';
-import type { Assignment, Submission, UserProfile, TeachingMaterial, GeneratedContent, SubjectsByClass, GES_CLASSES, Timetable, Quiz, Presentation, LiveTutoringSession, AttendanceRecord, AttendanceStatus, Notification, GES_SUBJECTS, TerminalReport, TerminalReportMark, ReportSummary, SchoolSettings, VideoContent, SchoolEvent, TimetableData, TimetablePeriod, LiveLesson, LiveLessonStep, Group, GroupMember, GroupMessage, Conversation, Slide, PublishedFlyer, UserActivityLog } from '../types';
+import type { Assignment, Submission, UserProfile, TeachingMaterial, GeneratedContent, SubjectsByClass, GES_CLASSES, Timetable, Quiz, Presentation, LiveTutoringSession, AttendanceRecord, AttendanceStatus, Notification, GES_SUBJECTS, TerminalReport, TerminalReportMark, ReportSummary, SchoolSettings, VideoContent, SchoolEvent, TimetableData, TimetablePeriod, LiveLesson, LiveLessonStep, Group, GroupMember, GroupMessage, Conversation, Slide } from '../types';
 import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
@@ -30,8 +30,8 @@ import BECEPastQuestionsView from './common/BECEPastQuestionsView';
 import MessagingView from './MessagingView';
 import html2canvas from 'html2canvas';
 import { ProgressDashboard } from './ProgressDashboard';
+import TeacherStudentActivity from './TeacherStudentActivity';
 import TeacherMyVoice from './TeacherMyVoice';
-import TeacherAITools from './TeacherAITools';
 
 const getGrade = (score: number) => {
     if (score >= 80) return 'A';
@@ -347,9 +347,7 @@ const TeacherDashboard: React.FC<{
     assignments: Assignment[];
     submissions: Submission[];
     teacherClasses: string[];
-    publishedFlyers: PublishedFlyer[];
-    onSelectFlyer: (flyer: PublishedFlyer) => void;
-}> = ({ userProfile, students, assignments, submissions, teacherClasses, publishedFlyers, onSelectFlyer }) => {
+}> = ({ userProfile, students, assignments, submissions, teacherClasses }) => {
     
     const pendingSubmissions = submissions.filter(s => s.status === 'Submitted').length;
     
@@ -372,32 +370,6 @@ const TeacherDashboard: React.FC<{
                 <Card><div className="text-center"><p className="text-sm text-gray-400">Classes Taught</p><p className="text-3xl font-bold">{teacherClasses.length || 0}</p></div></Card>
                 <Card><div className="text-center"><p className="text-sm text-gray-400">Submissions to Grade</p><p className="text-3xl font-bold text-yellow-400">{pendingSubmissions}</p></div></Card>
             </div>
-
-             {publishedFlyers.length > 0 && (
-                <Card>
-                    <h3 className="text-xl font-semibold mb-4">School Notice Board</h3>
-                    <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
-                        {publishedFlyers.map(flyer => (
-                            <button 
-                                key={flyer.id} 
-                                onClick={() => onSelectFlyer(flyer)}
-                                className="flex-shrink-0 w-48 group relative rounded-lg overflow-hidden border border-slate-700 hover:border-blue-500 transition-all"
-                            >
-                                <div className="aspect-[3/4] relative">
-                                    <img src={flyer.imageUrl} alt={flyer.title} className="w-full h-full object-cover" />
-                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <span className="text-white text-sm font-bold">View Flyer</span>
-                                    </div>
-                                </div>
-                                <div className="p-2 bg-slate-800 text-left">
-                                    <p className="font-bold text-sm truncate text-slate-200">{flyer.title}</p>
-                                    <p className="text-xs text-gray-500">{flyer.createdAt?.toDate().toLocaleDateString()}</p>
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                </Card>
-            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card>
@@ -431,86 +403,6 @@ const TeacherDashboard: React.FC<{
 };
 
 
-const StudentActivityTable: React.FC<{ teacherClasses: string[] }> = ({ teacherClasses }) => {
-    const [logs, setLogs] = useState<UserActivityLog[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        if (teacherClasses.length === 0) {
-            setLoading(false);
-            return;
-        }
-        
-        // Fetch recent activity for students. 
-        // Note: Firestore filtering by 'class IN [...]' combined with orderBy requires composite index.
-        // To simplify and avoid index creation requirements for the user, we fetch recent student logs and filter in client.
-        const unsubscribe = db.collection('userActivity')
-            .where('userRole', '==', 'student')
-            // Removed .orderBy('timestamp', 'desc') to avoid index requirement error. 
-            // We will sort client-side.
-            .limit(200)
-            .onSnapshot(snapshot => {
-                const allLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserActivityLog));
-                // Client-side filter by class and sort by timestamp desc
-                const filteredLogs = allLogs
-                    .filter(log => teacherClasses.includes(log.userClass || ''))
-                    .sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
-                
-                setLogs(filteredLogs);
-                setLoading(false);
-            });
-        
-        return () => unsubscribe();
-    }, [teacherClasses]);
-
-    if (loading) return <div className="flex justify-center p-12"><Spinner /></div>;
-
-    return (
-        <Card>
-            <h3 className="text-2xl font-bold mb-6">Student Activity Log</h3>
-            <div className="overflow-x-auto">
-                <table className="min-w-full text-sm text-left text-gray-400">
-                    <thead className="text-xs text-gray-200 uppercase bg-slate-700">
-                        <tr>
-                            <th className="px-6 py-3">Time</th>
-                            <th className="px-6 py-3">Student Name</th>
-                            <th className="px-6 py-3">Class</th>
-                            <th className="px-6 py-3">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {logs.map((log) => (
-                            <tr key={log.id} className="bg-slate-800 border-b border-slate-700 hover:bg-slate-700 transition-colors">
-                                <td className="px-6 py-4 whitespace-nowrap text-xs">
-                                    {log.timestamp?.toDate().toLocaleString()}
-                                </td>
-                                <td className="px-6 py-4 font-medium text-white">
-                                    {log.userName}
-                                </td>
-                                <td className="px-6 py-4">
-                                    {log.userClass}
-                                </td>
-                                <td className="px-6 py-4">
-                                    <span className={`px-2 py-1 rounded text-xs font-bold ${log.action === 'login' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                                        {log.action.toUpperCase()}
-                                    </span>
-                                </td>
-                            </tr>
-                        ))}
-                        {logs.length === 0 && (
-                             <tr>
-                                <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
-                                    No recent activity from your students.
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-        </Card>
-    );
-};
-
 interface TeacherViewProps {
   isSidebarExpanded: boolean;
   setIsSidebarExpanded: (isExpanded: boolean) => void;
@@ -534,8 +426,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     const [allTeachers, setAllTeachers] = useState<UserProfile[]>([]);
     const [groups, setGroups] = useState<Group[]>([]);
     const [terminalReports, setTerminalReports] = useState<TerminalReport[]>([]);
-    const [publishedFlyers, setPublishedFlyers] = useState<PublishedFlyer[]>([]);
-    const [selectedFlyer, setSelectedFlyer] = useState<PublishedFlyer | null>(null);
     
     // UI states
     const [loading, setLoading] = useState(true);
@@ -549,11 +439,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     const [isDeletingContent, setIsDeletingContent] = useState(false);
     const [gradeInput, setGradeInput] = useState('');
     const [feedbackInput, setFeedbackInput] = useState('');
-    
-    // Batch Actions UI State
-    const [selectedAssignmentIds, setSelectedAssignmentIds] = useState<string[]>([]);
-    const [isBulkDeleting, setIsBulkDeleting] = useState(false);
-
 
     // My Students state
     const [showCreateStudentModal, setShowCreateStudentModal] = useState(false);
@@ -693,30 +578,9 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             .onSnapshot(snap => setSubmissions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Submission)))));
 
         // Fetch students in those classes
-        // Chunk the query because 'in' only supports 10 values max
-        const classChunks = [];
-        for (let i = 0; i < teacherClasses.length; i += 10) {
-            classChunks.push(teacherClasses.slice(i, i + 10));
-        }
-
-        if (classChunks.length > 0) {
-             classChunks.forEach(chunk => {
-                 unsubscribers.push(db.collection('users')
-                    .where('class', 'in', chunk)
-                    .where('role', '==', 'student')
-                    .onSnapshot(snap => {
-                        setStudents(prev => {
-                            const newStudents = snap.docs.map(doc => doc.data() as UserProfile).filter(u => u && u.uid);
-                            // Merge and remove duplicates
-                            const studentMap = new Map(prev.map(s => [s.uid, s]));
-                            newStudents.forEach(s => studentMap.set(s.uid, s));
-                            return Array.from(studentMap.values());
-                        });
-                    }));
-             });
-        } else {
-             setStudents([]);
-        }
+        unsubscribers.push(db.collection('users').where('class', 'in', teacherClasses)
+            .where('role', '==', 'student')
+            .onSnapshot(snap => setStudents(snap.docs.map(doc => doc.data() as UserProfile).filter(u => u && u.uid))));
         
         // Fetch generated content
         unsubscribers.push(db.collection('generatedContent').where('collaboratorUids', 'array-contains', user.uid)
@@ -733,28 +597,11 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         
         // Fetch groups
         unsubscribers.push(db.collection('groups').where('teacherId', '==', user.uid).onSnapshot(snap => setGroups(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group)))));
-
-        // Fetch Published Flyers - REMOVED orderBy to fix index error
-        const flyerQueries = [
-            db.collection('publishedFlyers').where('targetAudience', '==', 'all'),
-            db.collection('publishedFlyers').where('targetRoles', 'array-contains', 'teacher'),
-            db.collection('publishedFlyers').where('targetAudience', '==', 'selected').where('targetUids', 'array-contains', user.uid)
-        ];
-        const unsubFlyers = flyerQueries.map(q => q.limit(10).onSnapshot(snap => {
-            const flyers = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublishedFlyer));
-            setPublishedFlyers(prev => {
-                const all = [...prev, ...flyers];
-                const unique = Array.from(new Map(all.map(item => [item.id, item])).values());
-                return unique.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()).slice(0, 20);
-            });
-        }));
-        unsubscribers.push(...unsubFlyers);
-
             
         if (teacherClasses.length > 0 && teacherSubjects.length > 0) {
             unsubscribers.push(
                 db.collection('terminalReports')
-                    .where('classId', 'in', teacherClasses.slice(0, 10)) // Limit to 10 for now to avoid query issues
+                    .where('classId', 'in', teacherClasses)
                     .onSnapshot(snap => {
                         const reports = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TerminalReport));
                         const relevantReports = reports.filter(report => 
@@ -994,7 +841,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             console.error("Error starting live lesson:", error);
             showToast(`Error starting live lesson`, 'error');
         }
-    }, [user, userProfile]);
+    }, [user, userProfile, showToast]);
 
     
     const handleDeleteContent = async () => {
@@ -1143,7 +990,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             }
         });
         setMarks(newMarks);
-        showToast("Scores from assignments and group work have been filled in.", "success");
+        showToast("Scores from assignments and group work have been filled in.", 'success');
     };
 
     const calculateTotalsAndSave = async () => {
@@ -1238,17 +1085,18 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
 
 
     const navItems = [
-        { key: 'dashboard', label: 'Dashboard', icon: '📊' },
-        { key: 'my_students', label: 'My Students', icon: '👨‍🎓' },
-        { key: 'assignments', label: 'Assignments', icon: '📝' },
-        { key: 'live_lesson', label: <span className="flex items-center">Live Lesson {activeLiveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: '🔴' },
-        { key: 'group_work', label: 'Group Work', icon: '👥' },
-        { key: 'messages', label: <span className="flex items-center justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: '💬' },
-        { key: 'my_library', label: 'My Library', icon: '📚' },
-        { key: 'attendance', label: 'Attendance', icon: '📅' },
-        { key: 'terminal_reports', label: 'Terminal Reports', icon: '📄' },
-        { key: 'past_questions', label: 'BECE Questions', icon: '❓' },
-        { key: 'student_activity', label: 'Student Activity', icon: '🕒' },
+        { key: 'dashboard', label: 'Dashboard', icon: <span className="text-xl">📊</span> },
+        { key: 'my_students', label: 'My Students', icon: <span className="text-xl">👨‍🎓</span> },
+        { key: 'assignments', label: 'Assignments', icon: <span className="text-xl">📝</span> },
+        { key: 'live_lesson', label: <span className="flex items-center">Live Lesson {activeLiveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: <span className="text-xl">🔴</span> },
+        { key: 'group_work', label: 'Group Work', icon: <span className="text-xl">👥</span> },
+        { key: 'messages', label: <span className="flex items-center justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: <span className="text-xl">💬</span> },
+        { key: 'my_library', label: 'My Library', icon: <span className="text-xl">📚</span> },
+        { key: 'attendance', label: 'Attendance', icon: <span className="text-xl">📅</span> },
+        { key: 'terminal_reports', label: 'Terminal Reports', icon: <span className="text-xl">📈</span> },
+        { key: 'past_questions', label: 'BECE Questions', icon: <span className="text-xl">❓</span> },
+        { key: 'student_activity', label: 'Student Activity', icon: <span className="text-xl">🕒</span> },
+        { key: 'my_voice', label: 'My Voice', icon: <span className="text-xl">🎤</span> },
     ];
     
     if (!user || !userProfile) {
@@ -1262,7 +1110,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
 
         switch (activeTab) {
             case 'dashboard':
-                return <TeacherDashboard userProfile={userProfile} students={students} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} publishedFlyers={publishedFlyers} onSelectFlyer={setSelectedFlyer} />;
+                return <TeacherDashboard userProfile={userProfile} students={students} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} />;
             case 'my_students':
                 const studentsByClass = students.reduce((acc: Record<string, UserProfile[]>, student) => {
                     const classKey = student.class || 'Unassigned';
@@ -1301,7 +1149,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             case 'assignments':
                 return (
                     <div className="space-y-6">
-                        {/* Header Section */}
                         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                             <h2 className="text-3xl font-bold">Assignments</h2>
                             <div className="flex items-center gap-4">
@@ -1323,64 +1170,45 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                             </div>
                         </div>
 
-                        {/* Grid Section */}
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                            {filteredAssignments.map(assignment => {
-                                const isScheduled = assignment.scheduledAt && assignment.scheduledAt.toDate() > new Date();
-                                return (
-                                    <Card key={assignment.id} className="flex flex-col" fullHeight={false}>
-                                        <div className="flex justify-between items-start gap-2 mb-3">
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    <h3 className="font-bold text-lg line-clamp-1" title={assignment.title}>{assignment.title}</h3>
-                                                    {isScheduled && (
-                                                        <span className="bg-blue-500/20 text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-500/30">
-                                                            SCHEDULED
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div className="flex gap-2 mt-1 flex-wrap">
-                                                    <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-gray-300">{assignment.classId}</span>
-                                                    <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-gray-300">{assignment.subject}</span>
-                                                </div>
-                                            </div>
-                                            <div className="flex gap-1 shrink-0">
-                                                <button onClick={() => handleEditAssignment(assignment)} className="p-1.5 text-blue-400 hover:bg-blue-400/10 rounded transition-colors" title="Edit">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" /><path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" /></svg>
-                                                </button>
-                                                <button onClick={() => handleDeleteAssignment(assignment.id)} className="p-1.5 text-red-400 hover:bg-red-400/10 rounded transition-colors" title="Delete">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" /></svg>
-                                                </button>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="flex-grow mb-4">
-                                            <p className="text-sm text-gray-400 line-clamp-3">{assignment.description}</p>
-                                            {isScheduled && (
-                                                <p className="text-xs text-blue-300 mt-2">
-                                                    Will publish on: {assignment.scheduledAt?.toDate().toLocaleString()}
-                                                </p>
-                                            )}
-                                        </div>
-
-                                        <div className="pt-4 border-t border-slate-700/50 flex flex-col gap-3">
-                                            <div className="flex justify-between items-center text-xs text-gray-400">
-                                                <span>Due: <span className="text-yellow-400">{assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'No Date'}</span></span>
-                                                <span>{assignment.type || 'Theory'}</span>
-                                            </div>
-                                            <Button size="sm" className="w-full" onClick={() => setViewingSubmissionsFor(assignment)}>
-                                                View Submissions ({submissions.filter(s => s.assignmentId === assignment.id).length})
-                                            </Button>
-                                        </div>
-                                    </Card>
-                                );
-                            })}
+                        {filteredAssignments.map(assignment => {
+                            const isScheduled = assignment.scheduledAt && assignment.scheduledAt.toDate() > new Date();
+                            return (
+                            <Card key={assignment.id}>
+                                <div className="flex justify-between items-start gap-4">
+                                    <div className="flex-1 min-w-0">
+                                        <h3 className="text-xl font-bold truncate" title={assignment.title}>{assignment.title}</h3>
+                                        <p className="text-sm text-gray-400">{assignment.classId} &bull; {assignment.subject}</p>
+                                    </div>
+                                    <div className="flex gap-2 flex-shrink-0">
+                                        <button onClick={() => handleEditAssignment(assignment)} className="p-1.5 rounded-full bg-slate-700 hover:bg-slate-600 text-blue-400" title="Edit">
+                                            <span className="text-lg">✏️</span>
+                                        </button>
+                                        <button onClick={() => handleDeleteAssignment(assignment.id)} className="p-1.5 rounded-full bg-slate-700 hover:bg-slate-600 text-red-400" title="Delete">
+                                            <span className="text-lg">🗑️</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="mt-4 pt-4 border-t border-slate-700 flex-grow">
+                                    <p className="text-sm text-gray-400 line-clamp-3">{assignment.description}</p>
+                                </div>
+                                 <div className="mt-4 pt-2 flex justify-between items-center border-t border-slate-700/50">
+                                    <div className="flex flex-col">
+                                        <span className="text-xs text-yellow-400">Due: {assignment.dueDate || 'Not set'}</p>
+                                        {isScheduled && <span className="text-xs bg-purple-900/50 text-purple-300 px-1.5 py-0.5 rounded border border-purple-500/30 mt-1 w-fit">Scheduled for {assignment.scheduledAt?.toDate().toLocaleDateString()}</span>}
+                                    </div>
+                                    <Button size="sm" onClick={() => setViewingSubmissionsFor(assignment)}>
+                                        Submissions ({submissions.filter(s => s.assignmentId === assignment.id).length})
+                                    </Button>
+                                 </div>
+                            </Card>
+                        )})}
                         </div>
                     </div>
                 );
             case 'live_lesson':
                 return activeLiveLesson ? 
-                        <TeacherLiveClassroom lessonId={activeLiveLesson.id} userProfile={userProfile} onClose={() => {}} />
+                        <TeacherLiveClassroom lessonId={activeLiveLesson.id} onClose={() => {}} userProfile={userProfile!} />
                         :
                         <div className="text-center p-8">
                             <h2 className="text-3xl font-bold">Live Lesson</h2>
@@ -1402,27 +1230,40 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                                 <Button onClick={() => { setEditingGroup(null); setShowCreateGroupModal(true); }}>Create New Group</Button>
                             </div>
                         </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                         {filteredGroups.length > 0 ? filteredGroups.map(group => (
-                            <Card key={group.id}>
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <h3 className="text-xl font-bold">{group.name}</h3>
-                                        <p className="text-sm text-gray-400">{group.classId} - {group.subject}</p>
-                                        <p className="text-xs text-gray-500 mt-1">{group.members.length} members</p>
-                                    </div>
-                                    <div className="flex flex-col items-end gap-2">
-                                         <span className={`px-2 py-1 text-xs font-semibold rounded-full ${group.isSubmitted ? 'bg-green-500' : 'bg-yellow-500'}`}>
-                                            {group.isSubmitted ? 'Submitted' : 'In Progress'}
-                                        </span>
-                                        <div className="flex gap-2">
-                                            <Button size="sm" onClick={() => setViewingGroup(group)}>View Details</Button>
-                                            <Button size="sm" variant="secondary" onClick={() => { setEditingGroup(group); setShowCreateGroupModal(true); }}>Edit</Button>
-                                            <Button size="sm" variant="danger" onClick={() => setGroupToDelete(group)}>Delete</Button>
+                            <div key={group.id} className="relative group-card bg-slate-800 rounded-2xl p-1 shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
+                                <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-2xl opacity-50 group-hover:opacity-100 transition-opacity blur-sm -z-10"></div>
+                                <div className="bg-slate-900 rounded-xl p-5 h-full flex flex-col">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div>
+                                            <h3 className="text-lg font-bold text-white">{group.name}</h3>
+                                            <p className="text-xs text-gray-400">{group.classId} • {group.subject}</p>
+                                        </div>
+                                        <div className="flex gap-1">
+                                            <button onClick={() => { setEditingGroup(group); setShowCreateGroupModal(true); }} className="p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-blue-400 transition-colors">✏️</button>
+                                            <button onClick={() => setGroupToDelete(group)} className="p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-red-400 transition-colors">🗑️</button>
                                         </div>
                                     </div>
+                                    
+                                    <div className="flex-grow mb-4">
+                                        <p className="text-sm text-gray-300 line-clamp-2 mb-2 font-medium">{group.assignmentTitle}</p>
+                                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                                            <span>👥 {group.members.length} Members</span>
+                                            <span>📅 Due: {group.dueDate || 'N/A'}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-auto pt-3 border-t border-slate-800 flex items-center justify-between">
+                                         <span className={`px-2 py-1 text-[10px] uppercase font-bold tracking-wider rounded-full ${group.isSubmitted ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'}`}>
+                                            {group.isSubmitted ? 'Submitted' : 'In Progress'}
+                                        </span>
+                                        <Button size="sm" variant="secondary" onClick={() => setViewingGroup(group)}>View Details</Button>
+                                    </div>
                                 </div>
-                            </Card>
-                        )) : <p className="text-center text-gray-400">No groups created yet.</p>}
+                            </div>
+                        )) : <p className="text-center text-gray-400 col-span-full py-10">No groups created yet.</p>}
+                        </div>
                      </div>
                 );
             case 'messages':
@@ -1432,19 +1273,9 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
                             <h2 className="text-3xl font-bold">My Library</h2>
-                            <div className="flex gap-2">
-                                <Button onClick={() => { setEditingPresentation(null); setShowPresentationGenerator(true); }}>+ Create New</Button>
-                                <TeacherAITools students={students} userProfile={userProfile} />
-                            </div>
+                            <Button onClick={() => { setEditingPresentation(null); setShowPresentationGenerator(true); }}>+ Create New</Button>
                         </div>
-                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {/* Render My Voice Card */}
-                            <Card className="border-2 border-blue-500/30 hover:border-blue-500 cursor-pointer" onClick={() => { /* Logic to expand voice settings if needed, or keep it separate */ }}>
-                                <h3 className="text-xl font-bold mb-2">🎤 My Voice</h3>
-                                <p className="text-sm text-gray-400 mb-4">Clone your voice for AI-driven presentations.</p>
-                                <TeacherMyVoice userProfile={userProfile} />
-                            </Card>
-
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {myLibraryContent.map(content => (
                                 <Card key={content.id}>
                                     <h3 className="text-xl font-bold truncate">{content.topic}</h3>
@@ -1575,14 +1406,15 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 );
             case 'past_questions':
                 return <BECEPastQuestionsView />;
-             case 'student_activity':
-                return <StudentActivityTable teacherClasses={teacherClasses} />;
+            case 'student_activity':
+                return <TeacherStudentActivity teacherClasses={teacherClasses} />;
+            case 'my_voice':
+                return <TeacherMyVoice userProfile={userProfile!} />;
             default:
                 return <div>Select a tab</div>;
         }
     };
     
-    // RENDER MAIN COMPONENT
     return (
         <div className="flex flex-1 overflow-hidden">
             <Sidebar 
@@ -1597,7 +1429,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 {renderContent()}
             </main>
             
-            {/* Modals and other floating components */}
             <AIAssistant systemInstruction={aiSystemInstruction} suggestedPrompts={aiSuggestedPrompts} />
             {isAssignmentModalOpen && user && userProfile && (
                 <AssignmentModal
@@ -1743,7 +1574,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                     editingGroup={editingGroup}
                 />
              )}
-              {viewingGroup && <GroupDetailsModal group={viewingGroup} onClose={() => setViewingGroup(null)} />}
+              {viewingGroup && <GroupDetailsModal group={viewingGroup} onClose={() => setViewingGroup(null)} />} 
                <ConfirmationModal
                 isOpen={!!groupToDelete}
                 onClose={() => setGroupToDelete(null)}
@@ -1753,18 +1584,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 isLoading={isDeletingGroup}
                 confirmButtonText="Yes, Delete Group"
             />
-             {selectedFlyer && (
-                <div className="fixed inset-0 bg-black bg-opacity-90 flex justify-center items-center p-4 z-50" onClick={() => setSelectedFlyer(null)}>
-                    <div className="max-w-4xl w-full max-h-full overflow-auto relative bg-slate-900 rounded-xl" onClick={e => e.stopPropagation()}>
-                        <button onClick={() => setSelectedFlyer(null)} className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full hover:bg-black/70">&times;</button>
-                        <img src={selectedFlyer.imageUrl} alt={selectedFlyer.title} className="w-full h-auto" />
-                        <div className="p-4 bg-slate-800 border-t border-slate-700">
-                            <h2 className="text-2xl font-bold">{selectedFlyer.title}</h2>
-                            <p className="text-sm text-gray-400">Posted by {selectedFlyer.publisherName} on {selectedFlyer.createdAt?.toDate().toLocaleDateString()}</p>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

@@ -1,12 +1,12 @@
 
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db, firebase } from '../services/firebase';
-import { LiveLesson, LiveLessonResponse, UserProfile, BreakoutWhiteboard, DrawingElement, Point, DrawingToolType } from '../types';
-import Card from './common/Card';
-import Button from './common/Button';
+import type { LiveLesson, LiveLessonResponse, UserProfile, LiveAction } from '../types';
 import Spinner from './common/Spinner';
+import SirEduAvatar from './common/SirEduAvatar';
+import Button from './common/Button';
+import Card from './common/Card';
 import { useLiveLessonAudio } from '../hooks/useLiveLessonAudio';
-import TrackedReading from './common/TrackedReading';
 
 interface StudentLiveClassroomProps {
   lessonId: string;
@@ -16,473 +16,312 @@ interface StudentLiveClassroomProps {
 
 const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, userProfile, onClose }) => {
   const [lesson, setLesson] = useState<LiveLesson | null>(null);
-  const [slideImages, setSlideImages] = useState<Record<string, { imageUrl: string; imageStyle: string }>>({});
-  const [loading, setLoading] = useState(true);
-  const [answeredQuestionIds, setAnsweredQuestionIds] = useState<Set<string>>(new Set());
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [breakoutWhiteboard, setBreakoutWhiteboard] = useState<BreakoutWhiteboard | null>(null);
+  const [hasRespondedToAction, setHasRespondedToAction] = useState(false);
+  const [confusionMode, setConfusionMode] = useState(false);
+  const [parsedConfusionItems, setParsedConfusionItems] = useState<string[]>([]);
+  const [isRaisingHand, setIsRaisingHand] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(false); // Track if user has interacted
   
-  // Drawing State
-  const [toolMode, setToolMode] = useState<DrawingToolType | 'none'>('pen');
-  const [drawColor, setDrawColor] = useState('#3B82F6'); // blue-500
-  const [textInput, setTextInput] = useState<{ x: number, y: number, text: string } | null>(null);
-
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const boardRef = useRef<HTMLDivElement>(null);
-  const isDrawing = useRef(false);
-  const currentElement = useRef<DrawingElement | null>(null);
-  const [teacherProfile, setTeacherProfile] = useState<UserProfile | null>(null);
-  
-  const reconstructedLesson = useMemo(() => {
-    if (!lesson) return null;
-    
-    const hasImages = Object.keys(slideImages).length > 0;
-    if (!hasImages && lesson.lessonPlan.some(step => step.boardContent.includes('<img'))) {
-        return lesson;
-    }
-    if (!hasImages) {
-        return lesson;
-    }
 
-    const newLessonPlan = lesson.lessonPlan.map((step, index) => {
-        const imageData = slideImages[index.toString()];
-        if (imageData && !step.boardContent.includes('<img')) {
-            const imageHtml = `<div style="text-align: center; margin-top: 1rem;"><img src="${imageData.imageUrl}" alt="Slide Image" style="max-height: 300px; border-radius: 8px; display: inline-block; object-fit: ${imageData.imageStyle || 'contain'};" /></div>`;
-            return { ...step, boardContent: step.boardContent + imageHtml };
-        }
-        return step;
-    });
-
-    return {
-        ...lesson,
-        lessonPlan: newLessonPlan,
-        currentBoardContent: newLessonPlan[lesson.currentStepIndex].boardContent,
-    };
-  }, [lesson, slideImages]);
-
-  const studentRoomId = useMemo(() => {
-    if (!lesson?.breakoutRoomsActive || !lesson.breakoutRooms) return null;
-    for (const [roomId, roomData] of Object.entries(lesson.breakoutRooms)) {
-        if ((roomData as { students: {uid: string, name: string}[] }).students.some(s => s.uid === userProfile.uid)) {
-            return roomId;
-        }
-    }
-    return null;
-  }, [lesson, userProfile.uid]);
-
-  const isDrawingAllowed = !!(lesson?.whiteboardActive || studentRoomId);
-
-  const htmlContent = reconstructedLesson?.lessonPlan[reconstructedLesson.currentStepIndex]?.boardContent;
-  useLiveLessonAudio(htmlContent, teacherProfile);
-
+  // Load Lesson
   useEffect(() => {
-    const lessonRef = db.collection('liveLessons').doc(lessonId);
-    const unsubscribeLesson = lessonRef.onSnapshot(doc => {
+    const unsubscribe = db.collection('liveLessons').doc(lessonId).onSnapshot(doc => {
       if (doc.exists) {
-        const lessonData = { id: doc.id, ...doc.data() } as LiveLesson;
-        if (lessonData.status !== 'active' && lessonData.status !== 'starting') { 
-            onClose(); 
-        }
-        setLesson(lessonData);
-        setLoading(false);
-
-        if (!teacherProfile && lessonData.teacherId) {
-            db.collection('users').doc(lessonData.teacherId).get().then(teacherDoc => {
-                if (teacherDoc.exists) {
-                    setTeacherProfile(teacherDoc.data() as UserProfile);
-                }
-            });
+        const data = doc.data() as LiveLesson;
+        setLesson({ id: doc.id, ...data });
+        if (data.status === 'ended') {
+            alert("The lesson has ended.");
+            onClose();
         }
       } else {
         onClose();
       }
     });
-    
-    const imagesRef = lessonRef.collection('images');
-    const unsubscribeImages = imagesRef.onSnapshot(snap => {
-        const imagesData: Record<string, any> = {};
-        snap.forEach(doc => { imagesData[doc.id] = doc.data(); });
-        setSlideImages(imagesData);
-    });
+    return () => unsubscribe();
+  }, [lessonId, onClose]);
 
-    const responsesRef = lessonRef.collection('responses').where('studentId', '==', userProfile.uid);
-    const unsubscribeResponses = responsesRef.onSnapshot(snap => {
-        const answeredIds = new Set<string>();
-        snap.forEach(doc => { answeredIds.add(doc.data().questionId); });
-        setAnsweredQuestionIds(answeredIds);
-    });
-
-    return () => {
-      unsubscribeLesson();
-      unsubscribeImages();
-      unsubscribeResponses();
-    };
-  }, [lessonId, onClose, userProfile.uid, teacherProfile]);
-
-  // Listener for this student's breakout room whiteboard
+  // Render Whiteboard Data
   useEffect(() => {
-    if (!studentRoomId) {
-        setBreakoutWhiteboard(null);
-        return;
-    }
-    const unsub = db.collection('liveLessons').doc(lessonId).collection('breakoutWhiteboards').doc(studentRoomId)
-        .onSnapshot(doc => {
-            setBreakoutWhiteboard(doc.exists ? doc.data() as BreakoutWhiteboard : null);
-        });
-    return () => unsub();
-  }, [studentRoomId, lessonId]);
-  
-  
-  const redrawCanvas = useCallback((history: DrawingElement[] | undefined) => {
-    const canvas = canvasRef.current;
-    const board = boardRef.current;
-    if (!canvas || !board) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+      const canvas = canvasRef.current;
+      if (!canvas || !lesson) return;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
 
-    canvas.width = board.clientWidth;
-    canvas.height = board.clientHeight;
-    const width = canvas.width;
-    const height = canvas.height;
+      // Handle resizing
+      canvas.width = canvas.parentElement?.clientWidth || 800;
+      canvas.height = canvas.parentElement?.clientHeight || 600;
 
-    ctx.clearRect(0, 0, width, height);
-    ctx.lineCap = 'round';
-    ctx.lineWidth = 4;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
 
-    const elementsToDraw = history || [];
+      if (lesson.drawingData) {
+          lesson.drawingData.forEach(stroke => {
+              ctx.beginPath();
+              
+              if (stroke.type === 'eraser') {
+                  ctx.globalCompositeOperation = 'destination-out';
+                  ctx.lineWidth = 20; 
+              } else {
+                  ctx.globalCompositeOperation = 'source-over';
+                  ctx.strokeStyle = stroke.color;
+                  ctx.lineWidth = 3;
+              }
 
-    const renderElement = (el: DrawingElement) => {
-        ctx.strokeStyle = el.color;
-        ctx.fillStyle = el.color;
-        ctx.lineWidth = el.type === 'eraser' ? 20 : 4;
-        
-        if (el.type === 'eraser') {
-            ctx.globalCompositeOperation = 'destination-out';
-        } else {
-            ctx.globalCompositeOperation = 'source-over';
-        }
-
-        if (el.type === 'pen' || el.type === 'eraser') {
-            if (!el.points || el.points.length < 2) return;
-            ctx.beginPath();
-            ctx.moveTo(el.points[0].x * width, el.points[0].y * height);
-            for (let i = 1; i < el.points.length; i++) {
-                ctx.lineTo(el.points[i].x * width, el.points[i].y * height);
-            }
-            ctx.stroke();
-        } else if (el.type === 'rect') {
-            if (el.x !== undefined && el.y !== undefined && el.width !== undefined && el.height !== undefined) {
-                ctx.strokeRect(el.x * width, el.y * height, el.width * width, el.height * height);
-            }
-        } else if (el.type === 'circle') {
-             if (el.x !== undefined && el.y !== undefined && el.width !== undefined) {
-                ctx.beginPath();
-                const r = Math.abs(el.width * width) / 2;
-                const cx = (el.x * width) + (el.width * width) / 2;
-                const cy = (el.y * height) + (el.height * height) / 2;
-                ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-                ctx.stroke();
-             }
-        } else if (el.type === 'text') {
-             if (el.x !== undefined && el.y !== undefined && el.text) {
-                 ctx.font = 'bold 20px sans-serif';
-                 ctx.fillText(el.text, el.x * width, el.y * height);
-             }
-        }
-        ctx.globalCompositeOperation = 'source-over';
-    };
-
-    elementsToDraw.forEach(renderElement);
-    if (isDrawing.current && currentElement.current) {
-        renderElement(currentElement.current);
-    }
-  }, []);
-
-  useEffect(() => {
-    const drawingHistory = studentRoomId ? breakoutWhiteboard?.drawingData : lesson?.drawingData;
-    redrawCanvas(drawingHistory);
-  }, [lesson?.drawingData, breakoutWhiteboard, studentRoomId, redrawCanvas]);
-
-  useEffect(() => {
-    const board = boardRef.current;
-    if (!board) return;
-    
-    const observer = new ResizeObserver(() => {
-        const history = studentRoomId ? breakoutWhiteboard?.drawingData : lesson?.drawingData;
-        redrawCanvas(history);
-    });
-
-    observer.observe(board);
-    return () => observer.disconnect();
-  }, [lesson?.drawingData, studentRoomId, breakoutWhiteboard, redrawCanvas]);
-
-  const getCoords = (e: React.MouseEvent): Point | null => {
-    if (!boardRef.current) return null;
-    const rect = boardRef.current.getBoundingClientRect();
-    return { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
-  };
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!isDrawingAllowed) return;
-    const pos = getCoords(e);
-    if (!pos) return;
-
-    if (toolMode === 'text') {
-        setTextInput({ x: pos.x, y: pos.y, text: '' });
-        return;
-    }
-
-    isDrawing.current = true;
-    if (toolMode === 'pen' || toolMode === 'eraser') {
-        currentElement.current = { type: toolMode, points: [pos], color: drawColor, id: Date.now().toString() };
-    } else if (toolMode === 'rect' || toolMode === 'circle') {
-        currentElement.current = { type: toolMode, x: pos.x, y: pos.y, width: 0, height: 0, color: drawColor, id: Date.now().toString() };
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDrawingAllowed || !isDrawing.current || !currentElement.current) return;
-    const pos = getCoords(e);
-    if (!pos) return;
-    
-    if (toolMode === 'pen' || toolMode === 'eraser') {
-         currentElement.current.points?.push(pos);
-    } else if (toolMode === 'rect' || toolMode === 'circle') {
-         currentElement.current.width = pos.x - (currentElement.current.x || 0);
-         currentElement.current.height = pos.y - (currentElement.current.y || 0);
-    }
-    
-    const history = (studentRoomId ? breakoutWhiteboard?.drawingData : lesson?.drawingData);
-    redrawCanvas(history);
-  };
-
-  const handleMouseUp = async () => {
-    if (!isDrawingAllowed || !isDrawing.current || !currentElement.current) return;
-    isDrawing.current = false;
-    
-    // Basic validation
-    let isValid = false;
-    if ((toolMode === 'pen' || toolMode === 'eraser') && (currentElement.current.points?.length || 0) > 1) isValid = true;
-    if ((toolMode === 'rect' || toolMode === 'circle') && (Math.abs(currentElement.current.width || 0) > 0.01)) isValid = true;
-    
-    if (isValid) {
-        let docRef;
-        if (studentRoomId) {
-            docRef = db.collection('liveLessons').doc(lessonId).collection('breakoutWhiteboards').doc(studentRoomId);
-        } else {
-            docRef = db.collection('liveLessons').doc(lessonId);
-        }
-        await docRef.update({
-            drawingData: firebase.firestore.FieldValue.arrayUnion(currentElement.current)
-        });
-    }
-    currentElement.current = null;
-  };
-  
-  const handleTextSubmit = async () => {
-      if (!textInput || !textInput.text.trim()) {
-          setTextInput(null);
-          return;
+              if ((stroke.type === 'pen' || stroke.type === 'eraser') && stroke.points && stroke.points.length > 0) {
+                  ctx.moveTo(stroke.points[0].x * canvas.width, stroke.points[0].y * canvas.height);
+                  for (let i = 1; i < stroke.points.length; i++) {
+                      ctx.lineTo(stroke.points[i].x * canvas.width, stroke.points[i].y * canvas.height);
+                  }
+              } else if (stroke.type === 'line' && stroke.points && stroke.points.length >= 2) {
+                  const start = stroke.points[0];
+                  const end = stroke.points[stroke.points.length - 1];
+                  ctx.moveTo(start.x * canvas.width, start.y * canvas.height);
+                  ctx.lineTo(end.x * canvas.width, end.y * canvas.height);
+              } else if (stroke.type === 'rect' && stroke.points && stroke.points.length >= 2) {
+                  const start = stroke.points[0];
+                  const end = stroke.points[stroke.points.length - 1];
+                  const w = (end.x - start.x) * canvas.width;
+                  const h = (end.y - start.y) * canvas.height;
+                  ctx.rect(start.x * canvas.width, start.y * canvas.height, w, h);
+              } else if (stroke.type === 'circle' && stroke.points && stroke.points.length >= 2) {
+                  const start = stroke.points[0];
+                  const end = stroke.points[stroke.points.length - 1];
+                  const radius = Math.sqrt(Math.pow((end.x - start.x) * canvas.width, 2) + Math.pow((end.y - start.y) * canvas.height, 2));
+                  ctx.arc(start.x * canvas.width, start.y * canvas.height, radius, 0, 2 * Math.PI);
+              }
+              
+              ctx.stroke();
+          });
+          // Reset composite operation
+          ctx.globalCompositeOperation = 'source-over';
       }
-      const textElement: DrawingElement = {
-          id: Date.now().toString(),
-          type: 'text',
-          x: textInput.x,
-          y: textInput.y,
-          text: textInput.text,
-          color: drawColor,
-          height: 0.05
+  }, [lesson?.drawingData, lesson?.currentStepIndex]);
+
+  // Reset response state when action changes
+  useEffect(() => {
+      setHasRespondedToAction(false);
+      setConfusionMode(false);
+  }, [lesson?.activeAction?.id]);
+
+  // Audio Hook - Handles TTS for slides and active actions
+  // Now passes lesson.currentAudioUrl which is auto-updated by teacher
+  const { isPlaying, playAudio } = useLiveLessonAudio(
+      lesson?.currentBoardContent, 
+      null, 
+      lesson?.currentAudioUrl, // Pass the pre-generated audio URL if available
+      lesson?.activeAction
+  );
+  
+  const handleEnableAudio = () => {
+      setAudioEnabled(true);
+      // Trigger a silent play or the current audio to unlock the context
+      if (lesson?.activeAction?.text) {
+          // Logic handled inside hook, but interaction unblocks future plays
+      }
+  };
+
+  const handleResponse = async (answer: string, confusionPoint?: string) => {
+      handleEnableAudio(); // Interaction enables audio
+      if (!lesson || !lesson.activeAction) return;
+      
+      const responseData: Omit<LiveLessonResponse, 'id'> = {
+          lessonId: lesson.id,
+          studentId: userProfile.uid,
+          studentName: userProfile.name,
+          actionId: lesson.activeAction.id,
+          answer: answer,
+          timestamp: firebase.firestore.Timestamp.now()
       };
-      
-      let docRef;
-      if (studentRoomId) {
-          docRef = db.collection('liveLessons').doc(lessonId).collection('breakoutWhiteboards').doc(studentRoomId);
-      } else {
-          // Students typically can't draw on main board unless explicitly allowed, but here we assume logic holds
-          docRef = db.collection('liveLessons').doc(lessonId);
+
+      if (confusionPoint) {
+          responseData.confusionPoint = confusionPoint;
       }
-      await docRef.update({
-          drawingData: firebase.firestore.FieldValue.arrayUnion(textElement)
-      });
-      setTextInput(null);
+
+      await db.collection('liveLessons').doc(lessonId).collection('responses').add(responseData);
+      setHasRespondedToAction(true);
+      setConfusionMode(false);
   };
-  
-  const handleUndo = async () => {
-      const currentData = studentRoomId ? breakoutWhiteboard?.drawingData : lesson?.drawingData;
-      if (!currentData || currentData.length === 0) return;
-      
-      const newData = currentData.slice(0, -1);
-      let docRef;
-      if (studentRoomId) {
-          docRef = db.collection('liveLessons').doc(lessonId).collection('breakoutWhiteboards').doc(studentRoomId);
+
+  const handleNoClick = () => {
+      // Parse current board content to find potential confusion points
+      if (lesson?.currentBoardContent) {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(lesson.currentBoardContent, 'text/html');
+          // Extract text from li, p, h1-h6
+          const elements = doc.querySelectorAll('li, p, h1, h2, h3');
+          const items = Array.from(elements).map(el => el.textContent?.trim()).filter(t => t && t.length > 5); // Filter short junk
+          
+          if (items.length > 0) {
+              setParsedConfusionItems(items as string[]);
+              setConfusionMode(true);
+          } else {
+              // If no clear text structure, just submit generic "No"
+              handleResponse('No');
+          }
       } else {
-          docRef = db.collection('liveLessons').doc(lessonId);
+          handleResponse('No');
       }
-      await docRef.update({ drawingData: newData });
-  };
-
-  
-  const handleAnswerSubmit = async (answer: string) => {
-    if (!lesson || !lesson.currentQuestion || isSubmitting) return;
-
-    setIsSubmitting(true);
-    const question = lesson.currentQuestion;
-
-    const responseData: Omit<LiveLessonResponse, 'id'> = {
-        lessonId,
-        studentId: userProfile.uid,
-        studentName: userProfile.name,
-        questionId: question.id,
-        answer,
-        isCorrect: answer === question.correctAnswer,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp
-    };
-    
-    try {
-        await db.collection('liveLessons').doc(lessonId).collection('responses').add(responseData);
-        setAnsweredQuestionIds(prev => new Set(prev).add(question.id));
-    } catch (error) {
-        console.error("Failed to submit answer:", error);
-    } finally {
-        setIsSubmitting(false);
-    }
-  };
-
-  if (loading || !reconstructedLesson) {
-    return <div className="flex justify-center items-center h-full"><Spinner /><p className="ml-4">Joining Classroom...</p></div>;
-  }
-  
-    if (reconstructedLesson.status === 'starting') {
-        return (
-            <div className="absolute inset-0 bg-slate-900 z-50 flex flex-col justify-center items-center">
-                <Spinner />
-                <h2 className="text-2xl font-bold mt-4">Lesson is starting...</h2>
-                <p className="mt-2 text-gray-400">Loading lesson content, please wait.</p>
-            </div>
-        );
-    }
-
-  const currentQuestion = reconstructedLesson.currentQuestion;
-  const hasAnsweredCurrent = currentQuestion ? answeredQuestionIds.has(currentQuestion.id) : true;
-
-  const renderMainContent = () => {
-    if (lesson?.screenShareActive) {
-        return <div className="w-full h-full bg-black flex items-center justify-center"><img src={`data:image/jpeg;base64,${lesson.screenShareFrame}`} alt="Shared Screen" className="max-w-full max-h-full object-contain" /></div>;
-    }
-    if (studentRoomId && lesson?.breakoutRooms) {
-        const room = lesson.breakoutRooms[studentRoomId];
-        return (
-            <div className="p-4 flex flex-col h-full">
-                <h3 className="text-xl font-bold">Breakout Room: {studentRoomId}</h3>
-                <p className="text-sm text-gray-400">Work with your group on the whiteboard.</p>
-                <div className="mt-4">
-                    <h4 className="font-semibold">Members:</h4>
-                    <ul className="list-disc list-inside text-sm">
-                        {(room as any).students.map((s: any) => <li key={s.uid}>{s.name} {s.uid === userProfile.uid && '(You)'}</li>)}
-                    </ul>
-                </div>
-            </div>
-        );
-    }
-    return (
-        <>
-            <h3 className="text-xl font-bold mb-4 flex-shrink-0">On The Board</h3>
-            <div className="flex-grow overflow-y-auto bg-slate-900 p-6 rounded-md prose-styles prose-invert relative">
-                 <div className="relative z-0">
-                    <TrackedReading htmlContent={reconstructedLesson.currentBoardContent} />
-                 </div>
-            </div>
-        </>
-    );
   };
   
-  const DrawingToolbar = () => {
-    if (!isDrawingAllowed) return null;
-    // Only show tools if in breakout room, usually students only watch the main board.
-    if (!studentRoomId) return null;
-
-    const colors = ['#3B82F6', '#EF4444', '#FACC15', '#4ADE80', '#FFFFFF'];
-    const canUndo = (breakoutWhiteboard?.drawingData?.length || 0) > 0;
-
-    return (
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-800 p-2 rounded-lg shadow-lg flex items-center gap-1.5 z-20">
-            {toolMode !== 'eraser' && (
-                <>
-                    {colors.map(color => (
-                        <button key={color} onClick={() => setDrawColor(color)} className={`w-6 h-6 rounded-full border-2 ${drawColor === color ? 'border-white' : 'border-transparent'}`} style={{ backgroundColor: color }} />
-                    ))}
-                    <div className="w-px h-6 bg-slate-600 mx-1"></div>
-                </>
-            )}
-             <Button size="sm" variant="secondary" onClick={() => setToolMode(toolMode === 'pen' ? 'none' : 'pen')} className={toolMode === 'pen' ? '!bg-blue-600' : ''} title="Pen">✏️</Button>
-             <Button size="sm" variant="secondary" onClick={() => setToolMode(toolMode === 'eraser' ? 'none' : 'eraser')} className={toolMode === 'eraser' ? '!bg-blue-600' : ''} title="Eraser">🧹</Button>
-             <Button size="sm" variant="secondary" onClick={() => setToolMode(toolMode === 'rect' ? 'none' : 'rect')} className={toolMode === 'rect' ? '!bg-blue-600' : ''} title="Rectangle">⬜</Button>
-             <Button size="sm" variant="secondary" onClick={() => setToolMode(toolMode === 'circle' ? 'none' : 'circle')} className={toolMode === 'circle' ? '!bg-blue-600' : ''} title="Circle">⚪</Button>
-             <Button size="sm" variant="secondary" onClick={() => setToolMode(toolMode === 'text' ? 'none' : 'text')} className={toolMode === 'text' ? '!bg-blue-600' : ''} title="Text">T</Button>
-             <div className="w-px h-6 bg-slate-600 mx-1"></div>
-             <Button size="sm" variant="secondary" onClick={handleUndo} disabled={!canUndo}>Undo</Button>
-        </div>
-    );
+  const toggleRaiseHand = async () => {
+      handleEnableAudio(); // Interaction enables audio
+      const newStatus = !isRaisingHand;
+      setIsRaisingHand(newStatus);
+      // In a real app, we'd update a 'raisedHands' array in the lesson doc
+      // Assuming lesson.raisedHands is available in types now
+      try {
+          if (newStatus) {
+              await db.collection('liveLessons').doc(lessonId).update({
+                  raisedHands: firebase.firestore.FieldValue.arrayUnion(userProfile.uid)
+              });
+          } else {
+              await db.collection('liveLessons').doc(lessonId).update({
+                  raisedHands: firebase.firestore.FieldValue.arrayRemove(userProfile.uid)
+              });
+          }
+      } catch (err) {
+          console.error("Failed to toggle raise hand", err);
+      }
   };
-  
+
+  if (!lesson) return <div className="flex justify-center items-center h-screen bg-slate-900"><Spinner /></div>;
+
+  // Determine if this student is the target of a direct question
+  const isDirectTarget = lesson.activeAction?.type === 'direct_question' && lesson.activeAction.targetStudentId === userProfile.uid;
+  const isBroadcast = lesson.activeAction && !lesson.activeAction.targetStudentId && lesson.activeAction.type === 'poll';
+  const showOverlay = (isBroadcast || isDirectTarget) && !hasRespondedToAction;
+  const isExplanation = lesson.activeAction?.type === 'explanation';
 
   return (
-    <div className="h-full flex flex-col p-4 bg-slate-900/50 rounded-lg relative">
-      <header className="flex-shrink-0 pb-4 mb-4 border-b border-slate-700 flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold">{reconstructedLesson.topic}</h2>
-          <p className="text-sm text-gray-400">{reconstructedLesson.subject} by {reconstructedLesson.teacherName}</p>
-        </div>
+    <div className="fixed inset-0 bg-slate-950 z-[100] flex flex-col overflow-hidden font-sans">
+      {/* Immersive Header */}
+      <header className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start z-20 pointer-events-none">
+          <div className="flex items-center gap-3 pointer-events-auto">
+              <div className="bg-red-600/90 backdrop-blur-sm px-3 py-1 rounded-full flex items-center gap-2 shadow-lg border border-red-500/50">
+                  <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                  <span className="text-xs font-bold text-white uppercase tracking-wider">Live Class</span>
+              </div>
+              {!audioEnabled && (
+                  <button onClick={handleEnableAudio} className="bg-blue-600/90 backdrop-blur-sm px-3 py-1 rounded-full flex items-center gap-2 shadow-lg animate-bounce cursor-pointer pointer-events-auto">
+                      <span className="text-xs font-bold text-white">Tap to Enable Audio 🔊</span>
+                  </button>
+              )}
+          </div>
+          <button onClick={onClose} className="pointer-events-auto bg-slate-900/50 hover:bg-slate-800 backdrop-blur-md text-white p-2 rounded-full border border-slate-700 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+          </button>
       </header>
 
-      <div className="flex-grow grid grid-cols-1 md:grid-cols-3 gap-4 overflow-hidden">
-        <div className="md:col-span-2 relative h-full">
-          <DrawingToolbar />
-          {textInput && (
-                <div className="absolute z-30" style={{ top: textInput.y * (boardRef.current?.clientHeight || 0), left: textInput.x * (boardRef.current?.clientWidth || 0) }}>
-                    <input 
-                        autoFocus
-                        value={textInput.text} 
-                        onChange={e => setTextInput({ ...textInput, text: e.target.value })}
-                        onKeyDown={e => { if (e.key === 'Enter') handleTextSubmit(); }}
-                        onBlur={handleTextSubmit}
-                        className="bg-transparent border-b border-blue-500 text-white focus:outline-none"
-                        style={{ color: drawColor, fontSize: '20px', fontWeight: 'bold' }}
-                    />
-                </div>
-            )}
-          <Card className="h-full flex flex-col" fullHeight={false} ref={boardRef} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
-             <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full pointer-events-none z-10" />
-             {renderMainContent()}
-          </Card>
-           {reconstructedLesson?.pointerPosition && (
-                <div className="absolute w-4 h-4 bg-red-500 rounded-full pointer-events-none z-20 shadow-[0_0_8px_4px_rgba(239,68,68,0.7)] transform -translate-x-1/2 -translate-y-1/2" 
-                    style={{ left: `${reconstructedLesson.pointerPosition.x * 100}%`, top: `${reconstructedLesson.pointerPosition.y * 100}%`, transition: 'left 0.05s linear, top 0.05s linear' }} 
-                />
-            )}
-        </div>
+      {/* Main Stage - Fullscreen Content */}
+      <div className="flex-grow flex items-center justify-center p-4 md:p-8 bg-gradient-to-b from-slate-900 to-slate-950 relative">
+           {/* Teacher Avatar Floating */}
+           <div className="absolute bottom-20 left-4 z-10 pointer-events-none transition-transform duration-300">
+               <SirEduAvatar isSpeaking={isPlaying} />
+           </div>
 
-        <Card className="md:col-span-1 flex flex-col">
-          <h3 className="text-xl font-bold mb-4 flex-shrink-0">Your Response</h3>
-          <div className="flex-grow overflow-y-auto">
-            {currentQuestion ? (
-                <div>
-                    <p className="font-semibold mb-4">{currentQuestion.text}</p>
-                    <div className="space-y-2">
-                        {currentQuestion.options.map((option, index) => (
-                            <Button key={index} onClick={() => handleAnswerSubmit(option)} disabled={hasAnsweredCurrent || isSubmitting} className="w-full text-left justify-start" variant="secondary">
-                                {option}
-                            </Button>
-                        ))}
-                    </div>
-                    {hasAnsweredCurrent && <p className="text-sm text-green-400 mt-4 text-center">Your answer has been submitted!</p>}
+           {/* Content Board */}
+           <div className="w-full max-w-6xl aspect-video bg-white text-slate-900 rounded-xl shadow-2xl overflow-hidden relative flex flex-col justify-center items-center transition-all duration-500">
+                <div className="absolute inset-0 overflow-y-auto p-8 md:p-16 flex flex-col justify-center items-center z-0">
+                    <div className="prose-styles prose-2xl text-center w-full" dangerouslySetInnerHTML={{ __html: lesson.currentBoardContent }} />
                 </div>
-            ) : (
-                <p className="text-sm text-gray-400 text-center pt-8">The teacher has not asked a question yet.</p>
-            )}
-          </div>
-        </Card>
+                {/* Student View Canvas - Read Only */}
+                <canvas ref={canvasRef} className="absolute inset-0 z-10 pointer-events-none w-full h-full" />
+           </div>
       </div>
+      
+      {/* Bottom Interaction Bar */}
+      <div className="absolute bottom-0 left-0 right-0 p-4 flex justify-center items-center gap-4 z-30 bg-gradient-to-t from-slate-900 to-transparent pb-8">
+          <div className="flex gap-2 bg-slate-800/80 backdrop-blur-md p-2 rounded-full border border-slate-700 shadow-xl">
+              <button 
+                onClick={toggleRaiseHand}
+                className={`p-3 rounded-full transition-all ${isRaisingHand ? 'bg-yellow-500 text-black scale-110' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                title="Raise Hand"
+              >
+                  ✋
+              </button>
+              <div className="w-px bg-slate-600 mx-1"></div>
+              <button onClick={handleEnableAudio} className="p-3 rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 hover:scale-110 transition-all" title="Like">👍</button>
+              <button onClick={handleEnableAudio} className="p-3 rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 hover:scale-110 transition-all" title="Clap">👏</button>
+              <button onClick={handleEnableAudio} className="p-3 rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 hover:scale-110 transition-all" title="Love">❤️</button>
+          </div>
+      </div>
+
+      {/* INTERACTION OVERLAYS */}
+      
+      {/* 1. Explanation Card (Teacher explaining something) */}
+      {isExplanation && (
+          <div className="absolute top-24 right-4 max-w-sm w-full bg-slate-800/90 backdrop-blur-md border-l-4 border-blue-500 p-4 rounded-lg shadow-2xl animate-fade-in-right z-30">
+              <h4 className="text-blue-300 font-bold text-sm uppercase mb-2 flex items-center gap-2">
+                  <span className="text-lg">💡</span> Teacher Note
+              </h4>
+              <p className="text-white text-lg leading-relaxed">{lesson.activeAction?.text}</p>
+              <div className="mt-2 flex justify-end">
+                  {/* Visual cue that audio is playing for explanation */}
+                  {isPlaying && <div className="flex gap-1 h-3 items-end"><div className="w-1 bg-blue-400 h-full animate-pulse"></div><div className="w-1 bg-blue-400 h-2/3 animate-pulse delay-75"></div><div className="w-1 bg-blue-400 h-full animate-pulse delay-150"></div></div>}
+              </div>
+          </div>
+      )}
+
+      {/* 2. Active Action Overlay (Poll/Question) */}
+      {showOverlay && (
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm z-40 flex items-end pb-24 sm:items-center sm:pb-0 justify-center">
+              <div className="w-full max-w-md bg-slate-800/90 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl p-6 mx-4 animate-fade-in-up relative overflow-hidden">
+                  {/* Glowing Border Effect */}
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
+                  
+                  <h3 className="text-center text-2xl font-bold text-white mb-2">
+                      {isDirectTarget ? `📢 ${userProfile.name}, question for you!` : "Quick Check"}
+                  </h3>
+                  <p className="text-center text-slate-300 text-lg mb-8 font-medium leading-relaxed">
+                      {lesson.activeAction?.text}
+                  </p>
+
+                  {confusionMode ? (
+                      <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                          <p className="text-sm text-center text-gray-400 mb-2">Tap the part you find confusing:</p>
+                          {parsedConfusionItems.map((item, idx) => (
+                              <button 
+                                key={idx}
+                                onClick={() => handleResponse('No', item)}
+                                className="w-full text-left p-3 bg-slate-700/50 hover:bg-red-900/30 border border-slate-600 hover:border-red-500 rounded-lg text-sm transition-all text-slate-200"
+                              >
+                                  {item}
+                              </button>
+                          ))}
+                          <button onClick={() => handleResponse('No', 'General Confusion')} className="w-full p-2 text-center text-slate-400 text-xs hover:text-white mt-2 underline decoration-slate-600">I'm confused about everything</button>
+                      </div>
+                  ) : (
+                      <div className="grid grid-cols-2 gap-4">
+                          {lesson.activeAction?.options ? (
+                              lesson.activeAction.options.map(opt => (
+                                  <Button key={opt} onClick={() => opt === 'No' ? handleNoClick() : handleResponse(opt)} variant={opt === 'No' ? 'secondary' : 'primary'} className="py-4 text-lg shadow-lg">
+                                      {opt}
+                                  </Button>
+                              ))
+                          ) : (
+                              // Default Yes/No if no options provided
+                              <>
+                                <Button onClick={() => handleResponse('Yes')} className="bg-green-600 hover:bg-green-500 py-4 text-lg shadow-lg shadow-green-900/20">Yes, I get it 👍</Button>
+                                <Button onClick={handleNoClick} variant="secondary" className="py-4 text-lg shadow-lg">No, I'm lost 👎</Button>
+                              </>
+                          )}
+                      </div>
+                  )}
+              </div>
+          </div>
+      )}
+
+      {/* 3. Celebration Overlay */}
+      {lesson.activeAction?.type === 'celebration' && (
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-50">
+              <div className="text-6xl animate-bounce drop-shadow-lg">🎉</div>
+              {/* Simple CSS confetti effect could be added here */}
+          </div>
+      )}
+
     </div>
   );
 };
