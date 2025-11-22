@@ -1,5 +1,3 @@
-
-
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 
@@ -296,6 +294,7 @@ export interface Assignment {
     attachmentURL: string; attachmentName: string; subject: string;
     type?: AssignmentType; // Can be 'Theory' or 'Objective'
     quiz?: Quiz | null; // For objective assignments
+    scheduledAt?: firebase.firestore.Timestamp | null;
 }
 
 export interface Correction {

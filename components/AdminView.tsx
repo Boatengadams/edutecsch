@@ -241,6 +241,182 @@ const SessionLogsTable: React.FC = () => {
     );
 }
 
+const AdminSettingsEditor: React.FC = () => {
+    const { schoolSettings } = useAuthentication();
+    const { showToast } = useToast();
+    const [formData, setFormData] = useState<SchoolSettings>({
+        schoolName: '',
+        schoolMotto: '',
+        academicYear: '',
+        currentTerm: 1,
+        sleepModeConfig: { enabled: false, sleepTime: '21:00', wakeTime: '05:00' }
+    });
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (schoolSettings) {
+            setFormData({
+                ...schoolSettings,
+                sleepModeConfig: schoolSettings.sleepModeConfig || { enabled: false, sleepTime: '21:00', wakeTime: '05:00' }
+            });
+        }
+    }, [schoolSettings]);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSleepModeChange = (field: keyof SchoolSettings['sleepModeConfig'], value: any) => {
+        setFormData(prev => ({
+            ...prev,
+            sleepModeConfig: {
+                ...prev.sleepModeConfig!,
+                [field]: value
+            }
+        }));
+    };
+
+    const handleSave = async () => {
+        setLoading(true);
+        try {
+            await db.collection('schoolConfig').doc('settings').set(formData, { merge: true });
+            showToast('System settings updated successfully!', 'success');
+        } catch (err: any) {
+            console.error("Error updating settings:", err);
+            showToast(`Error updating settings: ${err.message}`, 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="space-y-6 max-w-4xl">
+            <div className="flex justify-between items-center">
+                <h2 className="text-3xl font-bold">System Configuration</h2>
+                <Button onClick={handleSave} disabled={loading}>
+                    {loading ? 'Saving...' : 'Save Changes'}
+                </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* General Settings */}
+                <Card className="border-t-4 border-blue-500">
+                    <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                        <span>🏫</span> General Information
+                    </h3>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-400 mb-1">School Name</label>
+                            <input 
+                                type="text" 
+                                name="schoolName" 
+                                value={formData.schoolName} 
+                                onChange={handleChange} 
+                                className="w-full p-2 bg-slate-800 rounded-md border border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-400 mb-1">School Motto</label>
+                            <input 
+                                type="text" 
+                                name="schoolMotto" 
+                                value={formData.schoolMotto} 
+                                onChange={handleChange} 
+                                className="w-full p-2 bg-slate-800 rounded-md border border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            />
+                        </div>
+                    </div>
+                </Card>
+
+                {/* Academic Session */}
+                <Card className="border-t-4 border-green-500">
+                    <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                        <span>📅</span> Academic Session
+                    </h3>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-400 mb-1">Current Academic Year</label>
+                            <input 
+                                type="text" 
+                                name="academicYear" 
+                                value={formData.academicYear} 
+                                onChange={handleChange} 
+                                placeholder="e.g. 2024-2025"
+                                className="w-full p-2 bg-slate-800 rounded-md border border-slate-700 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-400 mb-1">Current Term</label>
+                            <select 
+                                name="currentTerm" 
+                                value={formData.currentTerm} 
+                                onChange={handleChange} 
+                                className="w-full p-2 bg-slate-800 rounded-md border border-slate-700 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                            >
+                                <option value={1}>Term 1</option>
+                                <option value={2}>Term 2</option>
+                                <option value={3}>Term 3</option>
+                            </select>
+                        </div>
+                    </div>
+                </Card>
+
+                {/* Digital Wellbeing / Sleep Mode */}
+                <Card className="border-t-4 border-purple-500 md:col-span-2">
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 className="text-xl font-bold flex items-center gap-2">
+                                <span>🌙</span> Digital Wellbeing (Sleep Mode)
+                            </h3>
+                            <p className="text-sm text-gray-400 mt-1">Automatically restrict student access to the platform during rest hours.</p>
+                        </div>
+                        <div className="flex items-center">
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    className="sr-only peer" 
+                                    checked={formData.sleepModeConfig?.enabled}
+                                    onChange={(e) => handleSleepModeChange('enabled', e.target.checked)}
+                                />
+                                <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                                <span className="ml-3 text-sm font-medium text-gray-300">{formData.sleepModeConfig?.enabled ? 'Enabled' : 'Disabled'}</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div className={`grid grid-cols-2 gap-6 transition-opacity duration-300 ${!formData.sleepModeConfig?.enabled ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-400 mb-1">Sleep Time (Lock)</label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🛌</span>
+                                <input 
+                                    type="time" 
+                                    value={formData.sleepModeConfig?.sleepTime} 
+                                    onChange={(e) => handleSleepModeChange('sleepTime', e.target.value)}
+                                    className="w-full pl-10 p-2 bg-slate-800 rounded-md border border-slate-700 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-400 mb-1">Wake Time (Unlock)</label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">☀️</span>
+                                <input 
+                                    type="time" 
+                                    value={formData.sleepModeConfig?.wakeTime} 
+                                    onChange={(e) => handleSleepModeChange('wakeTime', e.target.value)}
+                                    className="w-full pl-10 p-2 bg-slate-800 rounded-md border border-slate-700 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </Card>
+            </div>
+        </div>
+    );
+};
+
 const AdminTerminalReports: React.FC<{ allUsers: UserProfile[], schoolSettings: SchoolSettings | null, userProfile: UserProfile | null }> = ({ allUsers, schoolSettings, userProfile }) => {
     const { showToast } = useToast();
 
@@ -1448,34 +1624,7 @@ export const AdminView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpan
             case 'activation':
                 return <SystemActivation subscriptionStatus={subscriptionStatus} />;
             case 'settings':
-                 return (
-                    <div className="space-y-6">
-                        <h2 className="text-3xl font-bold">System Settings</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <Card>
-                                <h3 className="text-lg font-bold mb-4">School Configuration</h3>
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-400">School Name</label>
-                                        <input type="text" value={schoolSettings?.schoolName || ''} disabled className="w-full p-2 bg-slate-700 rounded-md mt-1 opacity-50" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-400">Academic Year</label>
-                                        <input type="text" value={schoolSettings?.academicYear || ''} disabled className="w-full p-2 bg-slate-700 rounded-md mt-1 opacity-50" />
-                                    </div>
-                                </div>
-                            </Card>
-                             <Card>
-                                <h3 className="text-lg font-bold mb-4">Sleep Mode</h3>
-                                <p className="text-sm text-gray-400 mb-4">Automatically lock student access during night hours.</p>
-                                {/* Sleep mode controls would go here */}
-                                <div className="p-4 bg-slate-800 rounded border border-slate-700 text-center text-sm text-gray-500">
-                                    Configured in main App settings
-                                </div>
-                            </Card>
-                        </div>
-                    </div>
-                 );
+                 return <AdminSettingsEditor />;
             default:
                 return null;
         }
