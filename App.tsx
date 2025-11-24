@@ -7,7 +7,7 @@ import type { UserProfile, SchoolSettings, SubscriptionStatus, UserRole } from '
 import 'firebase/compat/auth';
 import AuthForm from './components/AuthForm';
 import RoleSelector from './components/RoleSelector';
-import TeacherView from './components/TeacherView';
+import { TeacherView } from './components/TeacherView';
 import { StudentView } from './components/StudentView';
 // FIX: Changed to named imports to resolve "no default export" error.
 import { AdminView } from './components/AdminView';
@@ -155,9 +155,17 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
 
     if (loading) {
         return (
-            <div className="min-h-screen flex flex-col justify-center items-center bg-slate-950 text-blue-400">
-                <Spinner />
-                <p className="mt-6 font-medium text-slate-400 tracking-wide animate-pulse">INITIALIZING EDUTEC...</p>
+            <div className="min-h-screen flex flex-col justify-center items-center bg-slate-950 relative overflow-hidden">
+                <div className="absolute inset-0 pointer-events-none">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[100px] animate-pulse"></div>
+                </div>
+                <div className="relative z-10 flex flex-col items-center">
+                    <div className="w-16 h-16 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-8 shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
+                    <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 tracking-widest uppercase mb-2">
+                        {schoolSettings?.schoolName || 'EDUTEC'}
+                    </h1>
+                    <p className="text-sm font-medium text-slate-500 tracking-[0.2em] animate-pulse">SYSTEM INITIALIZING</p>
+                </div>
             </div>
         );
     }

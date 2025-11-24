@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuthentication } from '../hooks/useAuth';
 import { db, storage, functions, firebase } from '../services/firebase';
-// FIX: GES_STANDARD_CURRICULUM is a value, so it's imported separately from the types.
 import { GES_STANDARD_CURRICULUM } from '../types';
 import type { Assignment, Submission, UserProfile, TeachingMaterial, GeneratedContent, SubjectsByClass, GES_CLASSES, Timetable, Quiz, Presentation, LiveTutoringSession, AttendanceRecord, AttendanceStatus, Notification, GES_SUBJECTS, TerminalReport, TerminalReportMark, ReportSummary, SchoolSettings, VideoContent, SchoolEvent, TimetableData, TimetablePeriod, LiveLesson, LiveLessonStep, Group, GroupMember, GroupMessage, Conversation, Slide } from '../types';
 import Card from './common/Card';
@@ -17,21 +16,19 @@ import { GoogleGenAI, Type, Modality } from '@google/genai';
 import TTSAudioPlayer from './common/TTSAudioPlayer';
 import NotebookTimetable from './common/NotebookTimetable';
 import AssignmentModal from './AssignmentModal';
-import { useToast } from './common/Toast';
+import Toast from './common/Toast';
 import Histogram from './common/charts/Histogram';
 import PieChart from './common/charts/PieChart';
 import VideoGenerator from './VideoGenerator';
 import TeacherCreateStudentForm from './TeacherCreateStudentForm';
 import TeacherCreateParentForm from './TeacherCreateParentForm';
 import SnapToRegister from './SnapToRegister';
-// FIX: Changed import of TeacherLiveClassroom to be a named import as it is not a default export.
 import { TeacherLiveClassroom } from './TeacherLiveClassroom';
 import BECEPastQuestionsView from './common/BECEPastQuestionsView';
 import MessagingView from './MessagingView';
 import html2canvas from 'html2canvas';
 import { ProgressDashboard } from './ProgressDashboard';
-import TeacherStudentActivity from './TeacherStudentActivity';
-import TeacherMyVoice from './TeacherMyVoice';
+import TeacherStudentCard from './TeacherStudentCard';
 
 const getGrade = (score: number) => {
     if (score >= 80) return 'A';
@@ -44,7 +41,6 @@ const getGrade = (score: number) => {
     return 'F';
 };
 
-// FIX: Added missing compressImage function definition.
 const compressImage = (file: Blob, quality = 0.85): Promise<Blob> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -95,26 +91,45 @@ const TeacherGroupChatView: React.FC<{ group: Group }> = ({ group }) => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-    if (loading) return <div className="flex h-full items-center justify-center"><Spinner /></div>;
+    if (loading) return <div className="flex h-full items-center justify-center p-8"><Spinner /></div>;
 
     return (
-        <div className="flex flex-col h-full">
-            <div className="flex-grow overflow-y-auto p-4 space-y-4">
+        <div className="flex flex-col h-full bg-slate-950 rounded-xl border border-slate-800 overflow-hidden shadow-inner">
+            <div className="p-3 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
+                <span className="text-xs text-slate-400 font-mono uppercase tracking-widest flex items-center gap-2">
+                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    Live Monitor Mode
+                </span>
+                <span className="text-xs text-slate-500">Read-only</span>
+            </div>
+            <div className="flex-grow overflow-y-auto p-4 space-y-4 custom-scrollbar">
                 {messages.length === 0 ? (
-                    <p className="text-center text-gray-500">No messages yet.</p>
+                    <div className="flex flex-col items-center justify-center h-full text-slate-600 opacity-50">
+                        <span className="text-4xl mb-2">💬</span>
+                        <p>No messages yet.</p>
+                    </div>
                 ) : messages.map(msg => (
-                    <div key={msg.id} className="flex flex-col items-start">
-                        <span className="text-xs text-gray-400 font-bold ml-1">{msg.senderName}</span>
-                        <div className="p-2 bg-slate-700 rounded-lg max-w-xs break-words">
-                           {msg.imageUrl && <img src={msg.imageUrl} alt="Group attachment" className="rounded-md max-w-xs mb-1" />}
-                           {msg.audioUrl && <audio controls src={msg.audioUrl} className="w-full max-w-xs" />}
-                           {msg.text && <p className="text-sm px-1">{msg.text}</p>}
+                    <div key={msg.id} className="flex flex-col items-start animate-fade-in-up">
+                        <div className="flex items-center gap-2 mb-1">
+                            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[10px] font-bold text-white shadow-sm border border-white/10">
+                                {msg.senderName.charAt(0)}
+                            </div>
+                            <span className="text-xs text-slate-300 font-bold">{msg.senderName}</span>
+                            <span className="text-[10px] text-slate-500">{msg.createdAt?.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        </div>
+                        <div className="ml-8 p-3 bg-slate-800/80 rounded-2xl rounded-tl-none border border-slate-700 text-sm text-slate-200 shadow-md max-w-[90%]">
+                           {msg.imageUrl && (
+                               <div className="mb-2 overflow-hidden rounded-lg border border-slate-600">
+                                   <img src={msg.imageUrl} alt="Attachment" className="max-w-full h-auto" />
+                               </div>
+                           )}
+                           {msg.audioUrl && <audio controls src={msg.audioUrl} className="w-full max-w-[200px] mb-1" />}
+                           {msg.text && <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>}
                         </div>
                     </div>
                 ))}
                  <div ref={messagesEndRef} />
             </div>
-            <p className="text-xs text-center text-gray-500 p-2 border-t border-slate-700">You are viewing this chat in monitor mode.</p>
         </div>
     );
 };
@@ -122,8 +137,8 @@ const TeacherGroupChatView: React.FC<{ group: Group }> = ({ group }) => {
 const GroupDetailsModal: React.FC<{
     group: Group;
     onClose: () => void;
-}> = ({ group, onClose }) => {
-    const { showToast } = useToast();
+    setToast: (toast: { message: string, type: 'success' | 'error' } | null) => void;
+}> = ({ group, onClose, setToast }) => {
     const [grade, setGrade] = useState(group.grade || '');
     const [feedback, setFeedback] = useState(group.feedback || '');
     const [isSaving, setIsSaving] = useState(false);
@@ -132,58 +147,113 @@ const GroupDetailsModal: React.FC<{
         setIsSaving(true);
         try {
             await db.collection('groups').doc(group.id).update({ grade, feedback });
-            showToast('Grade and feedback saved.', 'success');
+            setToast({ message: 'Grade and feedback saved.', type: 'success' });
             onClose();
         } catch (err: any) {
-            showToast(`Error saving grade: ${err.message}`, 'error');
+            setToast({ message: `Error saving grade: ${err.message}`, type: 'error' });
         } finally {
             setIsSaving(false);
         }
     };
     
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
-            <Card className="w-full max-w-4xl h-[90vh] flex flex-col">
-                <div className="flex justify-between items-start mb-4 flex-shrink-0">
-                    <div>
-                        <h2 className="text-xl font-bold">{group.name}</h2>
-                        <p className="text-sm text-gray-400">{group.classId} - {group.subject}</p>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex justify-center items-center p-4 z-50">
+            <Card className="w-full max-w-5xl h-[85vh] flex flex-col !p-0 overflow-hidden border-slate-700 shadow-2xl">
+                <div className="bg-slate-900/90 p-4 border-b border-slate-700 flex justify-between items-center flex-shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center text-xl shadow-lg">
+                            👥
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-bold text-white">{group.name}</h2>
+                            <p className="text-sm text-slate-400">{group.classId} &bull; {group.subject}</p>
+                        </div>
                     </div>
-                    <Button variant="secondary" onClick={onClose}>Close</Button>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                    </button>
                 </div>
-                <div className="flex-grow grid grid-cols-1 md:grid-cols-3 gap-4 overflow-hidden">
-                    <div className="md:col-span-1 flex flex-col space-y-4 overflow-y-auto pr-2">
-                        <div>
-                            <h4 className="font-semibold text-gray-300">Assignment: <span className="text-white font-bold">{group.assignmentTitle}</span></h4>
-                            <p className="text-xs text-gray-400 whitespace-pre-wrap mt-1">{group.assignmentDescription}</p>
-                            <p className="text-xs text-yellow-400 mt-1">Due: {group.dueDate || 'N/A'}</p>
+                
+                <div className="flex-grow grid grid-cols-1 lg:grid-cols-3 overflow-hidden bg-slate-900">
+                    {/* Left Panel: Info & Grading */}
+                    <div className="lg:col-span-1 flex flex-col border-r border-slate-800 bg-slate-800/30 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                        <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 shadow-sm">
+                            <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                                <span>📝</span> Assignment
+                            </h4>
+                            <p className="font-bold text-white text-lg mb-1">{group.assignmentTitle}</p>
+                            <p className="text-sm text-slate-300 leading-relaxed">{group.assignmentDescription}</p>
+                            {group.dueDate && (
+                                <div className="mt-3 inline-flex items-center gap-1.5 px-2 py-1 rounded bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs font-mono">
+                                    📅 Due: {group.dueDate}
+                                </div>
+                            )}
                         </div>
+
                         <div>
-                            <h4 className="font-semibold text-gray-300">Members</h4>
-                            <ul className="list-disc list-inside text-sm text-gray-200">
-                                {group.members.map(m => <li key={m.uid}>{m.name}</li>)}
-                            </ul>
-                        </div>
-                        {group.isSubmitted && group.submission ? (
-                            <div className="space-y-2 p-3 bg-slate-900/50 rounded-lg">
-                                <h4 className="font-semibold text-gray-300">Submission</h4>
-                                <pre className="text-sm whitespace-pre-wrap font-sans bg-slate-800 p-2 rounded-md max-h-48 overflow-y-auto">{group.submission.content}</pre>
-                                <p className="text-xs text-gray-400">Submitted by {group.submission.submittedBy.name} on {group.submission.submittedAt.toDate().toLocaleString()}</p>
+                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Squad Members</h4>
+                            <div className="flex flex-wrap gap-2">
+                                {group.members.map(m => (
+                                    <div key={m.uid} className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-full border border-slate-700 shadow-sm">
+                                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-[10px] font-bold text-white">
+                                            {m.name.charAt(0)}
+                                        </div>
+                                        <span className="text-sm text-slate-300">{m.name}</span>
+                                    </div>
+                                ))}
                             </div>
-                        ) : (
-                             <div className="space-y-2 p-3 bg-slate-900/50 rounded-lg text-center text-gray-400">
-                                Not submitted yet.
-                             </div>
-                        )}
-                        <div className="space-y-2 flex-grow flex flex-col">
-                            <h4 className="font-semibold text-gray-300">Grade & Feedback</h4>
-                            <input type="text" value={grade} onChange={e => setGrade(e.target.value)} placeholder="Enter grade (e.g., 14)" className="w-full p-2 bg-slate-700 rounded-md"/>
-                            <textarea value={feedback} onChange={e => setFeedback(e.target.value)} placeholder="Enter feedback..." rows={4} className="w-full p-2 bg-slate-700 rounded-md flex-grow"/>
-                            <Button onClick={handleSaveGrade} disabled={isSaving}>{isSaving ? 'Saving...' : 'Save'}</Button>
+                        </div>
+
+                        <div className="border-t border-slate-700/50 pt-6">
+                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Assessment</h4>
+                            {group.isSubmitted && group.submission ? (
+                                <div className="mb-4">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs text-green-400 font-bold bg-green-900/30 px-2 py-0.5 rounded border border-green-500/30">SUBMITTED</span>
+                                        <span className="text-[10px] text-slate-500">{group.submission.submittedAt.toDate().toLocaleDateString()}</span>
+                                    </div>
+                                    <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 font-mono text-xs text-slate-300 max-h-40 overflow-y-auto custom-scrollbar shadow-inner leading-relaxed">
+                                        {group.submission.content}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="mb-4 p-4 bg-yellow-900/10 border border-yellow-500/20 rounded-xl text-center">
+                                    <span className="text-2xl block mb-1">🚧</span>
+                                    <p className="text-sm text-yellow-500 font-medium">Work in Progress</p>
+                                    <p className="text-xs text-yellow-600/70">No final submission yet</p>
+                                </div>
+                            )}
+                            
+                            <div className="space-y-4 bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">Score / Grade</label>
+                                    <input 
+                                        type="text" 
+                                        value={grade} 
+                                        onChange={e => setGrade(e.target.value)} 
+                                        placeholder="e.g., 85/100" 
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all text-white placeholder-slate-600 font-mono"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">Feedback</label>
+                                    <textarea 
+                                        value={feedback} 
+                                        onChange={e => setFeedback(e.target.value)} 
+                                        placeholder="Constructive feedback..." 
+                                        rows={4} 
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all resize-none text-white placeholder-slate-600"
+                                    />
+                                </div>
+                                <Button onClick={handleSaveGrade} disabled={isSaving} className="w-full shadow-lg shadow-blue-600/20">
+                                    {isSaving ? <Spinner size="sm" /> : 'Save Assessment'}
+                                </Button>
+                            </div>
                         </div>
                     </div>
-                    <div className="md:col-span-2 flex flex-col bg-slate-900/50 rounded-lg">
-                         <h4 className="font-semibold p-3 border-b border-slate-700 flex-shrink-0">Group Chat (Monitor Mode)</h4>
+
+                    {/* Right Panel: Chat */}
+                    <div className="lg:col-span-2 flex flex-col bg-slate-950 p-4 lg:p-6">
                          <TeacherGroupChatView group={group} />
                     </div>
                 </div>
@@ -199,9 +269,9 @@ const CreateGroupModal: React.FC<{
     subjectsByClass: Record<string, string[]>;
     teacherId: string;
     onClose: () => void;
+    setToast: (toast: { message: string, type: 'success' | 'error' } | null) => void;
     editingGroup: Group | null;
-}> = ({ students, classes, subjectsByClass, teacherId, onClose, editingGroup }) => {
-    const { showToast } = useToast();
+}> = ({ students, classes, subjectsByClass, teacherId, onClose, setToast, editingGroup }) => {
     const isEditing = !!editingGroup;
     const isSubmitted = isEditing && editingGroup.isSubmitted;
 
@@ -226,7 +296,6 @@ const CreateGroupModal: React.FC<{
             setDueDate(editingGroup.dueDate || '');
             setSelectedStudentUids(editingGroup.memberUids);
         } else {
-            // Reset for create mode
             setGroupName('');
             setSelectedClass(classes[0] || '');
             setAssignmentTitle('');
@@ -237,8 +306,6 @@ const CreateGroupModal: React.FC<{
     }, [editingGroup, isEditing, classes]);
 
     useEffect(() => {
-        // FIX: Defensively check if subjectsByClass[selectedClass] is an array before using it.
-        // Data from Firestore might not match the expected type.
         const potentialSubs = subjectsByClass[selectedClass];
         const subs = Array.isArray(potentialSubs) ? potentialSubs : [];
         setSubjectsForClass(subs);
@@ -256,7 +323,7 @@ const CreateGroupModal: React.FC<{
 
     const handleSubmit = async () => {
         if (!groupName.trim() || !assignmentTitle.trim() || selectedStudentUids.length < 2 || !selectedClass || !selectedSubject) {
-            showToast('Please fill all fields and select at least 2 students.', 'error');
+            setToast({ message: 'Please fill all fields and select at least 2 students.', type: 'error' });
             return;
         }
         setIsProcessing(true);
@@ -273,7 +340,7 @@ const CreateGroupModal: React.FC<{
                     dueDate: dueDate || null,
                 };
                 await db.collection('groups').doc(editingGroup.id).update(groupUpdateData);
-                showToast('Group updated successfully.', 'success');
+                setToast({ message: 'Group updated successfully.', type: 'success' });
 
             } else {
                 const groupData: Omit<Group, 'id'> = {
@@ -290,49 +357,90 @@ const CreateGroupModal: React.FC<{
                     isSubmitted: false,
                 };
                 await db.collection('groups').add(groupData);
-                showToast('Group created successfully.', 'success');
+                setToast({ message: 'Group created successfully.', type: 'success' });
             }
             onClose();
         } catch (err: any) {
-             showToast(`Failed to ${isEditing ? 'update' : 'create'} group: ${err.message}`, 'error');
+             setToast({ message: `Failed to ${isEditing ? 'update' : 'create'} group: ${err.message}`, type: 'error' });
         } finally {
             setIsProcessing(false);
         }
     };
     
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
-            <Card className="w-full max-w-lg h-[90vh] flex flex-col">
-                <h2 className="text-xl font-bold mb-4 flex-shrink-0">{isEditing ? 'Edit Group' : 'Create New Group'}</h2>
-                <div className="flex-grow overflow-y-auto pr-2 space-y-4">
-                    {isSubmitted && <p className="text-yellow-400 text-sm p-2 bg-yellow-900/50 rounded-md">This group has already submitted their work and can no longer be edited.</p>}
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex justify-center items-center p-4 z-50">
+            <Card className="w-full max-w-lg h-[85vh] flex flex-col border border-slate-700 shadow-2xl">
+                <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-700/50">
+                    <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+                        {isEditing ? 'Edit Squad' : 'New Squad Mission'}
+                    </h2>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white">&times;</button>
+                </div>
+                
+                <div className="flex-grow overflow-y-auto pr-2 space-y-5 custom-scrollbar">
+                    {isSubmitted && (
+                        <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg flex items-center gap-3">
+                            <span className="text-xl">🔒</span>
+                            <p className="text-yellow-400 text-sm">Group has submitted work. Editing limited.</p>
+                        </div>
+                    )}
+                    
                     <div className="grid grid-cols-2 gap-4">
-                        <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} disabled={isEditing} className="w-full p-2 bg-slate-700 rounded-md disabled:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {classes.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                        <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={isEditing || subjectsForClass.length === 0} className="w-full p-2 bg-slate-700 rounded-md disabled:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {subjectsForClass.length > 0 ? subjectsForClass.map(s => <option key={s} value={s}>{s}</option>) : <option>Select Class</option>}
-                        </select>
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-400 uppercase">Class</label>
+                            <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} disabled={isEditing} className="w-full p-3 bg-slate-800 rounded-xl border border-slate-700 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+                                {classes.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-400 uppercase">Subject</label>
+                            <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={isEditing || subjectsForClass.length === 0} className="w-full p-3 bg-slate-800 rounded-xl border border-slate-700 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+                                {subjectsForClass.length > 0 ? subjectsForClass.map(s => <option key={s} value={s}>{s}</option>) : <option>Select Class</option>}
+                            </select>
+                        </div>
                     </div>
-                    <input type="text" placeholder="Group Name (e.g., The Innovators)" value={groupName} onChange={e => setGroupName(e.target.value)} required disabled={isSubmitted} className="w-full p-2 bg-slate-700 rounded-md disabled:opacity-50" />
-                    <input type="text" placeholder="Assignment Title" value={assignmentTitle} onChange={e => setAssignmentTitle(e.target.value)} required disabled={isSubmitted} className="w-full p-2 bg-slate-700 rounded-md disabled:opacity-50" />
-                    <textarea placeholder="Assignment Description" value={assignmentDesc} onChange={e => setAssignmentDesc(e.target.value)} rows={3} disabled={isSubmitted} className="w-full p-2 bg-slate-700 rounded-md disabled:opacity-50" />
-                    <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} disabled={isSubmitted} className="w-full p-2 bg-slate-700 rounded-md disabled:opacity-50" />
+
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-400 uppercase">Group Name</label>
+                        <input type="text" placeholder="e.g., The Innovators" value={groupName} onChange={e => setGroupName(e.target.value)} required disabled={isSubmitted} className="w-full p-3 bg-slate-800 rounded-xl border border-slate-700 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-slate-600" />
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-400 uppercase">Assignment Title</label>
+                        <input type="text" placeholder="e.g., Renewable Energy Project" value={assignmentTitle} onChange={e => setAssignmentTitle(e.target.value)} required disabled={isSubmitted} className="w-full p-3 bg-slate-800 rounded-xl border border-slate-700 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-slate-600" />
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-400 uppercase">Description</label>
+                        <textarea placeholder="Instructions for the group..." value={assignmentDesc} onChange={e => setAssignmentDesc(e.target.value)} rows={3} disabled={isSubmitted} className="w-full p-3 bg-slate-800 rounded-xl border border-slate-700 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-slate-600 resize-none" />
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-400 uppercase">Due Date</label>
+                        <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} disabled={isSubmitted} className="w-full p-3 bg-slate-800 rounded-xl border border-slate-700 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all text-slate-300" />
+                    </div>
+
                     <div>
-                        <h4 className="font-semibold text-gray-300 mb-2">Select Members ({selectedStudentUids.length})</h4>
-                        <div className="max-h-48 overflow-y-auto grid grid-cols-2 gap-2 p-2 bg-slate-800 rounded-md">
+                        <div className="flex justify-between items-center mb-2">
+                            <h4 className="text-xs font-bold text-slate-400 uppercase">Select Members</h4>
+                            <span className="text-xs text-blue-400 font-mono bg-blue-500/10 px-2 py-0.5 rounded-full">{selectedStudentUids.length} selected</span>
+                        </div>
+                        <div className="max-h-40 overflow-y-auto grid grid-cols-2 gap-2 p-2 bg-slate-900/50 rounded-xl border border-slate-800 custom-scrollbar">
                             {studentsInSelectedClass.length > 0 ? studentsInSelectedClass.map(s => (
-                                <label key={s.uid} className={`flex items-center gap-2 p-2 hover:bg-slate-700 rounded-md ${isSubmitted ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
-                                    <input type="checkbox" checked={selectedStudentUids.includes(s.uid)} onChange={() => setSelectedStudentUids(p => p.includes(s.uid) ? p.filter(id => id !== s.uid) : [...p, s.uid])} disabled={isSubmitted} className="h-4 w-4 rounded bg-slate-700 border-slate-500" />
-                                    <span className="text-sm">{s.name}</span>
+                                <label key={s.uid} className={`flex items-center gap-3 p-2 hover:bg-slate-800/80 rounded-lg transition-colors ${isSubmitted ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+                                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${selectedStudentUids.includes(s.uid) ? 'bg-blue-500 border-blue-500' : 'border-slate-600 bg-slate-800'}`}>
+                                        {selectedStudentUids.includes(s.uid) && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                                    </div>
+                                    <input type="checkbox" checked={selectedStudentUids.includes(s.uid)} onChange={() => setSelectedStudentUids(p => p.includes(s.uid) ? p.filter(id => id !== s.uid) : [...p, s.uid])} disabled={isSubmitted} className="hidden" />
+                                    <span className="text-sm text-slate-300 truncate">{s.name}</span>
                                 </label>
-                            )) : <p className="text-sm text-gray-500 col-span-2 text-center">No students found for this class.</p>}
+                            )) : <p className="text-sm text-gray-500 col-span-2 text-center py-4">No students found for this class.</p>}
                         </div>
                     </div>
                 </div>
-                 <div className="flex-shrink-0 pt-4 flex justify-end gap-2">
+                 <div className="flex-shrink-0 pt-6 flex justify-end gap-3 border-t border-slate-700/50 mt-2">
                     <Button variant="secondary" onClick={onClose}>Cancel</Button>
-                    <Button onClick={handleSubmit} disabled={isProcessing || isSubmitted}>{isProcessing ? (isEditing ? 'Saving...' : 'Creating...') : (isEditing ? 'Save Changes' : 'Create Group')}</Button>
+                    <Button onClick={handleSubmit} disabled={isProcessing || isSubmitted} className="shadow-lg shadow-blue-600/20">{isProcessing ? (isEditing ? 'Saving...' : 'Creating...') : (isEditing ? 'Save Changes' : 'Create Squad')}</Button>
                  </div>
             </Card>
         </div>
@@ -362,41 +470,123 @@ const TeacherDashboard: React.FC<{
         .slice(0, 5);
 
     return (
-        <div className="space-y-6">
-            <h2 className="text-3xl font-bold">Welcome, {userProfile.name}</h2>
+        <div className="space-y-8">
+            {/* Hero Section */}
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-violet-900 to-fuchsia-900 border border-white/10 shadow-2xl">
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+                <div className="absolute -right-20 -top-20 w-96 h-96 bg-pink-500/20 rounded-full blur-3xl"></div>
+                <div className="absolute -left-20 -bottom-20 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl"></div>
+                
+                <div className="relative z-10 p-8 md:p-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                    <div>
+                        <p className="text-pink-200 font-bold uppercase tracking-wider text-xs mb-2">Teacher Command Center</p>
+                        <h2 className="text-4xl md:text-5xl font-black text-white tracking-tight mb-2">
+                            Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-200 to-blue-200">{userProfile.name.split(' ')[0]}</span>!
+                        </h2>
+                        <p className="text-slate-200 text-lg max-w-xl">Ready to inspire the next generation? You have <span className="font-bold text-white">{pendingSubmissions}</span> new submissions waiting for review.</p>
+                    </div>
+                    <div className="hidden md:block text-6xl animate-float">
+                        👩‍🏫
+                    </div>
+                </div>
+            </div>
             
+            {/* Metrics Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                <Card><div className="text-center"><p className="text-sm text-gray-400">Total Students</p><p className="text-3xl font-bold">{students.length || 0}</p></div></Card>
-                <Card><div className="text-center"><p className="text-sm text-gray-400">Classes Taught</p><p className="text-3xl font-bold">{teacherClasses.length || 0}</p></div></Card>
-                <Card><div className="text-center"><p className="text-sm text-gray-400">Submissions to Grade</p><p className="text-3xl font-bold text-yellow-400">{pendingSubmissions}</p></div></Card>
+                <div className="group bg-slate-800/50 backdrop-blur-sm border border-slate-700 hover:border-blue-500/50 rounded-2xl p-6 transition-all hover:shadow-[0_0_20px_rgba(59,130,246,0.15)]">
+                    <div className="flex items-start justify-between mb-4">
+                        <div>
+                            <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">Total Students</p>
+                            <p className="text-4xl font-black text-white mt-1">{students.length || 0}</p>
+                        </div>
+                        <div className="w-12 h-12 bg-blue-500/10 rounded-xl flex items-center justify-center text-2xl border border-blue-500/20 group-hover:scale-110 transition-transform">
+                            🎓
+                        </div>
+                    </div>
+                    <div className="h-1 w-full bg-slate-700 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-500 w-3/4"></div>
+                    </div>
+                </div>
+
+                <div className="group bg-slate-800/50 backdrop-blur-sm border border-slate-700 hover:border-purple-500/50 rounded-2xl p-6 transition-all hover:shadow-[0_0_20px_rgba(168,85,247,0.15)]">
+                    <div className="flex items-start justify-between mb-4">
+                        <div>
+                            <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">Classes Active</p>
+                            <p className="text-4xl font-black text-white mt-1">{teacherClasses.length || 0}</p>
+                        </div>
+                        <div className="w-12 h-12 bg-purple-500/10 rounded-xl flex items-center justify-center text-2xl border border-purple-500/20 group-hover:scale-110 transition-transform">
+                            🏫
+                        </div>
+                    </div>
+                    <div className="h-1 w-full bg-slate-700 rounded-full overflow-hidden">
+                        <div className="h-full bg-purple-500 w-1/2"></div>
+                    </div>
+                </div>
+
+                <div className="group bg-slate-800/50 backdrop-blur-sm border border-slate-700 hover:border-yellow-500/50 rounded-2xl p-6 transition-all hover:shadow-[0_0_20px_rgba(234,179,8,0.15)]">
+                    <div className="flex items-start justify-between mb-4">
+                        <div>
+                            <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">Pending Grade</p>
+                            <p className="text-4xl font-black text-white mt-1">{pendingSubmissions}</p>
+                        </div>
+                        <div className="w-12 h-12 bg-yellow-500/10 rounded-xl flex items-center justify-center text-2xl border border-yellow-500/20 group-hover:scale-110 transition-transform">
+                            📝
+                        </div>
+                    </div>
+                    <div className="h-1 w-full bg-slate-700 rounded-full overflow-hidden">
+                        <div className="h-full bg-yellow-500 w-1/4"></div>
+                    </div>
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                    <h3 className="text-xl font-semibold mb-4">Upcoming Deadlines</h3>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 shadow-lg">
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                            <span className="text-blue-400">⏳</span> Upcoming Deadlines
+                        </h3>
+                    </div>
                     <div className="space-y-3">
                         {upcomingAssignments.length > 0 ? upcomingAssignments.map(a => (
-                            <div key={a.id} className="p-3 bg-slate-700 rounded-lg">
-                                <p className="font-semibold">{a.title}</p>
-                                <p className="text-sm text-gray-400">{a.classId} - Due: {new Date(a.dueDate!).toLocaleDateString()}</p>
+                            <div key={a.id} className="group p-4 bg-slate-800/50 hover:bg-slate-800 rounded-xl border border-slate-700/50 hover:border-blue-500/30 transition-all flex justify-between items-center">
+                                <div>
+                                    <p className="font-bold text-slate-200 group-hover:text-white transition-colors">{a.title}</p>
+                                    <p className="text-xs text-slate-400 mt-1 flex items-center gap-2">
+                                        <span className="px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">{a.classId}</span>
+                                        <span>•</span>
+                                        <span>{new Date(a.dueDate!).toLocaleDateString()}</span>
+                                    </p>
+                                </div>
+                                <span className="text-xs font-bold text-blue-400 bg-blue-400/10 px-2 py-1 rounded-md">Due Soon</span>
                             </div>
-                        )) : <p className="text-gray-400">No upcoming deadlines.</p>}
+                        )) : <p className="text-slate-500 text-center py-8 italic">No upcoming deadlines.</p>}
                     </div>
-                </Card>
-                <Card>
-                    <h3 className="text-xl font-semibold mb-4">Recent Submissions</h3>
+                </div>
+
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 shadow-lg">
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                            <span className="text-green-400">📥</span> Recent Submissions
+                        </h3>
+                    </div>
                     <div className="space-y-3">
                          {recentSubmissionsToGrade.length > 0 ? recentSubmissionsToGrade.map(s => {
                              const assignment = assignments.find(a => a.id === s.assignmentId);
                              return (
-                                <div key={s.id} className="p-3 bg-slate-700 rounded-lg">
-                                    <p className="font-semibold">{s.studentName}</p>
-                                    <p className="text-sm text-gray-400">Submitted for '{assignment?.title || 'Unknown Assignment'}'</p>
+                                <div key={s.id} className="group p-4 bg-slate-800/50 hover:bg-slate-800 rounded-xl border border-slate-700/50 hover:border-green-500/30 transition-all flex justify-between items-center">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">{s.studentName.charAt(0)}</div>
+                                        <div>
+                                            <p className="font-bold text-slate-200 group-hover:text-white">{s.studentName}</p>
+                                            <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[200px]">{assignment?.title || 'Assignment'}</p>
+                                        </div>
+                                    </div>
+                                    <button className="text-xs font-bold text-slate-900 bg-green-400 hover:bg-green-300 px-3 py-1.5 rounded-lg transition-colors">Grade</button>
                                 </div>
                              )
-                         }) : <p className="text-gray-400">No new submissions to grade.</p>}
+                         }) : <p className="text-slate-500 text-center py-8 italic">All caught up! No submissions pending.</p>}
                     </div>
-                </Card>
+                </div>
             </div>
         </div>
     );
@@ -408,10 +598,10 @@ interface TeacherViewProps {
   setIsSidebarExpanded: (isExpanded: boolean) => void;
 }
 
-const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
+export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
     const { user, userProfile, schoolSettings } = useAuthentication();
-    const { showToast } = useToast();
     const [activeTab, setActiveTab] = useState('dashboard');
+    const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
     const [showChangePassword, setShowChangePassword] = useState(false);
     const [showVideoGenerator, setShowVideoGenerator] = useState(false);
   
@@ -432,7 +622,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
     const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
     const [viewingSubmissionsFor, setViewingSubmissionsFor] = useState<Assignment | null>(null);
-    const [isGrading, setIsGrading] = useState<string | null>(null); // holds submission ID
+    const [isGrading, setIsGrading] = useState<string | null>(null);
     const [showPresentationGenerator, setShowPresentationGenerator] = useState(false);
     const [editingPresentation, setEditingPresentation] = useState<GeneratedContent | null>(null);
     const [contentToDelete, setContentToDelete] = useState<GeneratedContent | null>(null);
@@ -445,6 +635,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     const [studentCreationClass, setStudentCreationClass] = useState<string | null>(null);
     const [showCreateParentModal, setShowCreateParentModal] = useState(false);
     const [viewingStudentProgress, setViewingStudentProgress] = useState<UserProfile | null>(null);
+    const [studentSearchQuery, setStudentSearchQuery] = useState('');
 
     // Attendance state
     const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
@@ -471,11 +662,9 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     const [groupToDelete, setGroupToDelete] = useState<Group | null>(null);
     const [isDeletingGroup, setIsDeletingGroup] = useState(false);
     
-    // FIX: Add missing state for AI Assistant
     const [aiSystemInstruction, setAiSystemInstruction] = useState('');
     const [aiSuggestedPrompts, setAiSuggestedPrompts] = useState<string[]>([]);
   
-    // FIX: Add explicit type to useMemo to help with type inference.
     const teacherClasses = useMemo<string[]>(() => {
         if (!userProfile) return [];
         const allClasses = new Set([
@@ -485,12 +674,10 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         return Array.from(allClasses).sort();
     }, [userProfile]);
     
-    // FIX: Add explicit type and more robust checks to prevent errors from malformed Firestore data.
     const teacherSubjects = useMemo<string[]>(() => {
         if (!userProfile || !userProfile.subjectsByClass || typeof userProfile.subjectsByClass !== 'object') {
             return [];
         }
-        // Ensure subjectsByClass is treated as an object, and filter out non-array values before flattening.
         const subjectsMap = userProfile.subjectsByClass;
         return Object.values(subjectsMap)
                      .filter(Array.isArray)
@@ -568,34 +755,27 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
 
         const unsubscribers: (() => void)[] = [];
 
-        // Fetch assignments for all classes taught by the teacher
         unsubscribers.push(db.collection('assignments').where('teacherId', '==', user.uid)
             .orderBy('createdAt', 'desc')
             .onSnapshot(snap => setAssignments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Assignment)))));
 
-        // Fetch submissions for all those classes
         unsubscribers.push(db.collection('submissions').where('teacherId', '==', user.uid)
             .onSnapshot(snap => setSubmissions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Submission)))));
 
-        // Fetch students in those classes
         unsubscribers.push(db.collection('users').where('class', 'in', teacherClasses)
             .where('role', '==', 'student')
             .onSnapshot(snap => setStudents(snap.docs.map(doc => doc.data() as UserProfile).filter(u => u && u.uid))));
         
-        // Fetch generated content
         unsubscribers.push(db.collection('generatedContent').where('collaboratorUids', 'array-contains', user.uid)
             .orderBy('createdAt', 'desc')
             .onSnapshot(snap => setMyLibraryContent(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as GeneratedContent)))));
 
-        // Fetch active live lesson
         unsubscribers.push(db.collection('liveLessons').where('teacherId', '==', user.uid).where('status', '==', 'active')
             .onSnapshot(snap => setActiveLiveLesson(snap.empty ? null : {id: snap.docs[0].id, ...snap.docs[0].data()} as LiveLesson)));
         
-        // Fetch all parents and other teachers for messaging
         unsubscribers.push(db.collection('users').where('role', '==', 'parent').onSnapshot(snap => setAllParents(snap.docs.map(d => d.data() as UserProfile).filter(u => u && u.uid))));
         unsubscribers.push(db.collection('users').where('role', '==', 'teacher').onSnapshot(snap => setAllTeachers(snap.docs.map(d => d.data() as UserProfile).filter(u => u && u.uid))));
         
-        // Fetch groups
         unsubscribers.push(db.collection('groups').where('teacherId', '==', user.uid).onSnapshot(snap => setGroups(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group)))));
             
         if (teacherClasses.length > 0 && teacherSubjects.length > 0) {
@@ -617,7 +797,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         return () => unsubscribers.forEach(unsub => unsub());
     }, [user, userProfile, teacherClasses, teacherSubjects]);
 
-     // Fetch unread messages count
     useEffect(() => {
         if (!user) return;
         const unsubscribe = db.collection('conversations')
@@ -633,7 +812,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         return () => unsubscribe();
     }, [user]);
     
-    // FIX: Add useEffect for AI Assistant context
     useEffect(() => {
         const baseInstruction = "You are an AI assistant for a teacher at UTOPIA INTERNATIONAL SCHOOL. Your role is to help with lesson planning, student progress analysis, and administrative tasks. Maintain a professional and supportive tone. You can summarize the content on the teacher's current page if asked. As a bilingual AI, you can also be 'Kofi AI'. If a user speaks Twi, respond as Kofi AI in fluent Asante Twi, using correct grammar and letters like 'ɛ' and 'ɔ'.";
         let context = '';
@@ -643,20 +821,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             case 'dashboard':
                 context = `The teacher is on their main dashboard. They have ${submissions.filter(s => s.status === 'Submitted').length} submissions to grade.`;
                 prompts.push("Summarize my students' recent performance.");
-                prompts.push("Give me ideas for a group project for Basic 3 English.");
-                break;
-            case 'my_students':
-                context = `The teacher is viewing their 'My Students' page, which lists all students in their classes.`;
-                prompts.push("How can I identify students who are falling behind?");
-                break;
-            case 'assignments':
-                context = `The teacher is on the 'Assignments' page.`;
-                prompts.push("Create a 5-question multiple choice quiz on the water cycle.");
-                prompts.push("Generate a project-based assignment for Social Studies.");
-                break;
-            case 'my_library':
-                context = `The teacher is in 'My Library', viewing their saved lesson plans and presentations.`;
-                prompts.push("Help me improve the presentation on 'The Solar System'.");
                 break;
             default:
                 context = `The teacher is on the ${activeTab.replace(/_/g, ' ')} page.`;
@@ -666,7 +830,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         setAiSuggestedPrompts(prompts);
     }, [activeTab, submissions, assignments]);
 
-    // Attendance data fetcher
     useEffect(() => {
         if (activeTab === 'attendance' && userProfile?.classTeacherOf) {
             const recordId = `${attendanceDate}_${userProfile.classTeacherOf}`;
@@ -681,7 +844,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         }
     }, [activeTab, attendanceDate, userProfile?.classTeacherOf]);
 
-    // Terminal Reports data loader
     useEffect(() => {
         if (activeTab === 'terminal_reports' && reportClass && reportSubject && schoolSettings) {
             const academicYear = schoolSettings.academicYear?.replace(/\//g, '-') || '';
@@ -732,10 +894,10 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 feedback: feedbackInput,
                 status: 'Graded'
             });
-            showToast('Grade saved successfully.', 'success');
-            handleCancelGrading(); // This will reset state and close the form
+            setToast({ message: 'Grade saved successfully.', type: 'success' });
+            handleCancelGrading();
         } catch (err: any) {
-            showToast(`Error saving grade: ${err.message}`, 'error');
+            setToast({ message: `Error saving grade: ${err.message}`, type: 'error' });
         }
     };
 
@@ -751,8 +913,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
 
     const handleDeleteAssignment = async (assignmentId: string) => {
         if (window.confirm('Are you sure you want to delete this assignment and all its submissions?')) {
-            // It's safer to use a Cloud Function for this to ensure all related data is deleted.
-            // For now, we'll just delete the assignment doc.
             await db.collection('assignments').doc(assignmentId).delete();
         }
     };
@@ -760,14 +920,12 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     const handleStartLiveLesson = useCallback(async (content: GeneratedContent) => {
         if (!user || !userProfile) return;
 
-        setShowPresentationGenerator(false); // Close generator if it was open
+        setShowPresentationGenerator(false);
 
-        // FIX: Map the `question` property from the quiz to the `text` property required by LiveLessonStep.
         const lessonPlan: LiveLessonStep[] = content.presentation.slides.map((slide, index) => {
             const quizQuestion = content.quiz?.quiz[index];
             return {
                 boardContent: `<h3>${slide.title}</h3><ul>${slide.content.map(p => `<li>${p}</li>`).join('')}</ul>`,
-                audioUrl: slide.audioUrl, // Ensure audioUrl is passed
                 question: quizQuestion ? {
                     id: `${content.id || 'new'}_q${index}`,
                     text: quizQuestion.question,
@@ -780,7 +938,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         const newLessonData: Omit<LiveLesson, 'id' | 'createdAt'> = {
             teacherId: user.uid,
             teacherName: userProfile.name,
-            classId: content.classes[0], // For now, lesson is for the first selected class
+            classId: content.classes[0], 
             subject: content.subject,
             topic: content.topic,
             status: 'active',
@@ -788,10 +946,8 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             lessonPlan: lessonPlan,
             currentBoardContent: lessonPlan[0].boardContent,
             currentQuestion: lessonPlan[0].question,
-            currentAudioUrl: lessonPlan[0].audioUrl, // Initialize with first slide's audio
         };
 
-        // If starting from a saved presentation, link it
         if (content.id) {
             newLessonData.sourcePresentationId = content.id;
         }
@@ -802,10 +958,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            // The "optimistic start" approach: write text content instantly,
-            // then process and upload images in the background.
-            // Split data: main doc for text, sub-collection for images.
-            if (!content.id) { // This is a new, unsaved presentation
+            if (!content.id) {
                 const imagePromises = content.presentation.slides.map(async (slide, index) => {
                     if (slide.imageUrl && slide.imageUrl.startsWith('data:')) {
                         const response = await fetch(slide.imageUrl);
@@ -816,19 +969,17 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                         await storageRef.put(compressedBlob);
                         const downloadURL = await storageRef.getDownloadURL();
                         
-                        // Save image URL to sub-collection
                         return lessonRef.collection('images').doc(index.toString()).set({
                             imageUrl: downloadURL,
                             imageStyle: slide.imageStyle
                         });
                     }
                 });
-                // We don't await these promises, letting them run in the background
                 Promise.all(imagePromises).catch(err => {
                     console.error("Background image upload failed:", err);
-                    showToast("Some lesson images failed to upload.", 'error');
+                    setToast({ message: "Some lesson images failed to upload.", type: 'error' });
                 });
-            } else { // This is a saved presentation with permanent URLs
+            } else {
                 const imagePromises = content.presentation.slides.map((slide, index) => {
                     return lessonRef.collection('images').doc(index.toString()).set({
                         imageUrl: slide.imageUrl,
@@ -841,9 +992,9 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             setActiveTab('live_lesson');
         } catch(error) {
             console.error("Error starting live lesson:", error);
-            showToast(`Error starting live lesson`, 'error');
+            setToast({ message: `Error starting live lesson`, type: 'error' });
         }
-    }, [user, userProfile, showToast]);
+    }, [user, userProfile]);
 
     
     const handleDeleteContent = async () => {
@@ -852,23 +1003,22 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         try {
             const deleteResource = functions.httpsCallable('deleteResource');
             await deleteResource({ resourceType: 'generatedContent', resourceId: contentToDelete.id });
-            showToast('Content deleted successfully.', 'success');
+            setToast({ message: 'Content deleted successfully.', type: 'success' });
         } catch(err: any) {
-            showToast(`Failed to delete content: ${err.message}`, 'error');
+            setToast({ message: `Failed to delete content: ${err.message}`, type: 'error'});
         } finally {
             setIsDeletingContent(false);
             setContentToDelete(null);
         }
     };
 
-    // --- ATTENDANCE HANDLERS ---
     const handleAttendanceChange = (studentId: string, status: AttendanceStatus) => {
         setAttendanceData(prev => ({ ...prev, [studentId]: status }));
     };
 
     const handleSaveAttendance = async () => {
         if (!userProfile?.classTeacherOf || Object.keys(attendanceData).length === 0) {
-            showToast("No attendance data to save.", 'error');
+            setToast({ message: "No attendance data to save.", type: 'error' });
             return;
         }
 
@@ -889,7 +1039,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 parentUids: parentUids,
             }, { merge: true });
             
-            // Send notifications for absences
             const absentStudentIds = classStudents.filter(s => attendanceData[s.uid] === 'Absent').map(s => s.uid);
             if (absentStudentIds.length > 0) {
                  const sendNotifications = functions.httpsCallable('sendNotificationsToParentsOfStudents');
@@ -900,10 +1049,10 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                      senderName: userProfile.name,
                  });
             }
-            showToast("Attendance saved successfully.", 'success');
+            setToast({ message: "Attendance saved successfully.", type: 'success' });
         } catch(err: any) {
             console.error(err);
-            showToast(`Failed to save attendance: ${err.message}`, 'error');
+            setToast({ message: `Failed to save attendance: ${err.message}`, type: 'error' });
         } finally {
             setIsSavingAttendance(false);
         }
@@ -918,7 +1067,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         setAttendanceData(newAttendanceData);
     };
 
-    // --- TERMINAL REPORTS HANDLERS ---
     const handleMarkChange = (studentId: string, field: keyof TerminalReportMark, value: string) => {
         const numericValue = value === '' ? undefined : Number(value);
         setMarks(prev => ({
@@ -966,7 +1114,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                             totalPercentageSum += (score / maxScore);
                         }
                     }
-                    // If no submission, score is 0, so we add nothing to the sum.
                 });
                 
                 const averagePercentage = totalPercentageSum / totalAssignmentsCount;
@@ -992,12 +1139,12 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             }
         });
         setMarks(newMarks);
-        showToast("Scores from assignments and group work have been filled in.", 'success');
+        setToast({message: "Scores from assignments and group work have been filled in.", type: "success"});
     };
 
     const calculateTotalsAndSave = async () => {
         if (!reportClass || !reportSubject || !schoolSettings || !user) {
-            showToast("Missing required report information.", 'error');
+            setToast({ message: "Missing required report information.", type: 'error' });
             return;
         }
         setIsSavingMarks(true);
@@ -1062,9 +1209,9 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             }, { merge: true });
 
             setMarks(calculatedMarks);
-            showToast('Marks saved successfully!', 'success');
+            setToast({ message: 'Marks saved successfully!', type: 'success' });
         } catch (err: any) {
-            showToast(`Failed to save marks: ${err.message}`, 'error');
+            setToast({ message: `Failed to save marks: ${err.message}`, type: 'error' });
         } finally {
             setIsSavingMarks(false);
         }
@@ -1076,9 +1223,9 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         try {
             const deleteResource = functions.httpsCallable('deleteResource');
             await deleteResource({ resourceType: 'group', resourceId: groupToDelete.id });
-            showToast(`Group '${groupToDelete.name}' has been deleted.`, 'success');
+            setToast({ message: `Group '${groupToDelete.name}' has been deleted.`, type: 'success' });
         } catch (err: any) {
-            showToast(`Failed to delete group: ${err.message}`, 'error');
+            setToast({ message: `Failed to delete group: ${err.message}`, type: 'error' });
         } finally {
             setIsDeletingGroup(false);
             setGroupToDelete(null);
@@ -1090,15 +1237,13 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         { key: 'dashboard', label: 'Dashboard', icon: <span className="text-xl">📊</span> },
         { key: 'my_students', label: 'My Students', icon: <span className="text-xl">👨‍🎓</span> },
         { key: 'assignments', label: 'Assignments', icon: <span className="text-xl">📝</span> },
-        { key: 'live_lesson', label: <span className="flex items-center">Live Lesson {activeLiveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: <span className="text-xl">🔴</span> },
+        { key: 'live_lesson', label: <span className="flex items-center">Live Lesson {activeLiveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: <span className="text-xl">📡</span> },
         { key: 'group_work', label: 'Group Work', icon: <span className="text-xl">👥</span> },
         { key: 'messages', label: <span className="flex items-center justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: <span className="text-xl">💬</span> },
         { key: 'my_library', label: 'My Library', icon: <span className="text-xl">📚</span> },
         { key: 'attendance', label: 'Attendance', icon: <span className="text-xl">📅</span> },
-        { key: 'terminal_reports', label: 'Terminal Reports', icon: <span className="text-xl">📈</span> },
-        { key: 'past_questions', label: 'BECE Questions', icon: <span className="text-xl">❓</span> },
-        { key: 'student_activity', label: 'Student Activity', icon: <span className="text-xl">🕒</span> },
-        { key: 'my_voice', label: 'My Voice', icon: <span className="text-xl">🎤</span> },
+        { key: 'terminal_reports', label: 'Terminal Reports', icon: <span className="text-xl">📄</span> },
+        { key: 'past_questions', label: 'BECE Questions', icon: <span className="text-xl">🎓</span> },
     ];
     
     if (!user || !userProfile) {
@@ -1122,28 +1267,55 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                     acc[classKey].push(student);
                     return acc;
                 }, {});
-                 return (
-                    <div className="space-y-6">
-                         <div className="flex justify-between items-center">
-                             <h2 className="text-3xl font-bold">My Students</h2>
-                             <Button onClick={() => setShowCreateParentModal(true)}>Create Parent Account</Button>
+                
+                return (
+                    <div className="space-y-8">
+                         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                             <div>
+                                 <h2 className="text-3xl font-bold">My Students</h2>
+                                 <p className="text-slate-400 text-sm mt-1">Manage student profiles and track progress across {Object.keys(studentsByClass).length} classes.</p>
+                             </div>
+                             <div className="flex gap-3">
+                                 <div className="relative">
+                                     <input 
+                                        type="search" 
+                                        placeholder="Search students..." 
+                                        value={studentSearchQuery}
+                                        onChange={(e) => setStudentSearchQuery(e.target.value)}
+                                        className="pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-64 transition-all"
+                                     />
+                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">🔍</span>
+                                 </div>
+                                 <Button onClick={() => setShowCreateParentModal(true)} variant="secondary">Link Parent</Button>
+                             </div>
                          </div>
+                         
                          {Object.keys(studentsByClass).map((classId) => {
-                            const classStudents = studentsByClass[classId];
+                            const classStudents = studentsByClass[classId].filter(s => s.name.toLowerCase().includes(studentSearchQuery.toLowerCase()));
+                            if (classStudents.length === 0) return null;
+
                             return (
-                                <Card key={classId}>
-                                    <div className="flex justify-between items-center mb-4">
-                                        <h3 className="text-xl font-semibold">{classId} ({classStudents.length} students)</h3>
+                                <div key={classId} className="animate-fade-in-up">
+                                    <div className="flex justify-between items-center mb-4 px-1">
+                                        <h3 className="text-xl font-bold text-slate-200 flex items-center gap-2">
+                                            <span className="w-1 h-6 bg-blue-500 rounded-full"></span>
+                                            {classId} <span className="text-sm font-normal text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">{classStudents.length}</span>
+                                        </h3>
                                         <Button size="sm" onClick={() => { setStudentCreationClass(classId); setShowCreateStudentModal(true); }}>+ Add Student</Button>
                                     </div>
-                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                                         {classStudents.map(student => (
-                                            <button key={student.uid} onClick={() => setViewingStudentProgress(student)} className="p-3 bg-slate-700 rounded-lg text-left hover:bg-slate-600 transition-colors">
-                                                {student.name}
-                                            </button>
+                                            <TeacherStudentCard 
+                                                key={student.uid}
+                                                student={student}
+                                                classAssignments={assignments.filter(a => a.classId === classId)}
+                                                studentSubmissions={submissions.filter(s => s.studentId === student.uid)}
+                                                onClick={() => setViewingStudentProgress(student)}
+                                                onMessage={() => { /* Logic to open message modal could go here */ }}
+                                            />
                                         ))}
                                     </div>
-                                </Card>
+                                </div>
                             );
                          })}
                      </div>
@@ -1153,118 +1325,141 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                     <div className="space-y-6">
                         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                             <h2 className="text-3xl font-bold">Assignments</h2>
-                            <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-2">
-                                    <label htmlFor="class-filter" className="text-sm text-gray-400">Class:</label>
-                                    <select id="class-filter" value={classFilter} onChange={e => setClassFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm">
-                                        <option value="all">All Classes</option>
-                                        {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                     <label htmlFor="subject-filter" className="text-sm text-gray-400">Subject:</label>
-                                    <select id="subject-filter" value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm">
-                                        <option value="all">All Subjects</option>
-                                        {subjectsForFilter.map(s => <option key={s} value={s}>{s}</option>)}
-                                    </select>
-                                </div>
-                                <Button onClick={handleCreateNewAssignment}>+ Create</Button>
+                            <div className="flex items-center gap-3 bg-slate-800/50 p-1 rounded-lg border border-slate-700">
+                                <select id="class-filter" value={classFilter} onChange={e => setClassFilter(e.target.value)} className="bg-transparent text-sm p-2 outline-none text-slate-300 cursor-pointer">
+                                    <option value="all">All Classes</option>
+                                    {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                                <div className="w-px h-4 bg-slate-600"></div>
+                                <select id="subject-filter" value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} className="bg-transparent text-sm p-2 outline-none text-slate-300 cursor-pointer">
+                                    <option value="all">All Subjects</option>
+                                    {subjectsForFilter.map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
                             </div>
+                            <Button onClick={handleCreateNewAssignment} className="shadow-lg shadow-blue-600/20">+ New Assignment</Button>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                        {filteredAssignments.map(assignment => {
-                            const isScheduled = assignment.scheduledAt && assignment.scheduledAt.toDate() > new Date();
-                            return (
-                            <Card key={assignment.id}>
-                                <div className="flex justify-between items-start gap-4">
-                                    <div className="flex-1 min-w-0">
-                                        <h3 className="text-xl font-bold truncate" title={assignment.title}>{assignment.title}</h3>
-                                        <p className="text-sm text-gray-400">{assignment.classId} &bull; {assignment.subject}</p>
+                            {filteredAssignments.map(assignment => {
+                                const submissionCount = submissions.filter(s => s.assignmentId === assignment.id).length;
+                                const gradedCount = submissions.filter(s => s.assignmentId === assignment.id && s.status === 'Graded').length;
+                                
+                                return (
+                                    <div key={assignment.id} className="group bg-slate-800/40 backdrop-blur-md border border-slate-700 hover:border-blue-500/50 rounded-2xl p-0 transition-all hover:shadow-xl hover:-translate-y-1 flex flex-col">
+                                        <div className="p-5 border-b border-slate-700/50 relative overflow-hidden">
+                                            <div className={`absolute top-0 right-0 px-3 py-1 rounded-bl-xl text-[10px] font-bold uppercase tracking-wider ${assignment.type === 'Objective' ? 'bg-purple-500/20 text-purple-300' : 'bg-blue-500/20 text-blue-300'}`}>
+                                                {assignment.type || 'Theory'}
+                                            </div>
+                                            <h3 className="text-lg font-bold text-white line-clamp-1 pr-12">{assignment.title}</h3>
+                                            <div className="flex gap-2 mt-2">
+                                                <span className="px-2 py-0.5 rounded text-[10px] bg-slate-700 text-slate-300 border border-slate-600">{assignment.classId}</span>
+                                                <span className="px-2 py-0.5 rounded text-[10px] bg-slate-700 text-slate-300 border border-slate-600 truncate max-w-[150px]">{assignment.subject}</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="p-5 flex-grow">
+                                            <p className="text-sm text-slate-400 line-clamp-3 mb-4">{assignment.description}</p>
+                                            
+                                            <div className="flex items-center justify-between text-xs text-slate-500 font-mono">
+                                                <span>Due: {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'No Date'}</span>
+                                                <span className={gradedCount === submissionCount && submissionCount > 0 ? 'text-green-400' : 'text-yellow-400'}>
+                                                    {gradedCount}/{submissionCount} Graded
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-slate-700 h-1 mt-2 rounded-full overflow-hidden">
+                                                <div className="bg-green-500 h-full transition-all duration-500" style={{ width: `${submissionCount > 0 ? (gradedCount/submissionCount)*100 : 0}%` }}></div>
+                                            </div>
+                                        </div>
+
+                                        <div className="p-4 bg-slate-900/30 border-t border-slate-700/50 flex justify-between items-center rounded-b-2xl">
+                                            <div className="flex gap-2">
+                                                <button onClick={() => handleEditAssignment(assignment)} className="p-2 text-slate-400 hover:text-blue-400 hover:bg-slate-700 rounded-lg transition-colors" title="Edit">
+                                                    ✏️
+                                                </button>
+                                                <button onClick={() => handleDeleteAssignment(assignment.id)} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors" title="Delete">
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                            <Button size="sm" onClick={() => setViewingSubmissionsFor(assignment)}>
+                                                View Work
+                                            </Button>
+                                        </div>
                                     </div>
-                                    <div className="flex gap-2 flex-shrink-0">
-                                        <button onClick={() => handleEditAssignment(assignment)} className="p-1.5 rounded-full bg-slate-700 hover:bg-slate-600 text-blue-400" title="Edit">
-                                            <span className="text-lg">✏️</span>
-                                        </button>
-                                        <button onClick={() => handleDeleteAssignment(assignment.id)} className="p-1.5 rounded-full bg-slate-700 hover:bg-slate-600 text-red-400" title="Delete">
-                                            <span className="text-lg">🗑️</span>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div className="mt-4 pt-4 border-t border-slate-700 flex-grow">
-                                    <p className="text-sm text-gray-400 line-clamp-3">{assignment.description}</p>
-                                </div>
-                                 <div className="mt-4 pt-2 flex justify-between items-center border-t border-slate-700/50">
-                                    <div className="flex flex-col">
-                                        <span className="text-xs text-yellow-400">Due: {assignment.dueDate || 'Not set'}</span>
-                                        {isScheduled && <span className="text-xs bg-purple-900/50 text-purple-300 px-1.5 py-0.5 rounded border border-purple-500/30 mt-1 w-fit">Scheduled for {assignment.scheduledAt?.toDate().toLocaleDateString()}</span>}
-                                    </div>
-                                    <Button size="sm" onClick={() => setViewingSubmissionsFor(assignment)}>
-                                        Submissions ({submissions.filter(s => s.assignmentId === assignment.id).length})
-                                    </Button>
-                                 </div>
-                            </Card>
-                        )})}
+                                );
+                            })}
                         </div>
                     </div>
                 );
             case 'live_lesson':
                 return activeLiveLesson ? 
-                        <TeacherLiveClassroom lessonId={activeLiveLesson.id} onClose={() => {}} userProfile={userProfile!} />
+                        <TeacherLiveClassroom lessonId={activeLiveLesson.id} onClose={() => {}} userProfile={userProfile} />
                         :
-                        <div className="text-center p-8">
-                            <h2 className="text-3xl font-bold">Live Lesson</h2>
-                            <p className="mt-4 text-gray-400">Start an interactive lesson with your class.</p>
-                             <div className="mt-6 flex justify-center gap-4">
-                                <Button onClick={() => { setEditingPresentation(null); setShowPresentationGenerator(true); }}>Create New Lesson</Button>
+                        <div className="flex flex-col items-center justify-center h-[80vh] text-center">
+                            <div className="w-24 h-24 bg-slate-800 rounded-full flex items-center justify-center text-5xl mb-6 shadow-2xl border border-slate-700 animate-pulse">
+                                📡
                             </div>
+                            <h2 className="text-3xl font-bold text-white mb-2">Live Classroom</h2>
+                            <p className="text-slate-400 max-w-md mb-8">Start an interactive session with real-time whiteboard, polls, and Q&A.</p>
+                            <Button size="lg" onClick={() => { setEditingPresentation(null); setShowPresentationGenerator(true); }} className="shadow-lg shadow-blue-600/20">
+                                Launch New Session
+                            </Button>
                         </div>;
             case 'group_work':
                 return (
                      <div className="space-y-6">
                         <div className="flex justify-between items-center">
-                            <h2 className="text-3xl font-bold">Group Work</h2>
+                            <h2 className="text-3xl font-bold">Group Projects</h2>
                             <div className="flex items-center gap-4">
-                               <select value={groupClassFilter} onChange={e => setGroupClassFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm">
+                               <select value={groupClassFilter} onChange={e => setGroupClassFilter(e.target.value)} className="p-2 bg-slate-800 rounded-lg border border-slate-700 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                                     <option value="all">All Classes</option>
                                     {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
-                               </select>
-                                <Button onClick={() => { setEditingGroup(null); setShowCreateGroupModal(true); }}>Create New Group</Button>
+                                </select>
+                                <Button onClick={() => { setEditingGroup(null); setShowCreateGroupModal(true); }}>+ New Group</Button>
                             </div>
                         </div>
+                        
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                        {filteredGroups.length > 0 ? filteredGroups.map(group => (
-                            <div key={group.id} className="relative group-card bg-slate-800 rounded-2xl p-1 shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
-                                <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-2xl opacity-50 group-hover:opacity-100 transition-opacity blur-sm -z-10"></div>
-                                <div className="bg-slate-900 rounded-xl p-5 h-full flex flex-col">
-                                    <div className="flex justify-between items-start mb-3">
+                            {filteredGroups.length > 0 ? filteredGroups.map(group => (
+                                <div key={group.id} className="group relative bg-slate-800/40 backdrop-blur-md border border-slate-700 hover:border-purple-500/50 rounded-2xl p-5 transition-all hover:shadow-xl flex flex-col h-full">
+                                    <div className="flex justify-between items-start mb-4">
                                         <div>
                                             <h3 className="text-lg font-bold text-white">{group.name}</h3>
-                                            <p className="text-xs text-gray-400">{group.classId} • {group.subject}</p>
+                                            <p className="text-xs text-slate-400 mt-1">{group.classId} &bull; {group.subject}</p>
                                         </div>
-                                        <div className="flex gap-1">
-                                            <button onClick={() => { setEditingGroup(group); setShowCreateGroupModal(true); }} className="p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-blue-400 transition-colors">✏️</button>
-                                            <button onClick={() => setGroupToDelete(group)} className="p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-red-400 transition-colors">🗑️</button>
-                                        </div>
+                                        <span className={`px-2 py-1 text-[10px] font-bold uppercase rounded-lg border ${group.isSubmitted ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
+                                            {group.isSubmitted ? 'Submitted' : 'Active'}
+                                        </span>
                                     </div>
                                     
-                                    <div className="flex-grow mb-4">
-                                        <p className="text-sm text-gray-300 line-clamp-2 mb-2 font-medium">{group.assignmentTitle}</p>
-                                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                                            <span>👥 {group.members.length} Members</span>
-                                            <span>📅 Due: {group.dueDate || 'N/A'}</span>
+                                    <div className="mb-4">
+                                        <p className="text-sm text-slate-300 font-medium mb-2 truncate">{group.assignmentTitle}</p>
+                                        <div className="flex -space-x-2 overflow-hidden py-1">
+                                            {group.members.slice(0, 5).map((m, i) => (
+                                                <div key={i} className="inline-block h-8 w-8 rounded-full ring-2 ring-slate-800 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white" title={m.name}>
+                                                    {m.name.charAt(0)}
+                                                </div>
+                                            ))}
+                                            {group.members.length > 5 && (
+                                                <div className="inline-block h-8 w-8 rounded-full ring-2 ring-slate-800 bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
+                                                    +{group.members.length - 5}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
-                                    <div className="mt-auto pt-3 border-t border-slate-800 flex items-center justify-between">
-                                         <span className={`px-2 py-1 text-[10px] uppercase font-bold tracking-wider rounded-full ${group.isSubmitted ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'}`}>
-                                            {group.isSubmitted ? 'Submitted' : 'In Progress'}
-                                        </span>
-                                        <Button size="sm" variant="secondary" onClick={() => setViewingGroup(group)}>View Details</Button>
+                                    <div className="mt-auto pt-4 border-t border-slate-700/50 flex justify-between items-center">
+                                        <Button size="sm" variant="secondary" onClick={() => setViewingGroup(group)}>Manage & Chat</Button>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => { setEditingGroup(group); setShowCreateGroupModal(true); }} className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors">✏️</button>
+                                            <button onClick={() => setGroupToDelete(group)} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors">🗑️</button>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        )) : <p className="text-center text-gray-400 col-span-full py-10">No groups created yet.</p>}
+                            )) : (
+                                <div className="col-span-full text-center py-16 border-2 border-dashed border-slate-800 rounded-2xl">
+                                    <p className="text-slate-500">No groups created yet.</p>
+                                </div>
+                            )}
                         </div>
                      </div>
                 );
@@ -1275,19 +1470,24 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
                             <h2 className="text-3xl font-bold">My Library</h2>
-                            <Button onClick={() => { setEditingPresentation(null); setShowPresentationGenerator(true); }}>+ Create New</Button>
+                            <Button onClick={() => { setEditingPresentation(null); setShowPresentationGenerator(true); }}>+ Create Content</Button>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {myLibraryContent.map(content => (
                                 <Card key={content.id}>
-                                    <h3 className="text-xl font-bold truncate">{content.topic}</h3>
-                                    <p className="text-sm text-gray-400">{content.classes.join(', ')} - {content.subject}</p>
-                                    <p className="text-xs text-gray-500 mt-2">Created on {content.createdAt.toDate().toLocaleDateString()}</p>
-                                    <div className="mt-4 flex flex-wrap gap-2">
-                                        <Button size="sm" onClick={() => handleStartLiveLesson(content)}>Start Live Lesson</Button>
-                                        <Button size="sm" variant="secondary" onClick={() => { setEditingPresentation(content); setShowPresentationGenerator(true); }}>Edit</Button>
-                                        <Button size="sm" variant="danger" onClick={() => setContentToDelete(content)}>Delete</Button>
-                                        <Button size="sm" variant="secondary" onClick={() => setShowVideoGenerator(true)}>Create a Video</Button>
+                                    <div className="aspect-video bg-slate-900 mb-4 rounded-lg flex items-center justify-center text-4xl relative overflow-hidden group">
+                                        {/* If we had a thumbnail, show it here. For now, generic icon */}
+                                        <span className="group-hover:scale-110 transition-transform duration-500">📚</span>
+                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                                            <Button size="sm" onClick={() => handleStartLiveLesson(content)}>Present</Button>
+                                        </div>
+                                    </div>
+                                    <h3 className="text-lg font-bold truncate">{content.topic}</h3>
+                                    <p className="text-xs text-gray-400 mt-1">{content.classes.join(', ')} &bull; {content.subject}</p>
+                                    <div className="mt-4 flex justify-end gap-2 border-t border-slate-700 pt-3">
+                                        <button onClick={() => { setEditingPresentation(content); setShowPresentationGenerator(true); }} className="text-slate-400 hover:text-blue-400 text-xs font-medium">Edit</button>
+                                        <button onClick={() => setShowVideoGenerator(true)} className="text-slate-400 hover:text-purple-400 text-xs font-medium">Make Video</button>
+                                        <button onClick={() => setContentToDelete(content)} className="text-slate-400 hover:text-red-400 text-xs font-medium">Delete</button>
                                     </div>
                                 </Card>
                             ))}
@@ -1296,81 +1496,125 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 );
             case 'attendance':
                 if (!userProfile.classTeacherOf) {
-                    return <Card><p className="text-center">You are not a designated class teacher. Only class teachers can take attendance.</p></Card>;
+                    return <div className="p-8 text-center text-slate-500">You are not a designated class teacher. Only class teachers can take attendance.</div>;
                 }
                 const classStudents = students.filter(s => s.class === userProfile.classTeacherOf);
                 return (
-                     <Card>
-                         <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-3xl font-bold">Take Attendance for {userProfile.classTeacherOf}</h2>
-                            <div className="flex items-center gap-4">
-                                <input type="date" value={attendanceDate} onChange={e => setAttendanceDate(e.target.value)} className="p-2 bg-slate-700 rounded-md" />
-                                <Button onClick={handleSaveAttendance} disabled={isSavingAttendance}>{isSavingAttendance ? 'Saving...' : 'Save Attendance'}</Button>
-                            </div>
-                         </div>
-                         <div className="flex gap-2 mb-4">
-                            <Button size="sm" variant="secondary" onClick={() => handleMarkAll('Present')}>Mark All Present</Button>
-                            <Button size="sm" variant="secondary" onClick={() => handleMarkAll('Absent')}>Mark All Absent</Button>
-                         </div>
-                         <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-                             {classStudents.map(student => (
-                                 <div key={student.uid} className="p-3 bg-slate-700 rounded-lg flex justify-between items-center">
-                                     <span className="font-semibold">{student.name}</span>
-                                     <div className="flex gap-4">
-                                         {(['Present', 'Absent', 'Late'] as AttendanceStatus[]).map(status => (
-                                             <label key={status} className="flex items-center gap-2 cursor-pointer">
-                                                 <input type="radio" name={`attendance_${student.uid}`} value={status} checked={attendanceData[student.uid] === status} onChange={() => handleAttendanceChange(student.uid, status)} className="h-4 w-4 text-blue-500 bg-slate-800 border-slate-600 focus:ring-blue-500" />
-                                                 {status}
-                                             </label>
-                                         ))}
+                     <div className="max-w-4xl mx-auto">
+                         <Card>
+                             <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                                <div>
+                                    <h2 className="text-2xl font-bold">{userProfile.classTeacherOf} Register</h2>
+                                    <p className="text-sm text-slate-400">Date: {new Date(attendanceDate).toLocaleDateString()}</p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <input type="date" value={attendanceDate} onChange={e => setAttendanceDate(e.target.value)} className="p-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 focus:ring-2 focus:ring-blue-500 outline-none" />
+                                    <Button onClick={handleSaveAttendance} disabled={isSavingAttendance}>{isSavingAttendance ? 'Saving...' : 'Save Register'}</Button>
+                                </div>
+                             </div>
+                             
+                             <div className="bg-slate-900/50 rounded-xl border border-slate-700 overflow-hidden">
+                                 <div className="flex justify-between items-center p-3 bg-slate-800 border-b border-slate-700 text-xs font-bold uppercase text-slate-400 tracking-wider">
+                                     <span className="pl-2">Student Name</span>
+                                     <div className="flex gap-2 pr-2">
+                                         <button onClick={() => handleMarkAll('Present')} className="hover:text-green-400 transition-colors">All Present</button>
+                                         <span>|</span>
+                                         <button onClick={() => handleMarkAll('Absent')} className="hover:text-red-400 transition-colors">All Absent</button>
                                      </div>
                                  </div>
-                             ))}
-                         </div>
-                     </Card>
+                                 <div className="divide-y divide-slate-800 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                                     {classStudents.map(student => (
+                                         <div key={student.uid} className="flex items-center justify-between p-4 hover:bg-slate-800/50 transition-colors">
+                                             <div className="flex items-center gap-3">
+                                                 <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold">{student.name.charAt(0)}</div>
+                                                 <span className="font-medium text-slate-200">{student.name}</span>
+                                             </div>
+                                             <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800">
+                                                 {(['Present', 'Absent', 'Late'] as AttendanceStatus[]).map(status => {
+                                                     const isActive = attendanceData[student.uid] === status;
+                                                     let activeClass = '';
+                                                     if (isActive) {
+                                                         if (status === 'Present') activeClass = 'bg-green-600 text-white shadow-lg shadow-green-900/50';
+                                                         if (status === 'Absent') activeClass = 'bg-red-600 text-white shadow-lg shadow-red-900/50';
+                                                         if (status === 'Late') activeClass = 'bg-yellow-600 text-white shadow-lg shadow-yellow-900/50';
+                                                     } else {
+                                                         activeClass = 'text-slate-500 hover:text-slate-300';
+                                                     }
+                                                     
+                                                     return (
+                                                         <button
+                                                             key={status}
+                                                             onClick={() => handleAttendanceChange(student.uid, status)}
+                                                             className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${activeClass}`}
+                                                         >
+                                                             {status}
+                                                         </button>
+                                                     );
+                                                 })}
+                                             </div>
+                                         </div>
+                                     ))}
+                                 </div>
+                             </div>
+                         </Card>
+                     </div>
                 );
             case 'terminal_reports':
                 const studentsForReport = students.filter(s => s.class === reportClass);
                 return (
-                    <Card>
-                        <div className="flex justify-between items-center mb-6">
-                             <h2 className="text-3xl font-bold">Terminal Reports</h2>
-                             <div className="flex items-center gap-4">
-                                <select value={reportClass} onChange={e => setReportClass(e.target.value)} className="p-2 bg-slate-700 rounded-md">
+                    <Card className="!p-0 overflow-hidden border border-slate-700 bg-slate-900">
+                        <div className="p-6 border-b border-slate-700 bg-slate-800/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                             <div>
+                                <h2 className="text-2xl font-bold">Terminal Reports</h2>
+                                <p className="text-sm text-slate-400 mt-1">Enter marks and generate end-of-term reports.</p>
+                             </div>
+                             <div className="flex flex-wrap items-center gap-3">
+                                <select value={reportClass} onChange={e => setReportClass(e.target.value)} className="p-2 bg-slate-900 border border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                                     {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
-                                <select value={reportSubject} onChange={e => setReportSubject(e.target.value)} disabled={subjectsForReport.length === 0} className="p-2 bg-slate-700 rounded-md">
+                                <select value={reportSubject} onChange={e => setReportSubject(e.target.value)} disabled={subjectsForReport.length === 0} className="p-2 bg-slate-900 border border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                                     {subjectsForReport.length > 0 ? subjectsForReport.map(s => <option key={s} value={s}>{s}</option>) : <option>No subjects for class</option>}
                                 </select>
+                                <div className="h-8 w-px bg-slate-700 mx-2"></div>
+                                <Button variant="secondary" onClick={handleAutoFillScores} size="sm">✨ Auto-fill</Button>
+                                <Button onClick={calculateTotalsAndSave} disabled={isSavingMarks} size="sm">{isSavingMarks ? 'Saving...' : 'Save Changes'}</Button>
                              </div>
                         </div>
-                        <div className="flex gap-2 mb-4">
-                            <Button onClick={calculateTotalsAndSave} disabled={isSavingMarks}>{isSavingMarks ? 'Saving...' : 'Calculate & Save'}</Button>
-                            <Button variant="secondary" onClick={handleAutoFillScores}>Auto-fill Scores</Button>
-                        </div>
+                        
                          <div className="overflow-x-auto">
-                             <table className="min-w-full text-sm">
-                                 <thead className="bg-slate-700">
-                                    <tr className="text-center">
-                                        <th rowSpan={2} className="p-2 text-left border-r border-slate-600">Student Name</th>
-                                        <th colSpan={5} className="p-2 border-b border-slate-600">Class Score (Weight 50%)</th>
-                                        <th rowSpan={2} className="p-2 border-x border-slate-600">End of Term Exam (100)</th>
-                                        <th colSpan={5} className="p-2 border-b border-slate-600">Final Marks</th>
+                             <table className="min-w-full text-sm border-collapse">
+                                 <thead className="bg-slate-950 text-slate-400 uppercase text-xs sticky top-0 z-20">
+                                    <tr>
+                                        <th rowSpan={2} className="px-4 py-3 text-left border-r border-slate-800 sticky left-0 bg-slate-950 z-30 shadow-[4px_0_8px_rgba(0,0,0,0.2)] min-w-[250px]">
+                                            Student Name
+                                        </th>
+                                        <th colSpan={5} className="px-2 py-2 text-center border-r border-slate-800 bg-blue-900/10 text-blue-400 font-bold border-b border-slate-800">
+                                            Class Assessment (60)
+                                        </th>
+                                        <th rowSpan={2} className="px-2 py-2 text-center border-r border-slate-800 bg-purple-900/10 text-purple-400 font-bold min-w-[100px]">
+                                            Exam Score (100)
+                                        </th>
+                                        <th colSpan={5} className="px-2 py-2 text-center bg-green-900/10 text-green-400 font-bold border-b border-slate-800">
+                                            Final Grading
+                                        </th>
                                     </tr>
-                                    <tr className="text-xs">
-                                        <th className="p-2 font-normal border-r border-slate-600">Assignments (15)</th>
-                                        <th className="p-2 font-normal border-r border-slate-600">Group Work (15)</th>
-                                        <th className="p-2 font-normal border-r border-slate-600">Class Test (15)</th>
-                                        <th className="p-2 font-normal border-r border-slate-600">Project (15)</th>
-                                        <th className="p-2 font-bold border-r border-slate-600">Total (60)</th>
-                                        <th className="p-2 font-bold border-r border-slate-600">Scaled Class (50)</th>
-                                        <th className="p-2 font-bold border-r border-slate-600">Scaled Exam (50)</th>
-                                        <th className="p-2 font-bold border-r border-slate-600">Overall (100)</th>
-                                        <th className="p-2 font-bold border-r border-slate-600">Grade</th>
-                                        <th className="p-2 font-bold">Position</th>
+                                    <tr>
+                                        {/* CA Columns */}
+                                        <th className="px-2 py-2 text-center font-medium border-r border-slate-800 bg-blue-900/5 min-w-[80px]">Assign<br/><span className="text-[10px] opacity-60">(15)</span></th>
+                                        <th className="px-2 py-2 text-center font-medium border-r border-slate-800 bg-blue-900/5 min-w-[80px]">Group<br/><span className="text-[10px] opacity-60">(15)</span></th>
+                                        <th className="px-2 py-2 text-center font-medium border-r border-slate-800 bg-blue-900/5 min-w-[80px]">Test<br/><span className="text-[10px] opacity-60">(15)</span></th>
+                                        <th className="px-2 py-2 text-center font-medium border-r border-slate-800 bg-blue-900/5 min-w-[80px]">Project<br/><span className="text-[10px] opacity-60">(15)</span></th>
+                                        <th className="px-2 py-2 text-center font-bold text-slate-200 border-r border-slate-800 bg-blue-900/20 min-w-[80px]">Total<br/><span className="text-[10px] opacity-60">(60)</span></th>
+                                        
+                                        {/* Final Columns */}
+                                        <th className="px-2 py-2 text-center font-medium border-r border-slate-800 bg-green-900/5 min-w-[80px]">Class<br/><span className="text-[10px] opacity-60">(50%)</span></th>
+                                        <th className="px-2 py-2 text-center font-medium border-r border-slate-800 bg-green-900/5 min-w-[80px]">Exam<br/><span className="text-[10px] opacity-60">(50%)</span></th>
+                                        <th className="px-2 py-2 text-center font-black text-white border-r border-slate-800 bg-green-900/20 min-w-[80px]">Total<br/><span className="text-[10px] opacity-60">(100%)</span></th>
+                                        <th className="px-2 py-2 text-center font-bold border-r border-slate-800 bg-green-900/5 min-w-[60px]">Grade</th>
+                                        <th className="px-2 py-2 text-center font-bold bg-green-900/5 min-w-[60px]">Pos</th>
                                     </tr>
                                  </thead>
-                                 <tbody className="divide-y divide-slate-800">
+                                 <tbody className="divide-y divide-slate-800 bg-slate-900">
                                     {studentsForReport.map(student => {
                                         const mark = marks[student.uid] || {};
                                         const totalClassScore = (mark.indivTest || 0) + (mark.groupWork || 0) + (mark.classTest || 0) + (mark.project || 0);
@@ -1379,25 +1623,25 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                                         const overallTotal = scaledClassScore + scaledExamScore;
                                         const grade = getGrade(overallTotal);
 
-                                        let gradeColor = 'text-gray-200';
-                                        if (grade === 'A' || grade === 'B+') gradeColor = 'text-green-400';
-                                        else if (grade === 'F') gradeColor = 'text-red-400';
+                                        let gradeColor = 'text-slate-400';
+                                        if (grade === 'A' || grade === 'B+') gradeColor = 'text-green-400 font-bold';
+                                        else if (grade === 'F') gradeColor = 'text-red-400 font-bold';
                                         else if (grade === 'D' || grade === 'D+') gradeColor = 'text-yellow-400';
 
                                         return (
-                                            <tr key={student.uid} className="even:bg-slate-800/50">
-                                                <td className="p-2 font-semibold text-left">{student.name}</td>
-                                                <td><input type="number" step="0.1" min="0" max="15" value={mark.indivTest ?? ''} onChange={e => handleMarkChange(student.uid, 'indivTest', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td><input type="number" step="0.1" min="0" max="15" value={mark.groupWork ?? ''} onChange={e => handleMarkChange(student.uid, 'groupWork', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td><input type="number" step="0.1" min="0" max="15" value={mark.classTest ?? ''} onChange={e => handleMarkChange(student.uid, 'classTest', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td><input type="number" step="0.1" min="0" max="15" value={mark.project ?? ''} onChange={e => handleMarkChange(student.uid, 'project', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td className="p-2 text-center font-semibold bg-slate-900/30">{totalClassScore.toFixed(1)}</td>
-                                                <td><input type="number" step="0.1" min="0" max="100" value={mark.endOfTermExams ?? ''} onChange={e => handleMarkChange(student.uid, 'endOfTermExams', e.target.value)} className="w-24 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td className="p-2 text-center font-bold bg-slate-900/30">{scaledClassScore.toFixed(1)}</td>
-                                                <td className="p-2 text-center font-bold bg-slate-900/30">{scaledExamScore.toFixed(1)}</td>
-                                                <td className="p-2 text-center font-bold text-lg bg-slate-900/30">{overallTotal.toFixed(1)}</td>
-                                                <td className={`p-2 text-center font-bold text-lg bg-slate-900/30 ${gradeColor}`}>{grade}</td>
-                                                <td className="p-2 text-center font-bold text-lg bg-slate-900/30">{mark.position}</td>
+                                            <tr key={student.uid} className="hover:bg-slate-800/50 transition-colors group">
+                                                <td className="px-4 py-3 font-medium text-slate-200 sticky left-0 bg-slate-900 group-hover:bg-slate-800 transition-colors border-r border-slate-800 shadow-[4px_0_8px_rgba(0,0,0,0.2)]">{student.name}</td>
+                                                <td className="p-2 text-center"><input type="number" step="0.1" min="0" max="15" value={mark.indivTest ?? ''} onChange={e => handleMarkChange(student.uid, 'indivTest', e.target.value)} className="w-16 p-1.5 bg-slate-800 border border-slate-700 rounded text-center focus:border-blue-500 outline-none focus:ring-1 focus:ring-blue-500 transition-all font-mono text-slate-300"/></td>
+                                                <td className="p-2 text-center"><input type="number" step="0.1" min="0" max="15" value={mark.groupWork ?? ''} onChange={e => handleMarkChange(student.uid, 'groupWork', e.target.value)} className="w-16 p-1.5 bg-slate-800 border border-slate-700 rounded text-center focus:border-blue-500 outline-none focus:ring-1 focus:ring-blue-500 transition-all font-mono text-slate-300"/></td>
+                                                <td className="p-2 text-center"><input type="number" step="0.1" min="0" max="15" value={mark.classTest ?? ''} onChange={e => handleMarkChange(student.uid, 'classTest', e.target.value)} className="w-16 p-1.5 bg-slate-800 border border-slate-700 rounded text-center focus:border-blue-500 outline-none focus:ring-1 focus:ring-blue-500 transition-all font-mono text-slate-300"/></td>
+                                                <td className="p-2 text-center"><input type="number" step="0.1" min="0" max="15" value={mark.project ?? ''} onChange={e => handleMarkChange(student.uid, 'project', e.target.value)} className="w-16 p-1.5 bg-slate-800 border border-slate-700 rounded text-center focus:border-blue-500 outline-none focus:ring-1 focus:ring-blue-500 transition-all font-mono text-slate-300"/></td>
+                                                <td className="p-2 text-center font-bold text-slate-300 bg-slate-800/30 border-r border-slate-800">{totalClassScore.toFixed(1)}</td>
+                                                <td className="p-2 text-center border-r border-slate-800 bg-slate-800/30"><input type="number" step="0.1" min="0" max="100" value={mark.endOfTermExams ?? ''} onChange={e => handleMarkChange(student.uid, 'endOfTermExams', e.target.value)} className="w-20 p-1.5 bg-slate-900 border border-purple-500/30 rounded text-center focus:border-purple-500 outline-none focus:ring-1 focus:ring-purple-500 transition-all font-mono font-bold text-purple-300"/></td>
+                                                <td className="p-2 text-center font-medium text-slate-400 border-r border-slate-800">{scaledClassScore.toFixed(1)}</td>
+                                                <td className="p-2 text-center font-medium text-slate-400 border-r border-slate-800">{scaledExamScore.toFixed(1)}</td>
+                                                <td className="p-2 text-center font-black text-white text-lg bg-green-500/5 border-r border-slate-800">{overallTotal.toFixed(1)}</td>
+                                                <td className={`p-2 text-center font-bold text-lg border-r border-slate-800 ${gradeColor}`}>{grade}</td>
+                                                <td className="p-2 text-center font-mono text-slate-500">{mark.position || '-'}</td>
                                             </tr>
                                         );
                                     })}
@@ -1408,17 +1652,14 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 );
             case 'past_questions':
                 return <BECEPastQuestionsView />;
-            case 'student_activity':
-                return <TeacherStudentActivity teacherClasses={teacherClasses} />;
-            case 'my_voice':
-                return <TeacherMyVoice userProfile={userProfile!} />;
             default:
                 return <div>Select a tab</div>;
         }
     };
     
+    // RENDER MAIN COMPONENT
     return (
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden bg-slate-950 text-slate-200 font-sans selection:bg-blue-500/30">
             <Sidebar 
                 isExpanded={isSidebarExpanded}
                 navItems={navItems}
@@ -1427,10 +1668,11 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 onClose={() => setIsSidebarExpanded(false)}
                 title="Teacher Portal"
             />
-            <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
+            <main className="flex-1 p-4 sm:p-6 overflow-y-auto relative custom-scrollbar">
                 {renderContent()}
             </main>
             
+            {/* Modals and other floating components */}
             <AIAssistant systemInstruction={aiSystemInstruction} suggestedPrompts={aiSuggestedPrompts} />
             {isAssignmentModalOpen && user && userProfile && (
                 <AssignmentModal
@@ -1521,6 +1763,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                     userProfile={userProfile}
                     initialContent={editingPresentation}
                     onStartLiveLesson={handleStartLiveLesson}
+                    setToast={setToast}
                 />
             )}
             {showVideoGenerator && user && userProfile && (
@@ -1531,6 +1774,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                     subjectsByClass={userProfile.subjectsByClass || null} 
                 />
             )}
+            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
             {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
             {contentToDelete && (
                  <ConfirmationModal
@@ -1554,7 +1798,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
              {showCreateParentModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
                     <Card className="w-full max-w-md">
-                        <TeacherCreateParentForm allStudents={students} />
+                        <TeacherCreateParentForm allStudents={students} setToast={setToast} />
                         <Button variant="secondary" onClick={() => setShowCreateParentModal(false)} className="w-full mt-2">Cancel</Button>
                     </Card>
                 </div>
@@ -1573,10 +1817,11 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                     subjectsByClass={userProfile.subjectsByClass || {}}
                     teacherId={user.uid}
                     onClose={() => { setShowCreateGroupModal(false); setEditingGroup(null); }}
+                    setToast={setToast}
                     editingGroup={editingGroup}
                 />
              )}
-              {viewingGroup && <GroupDetailsModal group={viewingGroup} onClose={() => setViewingGroup(null)} />}
+              {viewingGroup && <GroupDetailsModal group={viewingGroup} onClose={() => setViewingGroup(null)} setToast={setToast} />}
                <ConfirmationModal
                 isOpen={!!groupToDelete}
                 onClose={() => setGroupToDelete(null)}

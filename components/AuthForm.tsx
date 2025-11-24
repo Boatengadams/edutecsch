@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { firebaseAuth, db } from '../services/firebase';
 import Button from './common/Button';
@@ -54,66 +55,97 @@ const AuthForm: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-5xl grid md:grid-cols-2 bg-slate-900/60 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-800/50 overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-0 bg-slate-950 relative overflow-hidden font-sans">
+      {/* Professional Ambient Background */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black"></div>
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600"></div>
+      
+      <div className="w-full max-w-[1400px] min-h-[80vh] grid md:grid-cols-2 bg-slate-900/30 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-800/50 overflow-hidden z-10 m-4 sm:m-8">
         
-        {/* Brand Section */}
-        <div className="hidden md:flex flex-col justify-between p-12 bg-gradient-to-br from-blue-600/20 to-purple-600/20 relative overflow-hidden">
-          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+        {/* Brand Section (Left) */}
+        <div className="hidden md:flex flex-col justify-between p-12 lg:p-16 bg-gradient-to-br from-slate-900 to-slate-950 relative overflow-hidden">
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03]"></div>
+          
+          {/* Decorative Circles */}
+          <div className="absolute -top-24 -left-24 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl"></div>
+          <div className="absolute top-1/2 right-0 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl"></div>
+
           <div className="relative z-10">
-             <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-purple-300 mb-4">
-                {settings?.schoolName || 'UTOPIA INTERNATIONAL SCHOOL'}
+             <div className="flex items-center gap-3 mb-8">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="white" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 0 0-.491 6.347A48.627 48.627 0 0 1 12 20.904a48.627 48.627 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.57 50.57 0 0 0-2.658-.813A59.905 59.905 0 0 1 12 3.493a59.902 59.902 0 0 1 10.499 5.221 69.17 69.17 0 0 0-2.692.813m-15.482 0a50.553 50.553 0 0 1 9.566-5.382m5.916 5.382a50.572 50.572 0 0 0 9.566-5.382" /></svg>
+                </div>
+                <span className="text-xl font-bold text-slate-200 tracking-wide">EDUTEC PLATFORM</span>
+             </div>
+             
+             <h1 className="text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight tracking-tight">
+                {settings?.schoolName || 'UTOPIA INTERNATIONAL'}
              </h1>
-             <p className="text-lg text-slate-300 font-light leading-relaxed">
+             <p className="text-lg text-slate-400 font-light leading-relaxed max-w-md border-l-2 border-blue-500/50 pl-4">
                 {settings?.schoolMotto || 'Shaping the Future, One Student at a Time.'}
              </p>
           </div>
+          
           <div className="relative z-10 mt-12">
-             <div className="flex gap-2 mb-4">
-                 <div className="w-3 h-3 rounded-full bg-red-400/80"></div>
-                 <div className="w-3 h-3 rounded-full bg-yellow-400/80"></div>
-                 <div className="w-3 h-3 rounded-full bg-green-400/80"></div>
-             </div>
-             <div className="p-4 bg-slate-950/50 rounded-xl border border-slate-700/50 font-mono text-sm text-slate-400">
-                <p className="mb-2 text-green-400">$ init_system...</p>
-                <p className="mb-2">Loading modules...</p>
-                <p className="typing-effect">Ready to transform learning.</p>
+             <div className="p-6 bg-white/5 rounded-2xl border border-white/5 backdrop-blur-sm">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="flex -space-x-2">
+                        {[1,2,3].map(i => <div key={i} className="w-8 h-8 rounded-full bg-slate-700 border-2 border-slate-800"></div>)}
+                    </div>
+                    <span className="text-sm text-slate-400">+2k Active Learners</span>
+                </div>
+                <p className="text-sm text-slate-300 italic">"Empowering the next generation with AI-driven education."</p>
              </div>
           </div>
-          <p className="relative z-10 text-xs text-slate-500 mt-8">&copy; {new Date().getFullYear()} EduTec Platform</p>
+          
+          <div className="relative z-10 mt-auto pt-8 flex justify-between text-xs text-slate-600 font-mono uppercase tracking-widest">
+              <span>v2.0.4 Stable</span>
+              <span>Secure Connection</span>
+          </div>
         </div>
         
-        {/* Form Section */}
-        <div className="p-8 sm:p-12 flex flex-col justify-center relative">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 blur-3xl rounded-full -mr-10 -mt-10 pointer-events-none"></div>
-            
-            <div className="animate-fade-in-short">
-                <h2 className="text-3xl font-bold text-slate-100 mb-2">{isLogin ? 'Welcome Back' : 'Get Started'}</h2>
-                <p className="text-slate-400 mb-8">{isLogin ? 'Enter your credentials to access your account.' : 'Create your account to join the platform.'}</p>
+        {/* Form Section (Right) */}
+        <div className="p-8 sm:p-12 lg:p-20 flex flex-col justify-center relative bg-slate-950/50">
+            <div className="max-w-md mx-auto w-full">
+                <div className="mb-10 text-center md:text-left">
+                    <h2 className="text-3xl font-bold text-white mb-2">{isLogin ? 'Sign In' : 'Create Account'}</h2>
+                    <p className="text-slate-400">Access your dashboard to continue learning.</p>
+                </div>
                 
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <div className="space-y-1.5">
-                    <label htmlFor="email" className="block text-sm font-medium text-slate-300">Email</label>
-                    <input 
-                        id="email" 
-                        type="email" 
-                        value={email} 
-                        onChange={(e) => setEmail(e.target.value)} 
-                        required 
-                        className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all"
-                        placeholder="name@example.com"
-                    />
+                    <label htmlFor="email" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider ml-1">Email</label>
+                    <div className="relative group">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-blue-400 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M3 4a2 2 0 0 0-2 2v1.161l8.441 4.221a1.25 1.25 0 0 0 1.118 0L19 7.162V6a2 2 0 0 0-2-2H3Z" /><path d="M19 8.839l-7.77 3.885a2.75 2.75 0 0 1-2.46 0L1 8.839V14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.839Z" /></svg>
+                        </div>
+                        <input 
+                            id="email" 
+                            type="email" 
+                            value={email} 
+                            onChange={(e) => setEmail(e.target.value)} 
+                            required 
+                            className="w-full pl-11 pr-4 py-3.5 bg-slate-900/50 border border-slate-700 rounded-xl text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all"
+                            placeholder="name@school.edu"
+                        />
+                    </div>
                   </div>
                   <div className="space-y-1.5">
-                    <label htmlFor="password"  className="block text-sm font-medium text-slate-300">Password</label>
-                    <div className="relative">
+                    <div className="flex justify-between items-center ml-1">
+                        <label htmlFor="password" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">Password</label>
+                        {isLogin && <button type="button" className="text-xs text-blue-400 hover:text-blue-300 transition-colors">Forgot?</button>}
+                    </div>
+                    <div className="relative group">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-blue-400 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clipRule="evenodd" /></svg>
+                        </div>
                         <input 
                             id="password" 
                             type={showPassword ? 'text' : 'password'} 
                             value={password} 
                             onChange={(e) => setPassword(e.target.value)} 
                             required 
-                            className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all"
+                            className="w-full pl-11 pr-12 py-3.5 bg-slate-900/50 border border-slate-700 rounded-xl text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all"
                             placeholder="••••••••"
                         />
                         <button 
@@ -131,22 +163,27 @@ const AuthForm: React.FC = () => {
                   </div>
 
                   {error && (
-                      <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex gap-2 items-start">
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 flex-shrink-0 mt-0.5"><path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" /></svg>
-                          {error}
+                      <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex gap-2 items-start animate-shake">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 flex-shrink-0"><path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" /></svg>
+                          <span>{error}</span>
                       </div>
                   )}
 
-                  <Button type="submit" disabled={loading} className="w-full py-3.5 text-lg shadow-xl shadow-blue-600/20">
-                    {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
+                  <Button type="submit" disabled={loading} className="w-full !py-3.5 text-base font-bold shadow-lg shadow-blue-600/20 rounded-xl">
+                    {loading ? (
+                        <span className="flex items-center justify-center gap-2">
+                            <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            Processing...
+                        </span>
+                    ) : (isLogin ? 'Sign In' : 'Create Account')}
                   </Button>
                 </form>
 
                 <div className="mt-8 pt-6 border-t border-slate-800 text-center">
                   <p className="text-slate-400 text-sm">
                     {isLogin ? "Don't have an account?" : 'Already have an account?'}
-                    <button onClick={() => setIsLogin(!isLogin)} className="ml-2 font-semibold text-blue-400 hover:text-blue-300 transition-colors">
-                      {isLogin ? 'Sign Up' : 'Sign In'}
+                    <button onClick={() => setIsLogin(!isLogin)} className="ml-2 font-bold text-blue-400 hover:text-blue-300 transition-colors hover:underline">
+                      {isLogin ? 'Register Now' : 'Login'}
                     </button>
                   </p>
                 </div>

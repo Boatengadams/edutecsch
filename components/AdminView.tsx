@@ -485,42 +485,109 @@ export const AdminView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpan
         switch(activeTab) {
             case 'dashboard':
                 return (
-                    <div className="space-y-6">
-                        <h2 className="text-3xl font-bold">Admin Dashboard</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <Card>
-                                <p className="text-sm text-gray-400">Total Students</p>
-                                <p className="text-3xl font-bold">{allUsers.filter(u => u.role === 'student').length}</p>
-                            </Card>
-                            <Card>
-                                <p className="text-sm text-gray-400">Total Teachers</p>
-                                <p className="text-3xl font-bold">{allUsers.filter(u => u.role === 'teacher').length}</p>
-                            </Card>
-                             <Card>
-                                <p className="text-sm text-gray-400">Pending Approvals</p>
-                                <p className="text-3xl font-bold text-yellow-400">{allUsers.filter(u => u.status === 'pending').length}</p>
-                            </Card>
+                    <div className="space-y-8">
+                        {/* Executive Header */}
+                        <div className="relative bg-slate-900 border border-slate-800 rounded-3xl p-8 overflow-hidden">
+                            <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
+                            <div className="relative z-10 flex flex-col md:flex-row justify-between items-center">
+                                <div>
+                                    <h2 className="text-3xl font-bold text-white mb-2">Executive Command Center</h2>
+                                    <p className="text-slate-400">System Overview & Administrative Controls</p>
+                                </div>
+                                <div className="flex items-center gap-4 mt-4 md:mt-0">
+                                    <div className="bg-slate-800 px-4 py-2 rounded-xl border border-slate-700">
+                                        <span className="block text-xs text-slate-500 uppercase tracking-wider font-bold">Status</span>
+                                        <span className="block text-green-400 font-mono">OPERATIONAL</span>
+                                    </div>
+                                    <div className="bg-slate-800 px-4 py-2 rounded-xl border border-slate-700">
+                                        <span className="block text-xs text-slate-500 uppercase tracking-wider font-bold">License</span>
+                                        <span className={`block font-mono ${subscriptionStatus?.isActive ? 'text-blue-400' : 'text-red-400'}`}>
+                                            {subscriptionStatus?.isActive ? 'ACTIVE' : 'EXPIRED'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <Card>
-                                <h3 className="text-lg font-bold mb-4">Quick Actions</h3>
+
+                        {/* Core Metrics Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <div className="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-6 hover:border-blue-500/30 transition-all group">
+                                <div className="flex justify-between items-start mb-2">
+                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Students</span>
+                                    <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400 group-hover:text-white group-hover:bg-blue-500 transition-colors">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path d="M10 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6 8a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM1.49 15.326a.78.78 0 0 1-.358-.442 3 3 0 0 1 4.308-3.516 6.484 6.484 0 0 0-1.905 3.959c-.023.222-.014.442.025.654a4.97 4.97 0 0 1-2.07-.655ZM16.44 15.98a4.97 4.97 0 0 0 2.07-.654.78.78 0 0 0 .357-.442 3 3 0 0 0-4.308-3.517 6.484 6.484 0 0 1 1.907 3.96 2.32 2.32 0 0 1-.026.654ZM18 8a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM5.304 16.19a.844.844 0 0 1-.277-.71 5 5 0 0 1 9.947 0 .843.843 0 0 1-.277.71A6.975 6.975 0 0 1 10 18a6.974 6.974 0 0 1-4.696-1.81Z" /></svg>
+                                    </div>
+                                </div>
+                                <span className="text-3xl font-bold text-white">{allUsers.filter(u => u.role === 'student').length}</span>
+                            </div>
+                            <div className="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-6 hover:border-purple-500/30 transition-all group">
+                                <div className="flex justify-between items-start mb-2">
+                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Teachers</span>
+                                    <div className="p-2 bg-purple-500/10 rounded-lg text-purple-400 group-hover:text-white group-hover:bg-purple-500 transition-colors">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M9.661 2.237a.531.531 0 0 1 .678 0 11.947 11.947 0 0 0 7.078 2.749.5.5 0 0 1 .479.425c.069.452.105.91.105 1.374 0 5.153-3.02 9.815-7.786 11.985a.53.53 0 0 1-.434 0C4.92 16.59 1.9 11.928 1.9 6.785c0-.463.036-.922.105-1.374a.5.5 0 0 1 .479-.425 11.947 11.947 0 0 0 7.177-2.75Z" clipRule="evenodd" /></svg>
+                                    </div>
+                                </div>
+                                <span className="text-3xl font-bold text-white">{allUsers.filter(u => u.role === 'teacher').length}</span>
+                            </div>
+                            <div className="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-6 hover:border-yellow-500/30 transition-all group">
+                                <div className="flex justify-between items-start mb-2">
+                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Pending</span>
+                                    <div className="p-2 bg-yellow-500/10 rounded-lg text-yellow-400 group-hover:text-white group-hover:bg-yellow-500 transition-colors">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clipRule="evenodd" /></svg>
+                                    </div>
+                                </div>
+                                <span className="text-3xl font-bold text-white">{allUsers.filter(u => u.status === 'pending').length}</span>
+                            </div>
+                            <div className="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-6 hover:border-green-500/30 transition-all group">
+                                <div className="flex justify-between items-start mb-2">
+                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">System Health</span>
+                                    <div className="p-2 bg-green-500/10 rounded-lg text-green-400 group-hover:text-white group-hover:bg-green-500 transition-colors">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M3.5 2A1.5 1.5 0 0 0 2 3.5V15a3 3 0 1 0 3 3V3.5A1.5 1.5 0 0 0 3.5 2Zm4.5 0A1.5 1.5 0 0 0 6.5 3.5V15a3 3 0 1 0 3 3V3.5A1.5 1.5 0 0 0 8 2Zm4.5 0A1.5 1.5 0 0 0 11 3.5V15a3 3 0 1 0 3 3V3.5A1.5 1.5 0 0 0 12.5 2Zm4.5 0A1.5 1.5 0 0 0 15.5 3.5V15a3 3 0 1 0 3 3V3.5A1.5 1.5 0 0 0 17 2Z" clipRule="evenodd" /></svg>
+                                    </div>
+                                </div>
+                                <span className="text-lg font-bold text-green-400">99.9% Uptime</span>
+                            </div>
+                        </div>
+
+                        {/* Quick Actions Panel */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-6">
+                                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                                    <span className="w-1.5 h-6 bg-blue-600 rounded-full"></span>
+                                    User Administration
+                                </h3>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <Button variant="secondary" onClick={() => setShowCreateUserForm(true)}>Add User</Button>
-                                    <Button variant="secondary" onClick={() => setActiveTab('online_monitor')}>Monitor Activity</Button>
-                                    <Button variant="secondary" onClick={() => setActiveTab('approval_queue')}>Review Approvals</Button>
-                                    <Button variant="secondary" onClick={() => setActiveTab('calendar')}>Event Planner</Button>
+                                    <button onClick={() => setShowCreateUserForm(true)} className="p-4 bg-slate-800 rounded-xl border border-slate-700 hover:bg-blue-600 hover:border-blue-500 transition-all group text-left">
+                                        <span className="block text-slate-300 font-bold group-hover:text-white mb-1">Create User</span>
+                                        <span className="text-xs text-slate-500 group-hover:text-blue-200">Add single user manualy</span>
+                                    </button>
+                                    <button onClick={() => { setRoleToRegister('student'); setShowSnapRegister(true); }} className="p-4 bg-slate-800 rounded-xl border border-slate-700 hover:bg-purple-600 hover:border-purple-500 transition-all group text-left">
+                                        <span className="block text-slate-300 font-bold group-hover:text-white mb-1">Snap Register</span>
+                                        <span className="text-xs text-slate-500 group-hover:text-purple-200">Bulk add via photo</span>
+                                    </button>
+                                    <button onClick={() => setActiveTab('approval_queue')} className="p-4 bg-slate-800 rounded-xl border border-slate-700 hover:bg-yellow-600 hover:border-yellow-500 transition-all group text-left">
+                                        <span className="block text-slate-300 font-bold group-hover:text-white mb-1">Review Queue</span>
+                                        <span className="text-xs text-slate-500 group-hover:text-yellow-200">{allUsers.filter(u => u.status === 'pending').length} pending requests</span>
+                                    </button>
                                 </div>
-                            </Card>
-                             <Card>
-                                <h3 className="text-lg font-bold mb-4">System Status</h3>
-                                <div className="flex items-center justify-between p-3 bg-slate-800 rounded-lg mb-2">
-                                    <span className="text-gray-300">Subscription</span>
-                                    <span className={`px-2 py-1 text-xs rounded-full ${subscriptionStatus?.isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                                        {subscriptionStatus?.isActive ? 'Active' : 'Inactive'}
-                                    </span>
+                            </div>
+
+                            <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-6">
+                                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                                    <span className="w-1.5 h-6 bg-green-600 rounded-full"></span>
+                                    System Controls
+                                </h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <button onClick={() => setActiveTab('online_monitor')} className="p-4 bg-slate-800 rounded-xl border border-slate-700 hover:bg-green-600 hover:border-green-500 transition-all group text-left">
+                                        <span className="block text-slate-300 font-bold group-hover:text-white mb-1">Live Monitor</span>
+                                        <span className="text-xs text-slate-500 group-hover:text-green-200">View active sessions</span>
+                                    </button>
+                                    <button onClick={() => setActiveTab('calendar')} className="p-4 bg-slate-800 rounded-xl border border-slate-700 hover:bg-orange-600 hover:border-orange-500 transition-all group text-left">
+                                        <span className="block text-slate-300 font-bold group-hover:text-white mb-1">Event Planner</span>
+                                        <span className="text-xs text-slate-500 group-hover:text-orange-200">Manage academic calendar</span>
+                                    </button>
                                 </div>
-                                <p className="text-xs text-gray-400">Plan: {subscriptionStatus?.planType?.toUpperCase() || 'NONE'}</p>
-                            </Card>
+                            </div>
                         </div>
                     </div>
                 );

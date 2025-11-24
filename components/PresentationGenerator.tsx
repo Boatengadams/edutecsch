@@ -24,6 +24,33 @@ const useDebounce = (callback: (...args: any[]) => void, delay: number) => {
     }, [callback, delay]);
 };
 
+const cleanJson = (text: string) => {
+    return text.replace(/```json\n?|```/g, '').trim();
+};
+
+// Helper to ensure content is a flat array of strings (Firestore requirement)
+const sanitizeSlides = (slides: any[]): Slide[] => {
+    return slides.map(slide => {
+        let safeContent: string[] = [];
+        if (Array.isArray(slide.content)) {
+            // Flatten deeply nested arrays and convert non-strings to strings
+            safeContent = slide.content.flat(Infinity).map((item: any) => 
+                (item === null || item === undefined) ? "" : String(item)
+            ).filter((str: string) => str.trim() !== "");
+        } else if (typeof slide.content === 'string') {
+            safeContent = [slide.content];
+        }
+
+        return {
+            title: slide.title || "Untitled Slide",
+            content: safeContent,
+            imageUrl: slide.imageUrl || "",
+            imageStyle: slide.imageStyle || 'cover',
+            audioUrl: slide.audioUrl || undefined
+        };
+    });
+};
+
 interface PresentationGeneratorProps {
   onClose: () => void;
   classes: string[];
@@ -32,50 +59,46 @@ interface PresentationGeneratorProps {
   userProfile: UserProfile | null;
   initialContent?: GeneratedContent | null;
   onStartLiveLesson: (content: GeneratedContent) => void;
-  setToast?: (toast: { message: string, type: 'success' | 'error' } | null) => void; // Made optional as we use useToast internally now
 }
 
 export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ onClose, classes, subjectsByClass, user, userProfile, initialContent = null, onStartLiveLesson }) => {
   const { showToast } = useToast();
-  // Form state
   const [targetClasses, setTargetClasses] = useState<string[]>(initialContent?.classes || (classes.length > 0 ? [classes[0]] : []));
   const [subject, setSubject] = useState(initialContent?.subject || '');
   const [topic, setTopic] = useState(initialContent?.topic || '');
   const [audience, setAudience] = useState(initialContent?.audience || '');
   const [subjectsForClass, setSubjectsForClass] = useState<string[]>([]);
   
-  // Content state (local buffer for edits, synced with Firestore)
   const [presentation, setPresentation] = useState<Presentation | null>(initialContent?.presentation || null);
-  const [quiz, setQuiz] = useState<Quiz | null>(initialContent?.quiz || null);
+  const [quiz, setQuiz] = useState<Quiz | null>(null);
   
-  // UI/Control state
   const [currentSlide, setCurrentSlide] = useState(0);
   const [savedContentId, setSavedContentId] = useState<string | null>(initialContent?.id || null);
   const [view, setView] = useState<'form' | 'presentation' | 'quiz'>(
     initialContent ? 'presentation' : 'form'
   );
   
-  // Loading/Error state
   const [loadingState, setLoadingState] = useState<'idle' | 'generating_presentation' | 'generating_quiz' | 'saving'>('idle');
   const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState('');
-  const [imageLoadStatus, setImageLoadStatus] = useState<Record<number, 'loading' | 'loaded' | 'error'>>({});
 
-  // Refs for managing updates
   const isUpdatingFromFirestore = useRef(false);
   const isInitialMount = useRef(true);
 
   useEffect(() => {
     if (subjectsByClass && targetClasses.length > 0) {
         const subjectsOfSelectedClasses = targetClasses.map(c => subjectsByClass[c] || []);
-        // Find common subjects (intersection)
-        const commonSubjects = subjectsOfSelectedClasses.reduce((a, b) => a.filter(c => b.includes(c)));
-        setSubjectsForClass(commonSubjects);
+        if (subjectsOfSelectedClasses.length > 0) {
+            const commonSubjects = subjectsOfSelectedClasses.reduce((a, b) => a.filter(c => b.includes(c)));
+            setSubjectsForClass(commonSubjects);
 
-        if (!initialContent && isInitialMount.current) {
-            setSubject(commonSubjects[0] || '');
-        } else if (subject && !commonSubjects.includes(subject)) {
-             setSubject(commonSubjects[0] || '');
+            if (!initialContent && isInitialMount.current) {
+                setSubject(commonSubjects[0] || '');
+            } else if (subject && !commonSubjects.includes(subject)) {
+                setSubject(commonSubjects[0] || '');
+            }
+        } else {
+            setSubjectsForClass([]);
         }
     } else {
         setSubjectsForClass([]);
@@ -86,19 +109,23 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
     }
   }, [targetClasses, subjectsByClass, initialContent, subject]);
 
-  // Debounced save function
   const debouncedSave = useDebounce(async (newPresentation: Presentation, newQuiz: Quiz | null, newTopic: string, newAudience: string) => {
     if (isUpdatingFromFirestore.current || !savedContentId) return;
     try {
+      // Strictly sanitize slides again before saving to Firestore
+      const safeSlides = sanitizeSlides(newPresentation.slides);
+      const safePresentation = { slides: safeSlides };
+      
+      const safeQuiz = newQuiz ? JSON.parse(JSON.stringify(newQuiz)) : null;
+
       await db.collection('generatedContent').doc(savedContentId).update({
-        presentation: newPresentation,
-        quiz: newQuiz,
+        presentation: safePresentation,
+        quiz: safeQuiz,
         topic: newTopic,
-        audience: newAudience,
+        audience: newAudience || null,
       });
     } catch (err) {
       console.error("Debounced save failed: ", err);
-      setError("Failed to save recent changes.");
     }
   }, 1000);
 
@@ -121,7 +148,6 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         
-        // Step 1: Generate Text Content
         setLoadingMessage('Generating presentation text...');
         const audienceInstruction = audience ? `The presentation should be tailored for the following audience: ${audience}.` : '';
         const textPrompt = `Create a professional educational presentation for classes '${targetClasses.join(', ')}' on the subject '${subject}'. The topic is '${topic}'. 
@@ -133,7 +159,7 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
         Do not include image URLs. Return ONLY the valid JSON object with a root "slides" key.`;
 
         const textResponse = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
+            model: 'gemini-2.5-flash', // Switched to faster model
             contents: textPrompt,
             config: {
                 responseMimeType: 'application/json',
@@ -157,51 +183,32 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
             }
         });
 
-        const presentationTextContent = JSON.parse(textResponse.text) as { slides: Omit<Slide, 'imageUrl'>[] };
+        const cleanedJson = cleanJson(textResponse.text);
+        const presentationTextContent = JSON.parse(cleanedJson) as { slides: Omit<Slide, 'imageUrl'>[] };
         
-        // Step 2: Generate Image for each slide
-        const slidesWithImages: Slide[] = [];
-        for (let i = 0; i < presentationTextContent.slides.length; i++) {
-            const slide = presentationTextContent.slides[i];
-            setLoadingMessage(`Generating image ${i + 1} of ${presentationTextContent.slides.length}...`);
-            
-            const imagePrompt = `A high-quality, photorealistic, educational image for a presentation slide. The slide title is "${slide.title}". The key points on the slide are: "${slide.content.join('; ')}". The image should be simple, clear, and directly illustrate the main concept of the slide.`;
+        // Directly map text content to slides, skipping image generation
+        const slidesWithImages: Slide[] = presentationTextContent.slides.map(slide => {
+            const sanitizedContent = Array.isArray(slide.content)
+                ? slide.content.flat(Infinity).map(item => String(item || '')).filter(Boolean)
+                : [];
 
-            const imageResponse = await ai.models.generateContent({
-                model: 'gemini-2.5-flash-image',
-                contents: { parts: [{ text: imagePrompt }] },
-                config: {
-                    responseModalities: [Modality.IMAGE],
-                },
-            });
-            
-            let imageUrl = ''; 
-            const parts = imageResponse.candidates?.[0]?.content?.parts || [];
-            for (const part of parts) {
-                if (part.inlineData) {
-                    imageUrl = `data:image/png;base64,${part.inlineData.data}`;
-                    break;
-                }
-            }
-            
-            slidesWithImages.push({
-                title: slide.title,
-                content: slide.content,
-                imageUrl: imageUrl,
+            return {
+                title: slide.title || "Untitled Slide",
+                content: sanitizedContent,
+                imageUrl: "", // No image for text-only lesson
                 imageStyle: 'cover'
-            });
-        }
+            };
+        });
 
         const newPresentation: Presentation = { slides: slidesWithImages };
         
-        // Step 3: Generate Quiz
         setLoadingMessage('Generating quiz...');
         const quizPrompt = `Based on the topic "${topic}", generate a 5-question multiple choice quiz.
         Return ONLY a valid JSON object with a root "quiz" key containing an array of questions.
         Each question must have: "question", "options" (array of 4 strings), "correctAnswer" (string matching one option).`;
 
         const quizResponse = await ai.models.generateContent({
-             model: 'gemini-3-pro-preview',
+             model: 'gemini-2.5-flash', // Switched to faster model
              contents: quizPrompt,
              config: {
                  responseMimeType: 'application/json',
@@ -225,13 +232,31 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
              }
         });
         
-        const quizData = JSON.parse(quizResponse.text) as Quiz;
+        const cleanedQuizJson = cleanJson(quizResponse.text);
+        const quizDataRaw = JSON.parse(cleanedQuizJson) as Quiz;
+        
+        let quizData: Quiz | null = null;
+        if (quizDataRaw && Array.isArray(quizDataRaw.quiz)) {
+            quizData = {
+                quiz: quizDataRaw.quiz.map(q => ({
+                    question: q.question || "Question text missing",
+                    options: Array.isArray(q.options) 
+                        ? q.options.flat(Infinity).map(opt => String(opt)).filter(Boolean)
+                        : [],
+                    correctAnswer: q.correctAnswer || ""
+                }))
+            };
+        }
 
         setPresentation(newPresentation);
         setQuiz(quizData);
         setView('presentation');
         
-        // Save to Firestore
+        // Sanitize before saving to avoid "invalid nested entity" error
+        const safeSlides = sanitizeSlides(newPresentation.slides);
+        const safePresentation = { slides: safeSlides };
+        const safeQuiz = quizData ? JSON.parse(JSON.stringify(quizData)) : null;
+
         const newContentRef = await db.collection('generatedContent').add({
             teacherId: user.uid,
             teacherName: userProfile.name,
@@ -239,8 +264,8 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
             subject,
             topic,
             audience: audience || null,
-            presentation: newPresentation,
-            quiz: quizData,
+            presentation: safePresentation,
+            quiz: safeQuiz,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             collaboratorUids: [],
             collaborators: [],
@@ -250,7 +275,24 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
 
     } catch (err: any) {
         console.error("Generation Error:", err);
-        setError(`Failed to generate content: ${err.message}`);
+        let errorMessage = err.message;
+        if (errorMessage && errorMessage.includes("exceeds the maximum allowed size")) {
+             errorMessage = "The generated presentation is too large to save directly. Please try again with fewer slides.";
+        } else if (errorMessage && errorMessage.includes("500")) {
+             errorMessage = "The AI service encountered a temporary error. Please try again.";
+        } else {
+             // Try to extract nested error message if JSON
+             try {
+                 const parsedErr = JSON.parse(errorMessage);
+                 if (parsedErr.error && parsedErr.error.message) {
+                     errorMessage = parsedErr.error.message;
+                 }
+             } catch (e) {
+                 // not json, use original
+             }
+             errorMessage = `Failed to generate content: ${errorMessage}`;
+        }
+        setError(errorMessage);
     } finally {
         setLoadingState('idle');
         setLoadingMessage('');
@@ -287,7 +329,7 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
               <input type="text" value={audience} onChange={e => setAudience(e.target.value)} placeholder="e.g. Fun and engaging for kids" className="w-full mt-1 p-2 bg-slate-700 rounded-md border border-slate-600" />
           </div>
           <Button type="submit" disabled={loadingState !== 'idle'} className="w-full">
-              {loadingState !== 'idle' ? <span className="flex items-center justify-center gap-2"><Spinner /> {loadingMessage}</span> : 'Generate Presentation'}
+              {loadingState !== 'idle' ? <span className="flex items-center justify-center gap-2"><Spinner /> {loadingMessage}</span> : 'Generate Presentation (Text Only)'}
           </Button>
           {error && <p className="text-red-400 text-sm text-center">{error}</p>}
       </form>
@@ -306,10 +348,12 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
                   </div>
               </div>
               <div className="flex-grow bg-slate-900 rounded-xl overflow-hidden relative flex flex-col md:flex-row">
-                  <div className="w-full md:w-1/2 h-64 md:h-auto relative bg-black">
-                      {slide.imageUrl && <img src={slide.imageUrl} alt="Slide" className="w-full h-full object-contain" />}
-                  </div>
-                  <div className="w-full md:w-1/2 p-6 overflow-y-auto">
+                  {slide.imageUrl && (
+                      <div className="w-full md:w-1/2 h-64 md:h-auto relative bg-black">
+                          <img src={slide.imageUrl} alt="Slide" className="w-full h-full object-contain" />
+                      </div>
+                  )}
+                  <div className={`w-full ${slide.imageUrl ? 'md:w-1/2' : ''} p-6 overflow-y-auto`}>
                       <h2 className="text-2xl font-bold mb-4">{slide.title}</h2>
                       <ul className="list-disc list-inside space-y-2 text-lg text-slate-300">
                           {slide.content.map((point, idx) => <li key={idx}>{point}</li>)}

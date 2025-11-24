@@ -344,68 +344,94 @@ export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIs
     }, [selectedChildProfile, assignments, submissions]);
 
     const renderDashboard = () => (
-        <div className="space-y-6">
+        <div className="space-y-8">
+             {/* Overview Banner */}
+             <div className="relative p-8 rounded-3xl bg-gradient-to-r from-blue-900 to-slate-900 border border-slate-800 overflow-hidden shadow-2xl">
+                <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5"></div>
+                <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div>
+                        <h2 className="text-3xl font-bold text-white mb-1">{selectedChildProfile?.name}</h2>
+                        <p className="text-blue-300 font-medium">{selectedChildProfile?.class}</p>
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-md border border-white/10 px-4 py-2 rounded-xl">
+                        <span className="text-xs text-slate-400 uppercase tracking-wider font-bold block">Academic Standing</span>
+                        <span className="text-lg font-bold text-green-400">Good Progress</span>
+                    </div>
+                </div>
+             </div>
+
+             {/* Stats Grid */}
              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                <Card><div className="text-center"><p className="text-sm text-gray-400">Average Grade</p><p className="text-3xl font-bold text-blue-400">{dashboardStats.averageGrade}{dashboardStats.averageGrade !== 'N/A' && '%'}</p></div></Card>
-                <Card><div className="text-center"><p className="text-sm text-gray-400">On-Time Rate</p><p className="text-3xl font-bold text-green-400">{dashboardStats.onTimeRate}{dashboardStats.onTimeRate !== 'N/A' && '%'}</p></div></Card>
-                <Card><div className="text-center"><p className="text-sm text-gray-400">Pending Assignments</p><p className="text-3xl font-bold text-yellow-400">{dashboardStats.pendingCount}</p></div></Card>
+                <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 hover:border-blue-500/30 transition-all">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Average Grade</p>
+                    <p className="text-4xl font-bold text-blue-400">{dashboardStats.averageGrade}{dashboardStats.averageGrade !== 'N/A' && '%'}</p>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 hover:border-green-500/30 transition-all">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">On-Time Submission</p>
+                    <p className="text-4xl font-bold text-green-400">{dashboardStats.onTimeRate}{dashboardStats.onTimeRate !== 'N/A' && '%'}</p>
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 hover:border-yellow-500/30 transition-all">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Pending Tasks</p>
+                    <p className="text-4xl font-bold text-yellow-400">{dashboardStats.pendingCount}</p>
+                </div>
             </div>
 
             {publishedFlyers.length > 0 && (
-                <Card>
-                    <h3 className="text-xl font-semibold mb-4">School Notice Board</h3>
-                    <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
+                <div className="bg-slate-900/30 border border-slate-800 rounded-2xl p-6">
+                    <h3 className="text-lg font-bold mb-4 text-white flex items-center gap-2">
+                        <span className="text-blue-500">📢</span> School Notices
+                    </h3>
+                    <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
                         {publishedFlyers.map(flyer => (
                             <button 
                                 key={flyer.id} 
                                 onClick={() => setSelectedFlyer(flyer)}
-                                className="flex-shrink-0 w-48 group relative rounded-lg overflow-hidden border border-slate-700 hover:border-blue-500 transition-all"
+                                className="flex-shrink-0 w-56 group relative rounded-xl overflow-hidden border border-slate-700 hover:border-blue-500 transition-all shadow-lg"
                             >
-                                <div className="aspect-[3/4] relative">
-                                    <img src={flyer.imageUrl} alt={flyer.title} className="w-full h-full object-cover" />
-                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <span className="text-white text-sm font-bold">View Flyer</span>
+                                <div className="aspect-[16/9] relative">
+                                    <img src={flyer.imageUrl} alt={flyer.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent opacity-80"></div>
+                                    <div className="absolute bottom-0 left-0 p-3">
+                                        <p className="font-bold text-sm truncate text-white">{flyer.title}</p>
+                                        <p className="text-[10px] text-slate-400">{flyer.createdAt?.toDate().toLocaleDateString()}</p>
                                     </div>
-                                </div>
-                                <div className="p-2 bg-slate-800 text-left">
-                                    <p className="font-bold text-sm truncate text-slate-200">{flyer.title}</p>
-                                    <p className="text-xs text-gray-500">{flyer.createdAt?.toDate().toLocaleDateString()}</p>
                                 </div>
                             </button>
                         ))}
                     </div>
-                </Card>
+                </div>
             )}
 
-            {childsGroup && (
-                <Card fullHeight={false}>
-                    <h3 className="text-xl font-semibold mb-2">Group Project</h3>
-                    <div className="p-3 bg-slate-700 rounded-lg">
-                        <p className="font-bold">{childsGroup.assignmentTitle}</p>
-                        <div className="flex justify-between items-center mt-2 text-sm">
-                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${childsGroup.isSubmitted ? 'bg-green-500' : 'bg-yellow-500'}`}>
-                                {childsGroup.isSubmitted ? 'Submitted' : 'In Progress'}
-                            </span>
-                            {childsGroup.grade && <span className="font-bold text-blue-400">Grade: {childsGroup.grade}</span>}
-                        </div>
-                        {childsGroup.feedback && <p className="text-xs italic text-gray-300 mt-2 bg-slate-800 p-2 rounded-md">"{childsGroup.feedback}"</p>}
-                    </div>
-                </Card>
-            )}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                    <h3 className="text-xl font-semibold mb-4">Grade History (Last 10)</h3>
-                    <div className="h-72">
+                <div className="bg-slate-800/30 border border-slate-700 rounded-2xl p-6">
+                    <h3 className="text-lg font-semibold mb-4 text-slate-200">Performance Trend</h3>
+                    <div className="h-64">
                         <LineChart data={dashboardStats.gradeHistoryChartData.slice(-10)} />
                     </div>
-                </Card>
-                <Card>
-                    <h3 className="text-xl font-semibold mb-4 text-center">Submission Timeliness</h3>
-                    <div className="h-72">
+                </div>
+                <div className="bg-slate-800/30 border border-slate-700 rounded-2xl p-6">
+                    <h3 className="text-lg font-semibold mb-4 text-slate-200 text-center">Submission Habits</h3>
+                    <div className="h-64">
                         <PieChart data={dashboardStats.timelinessChartData} />
                     </div>
-                </Card>
+                </div>
             </div>
+            
+            {childsGroup && (
+                <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-2xl p-6 relative overflow-hidden">
+                    <div className="absolute right-0 top-0 p-4 opacity-10 text-6xl">🤝</div>
+                    <h3 className="text-lg font-bold text-white mb-2 relative z-10">Active Group Project</h3>
+                    <div className="relative z-10">
+                        <p className="text-blue-300 font-semibold text-lg">{childsGroup.assignmentTitle}</p>
+                        <div className="flex items-center gap-3 mt-3">
+                            <span className={`px-3 py-1 text-xs font-bold rounded-full ${childsGroup.isSubmitted ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                                {childsGroup.isSubmitted ? 'Submitted' : 'In Progress'}
+                            </span>
+                            {childsGroup.grade && <span className="text-sm font-bold text-slate-300">Grade: {childsGroup.grade}</span>}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
     
@@ -488,20 +514,20 @@ export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIs
              <Sidebar 
                 isExpanded={isSidebarExpanded}
                 navItems={[
-                    { key: 'overview', label: 'Overview', icon: <span className="text-xl">📊</span> },
-                    { key: 'notifications', label: 'Notifications', icon: <span className="text-xl">🔔</span> },
-                    { key: 'timetable', label: 'Timetable', icon: <span className="text-xl">🗓️</span> },
-                    { key: 'attendance', label: 'Attendance', icon: <span className="text-xl">📅</span> },
-                    { key: 'progress', label: 'Progress', icon: <span className="text-xl">📈</span> },
-                    { key: 'messages', label: <span className="flex justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full px-1.5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: <span className="text-xl">💬</span> },
-                    { key: 'profile', label: 'Student Profile', icon: <span className="text-xl">👤</span> },
+                    { key: 'overview', label: 'Overview', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h12A2.25 2.25 0 0 0 20.25 14.25V3M3.75 21h16.5M16.5 3.75h.008v.008H16.5V3.75Z" /></svg> },
+                    { key: 'notifications', label: 'Notifications', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" /></svg> },
+                    { key: 'timetable', label: 'Timetable', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5m-9-6h.008v.008H12v-.008ZM12 15h.008v.008H12V15Zm0 2.25h.008v.008H12v-.008ZM9.75 15h.008v.008H9.75V15Zm0 2.25h.008v.008H9.75v-.008ZM7.5 15h.008v.008H7.5V15Zm0 2.25h.008v.008H7.5v-.008Zm6.75-4.5h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V15Zm0 2.25h.008v.008h-.008v-.008Zm2.25-4.5h.008v.008H16.5v-.008Zm0 2.25h.008v.008H16.5V15Z" /></svg> },
+                    { key: 'attendance', label: 'Attendance', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
+                    { key: 'progress', label: 'Progress', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" /></svg> },
+                    { key: 'messages', label: <span className="flex justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full px-1.5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" /></svg> },
+                    { key: 'profile', label: 'Student Profile', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg> },
                 ]}
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
                 onClose={() => setIsSidebarExpanded(false)}
                 title="Parent Portal"
             />
-            <main className="flex-1 flex flex-col overflow-hidden relative">
+            <main className="flex-1 flex flex-col overflow-hidden relative bg-slate-950">
                 {/* Child Selector Header if multiple children */}
                 {childrenProfiles.length > 1 && (
                     <div className="flex-shrink-0 bg-slate-900 border-b border-slate-800 p-2 flex gap-2 overflow-x-auto">

@@ -1,3 +1,4 @@
+
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
 import 'firebase/compat/firestore';
@@ -30,21 +31,6 @@ if (!firebase.apps.length) {
 const firebaseAuth = firebase.auth();
 const db = firebase.firestore();
 const rtdb = firebase.database(); // Initialize RTDB
-
-// Enable offline persistence for a better offline experience.
-// This allows the app to work seamlessly even with intermittent connectivity.
-// `synchronizeTabs: true` ensures data consistency across multiple open tabs.
-db.enablePersistence({synchronizeTabs: true})
-  .catch((err) => {
-    if (err.code == 'failed-precondition') {
-      // This can happen if multiple tabs are open and can't coordinate.
-      console.warn('Firestore persistence failed: multiple tabs open and could not sync.');
-    } else if (err.code == 'unimplemented') {
-      // The current browser does not support all of the
-      // features required to enable persistence.
-      console.warn('Firestore persistence not available in this browser.');
-    }
-  });
 
 
 const storage = firebase.storage();

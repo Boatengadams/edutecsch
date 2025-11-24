@@ -79,10 +79,11 @@ service cloud.firestore {
     // USERS
     // ---------------------
     match /users/{userId} {
-
-      // FIX: Allow users to read their own profile FIRST to prevent recursion issues for pending users.
-      // Then allow approved users to read other profiles.
-      allow read: if (isSignedIn() && request.auth.uid == userId) || isCallerApproved();
+      // Allow a user to read their own profile explicitly without checking approval status
+      allow get: if isSignedIn() && (request.auth.uid == userId || isCallerApproved());
+      
+      // Allow listing users only if the caller is approved (e.g. Admins/Teachers/Approved Students)
+      allow list: if isCallerApproved();
 
       allow create: if
         (isSignedIn() && request.auth.uid == userId)
