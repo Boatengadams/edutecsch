@@ -321,14 +321,14 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
 
   const navItems = [
       { key: 'dashboard', label: 'Dashboard', icon: <span className="text-xl">📊</span> },
-      { key: 'assignments', label: 'Mission Log', icon: <span className="text-xl">📝</span> },
-      { key: 'live_lesson', label: <span className="flex items-center">Live {liveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: <span className="text-xl">🔴</span> },
-      { key: 'group_work', label: 'Squad', icon: <span className="text-xl">👥</span> },
-      { key: 'study_mode', label: 'Brain Link', icon: <span className="text-xl">🧠</span> },
-      { key: 'messages', label: <span className="flex justify-between w-full">Comms {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full px-1.5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: <span className="text-xl">💬</span> },
+      { key: 'assignments', label: 'Assignments', icon: <span className="text-xl">📝</span> },
+      { key: 'live_lesson', label: <span className="flex items-center">Live Class {liveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: <span className="text-xl">🔴</span> },
+      { key: 'group_work', label: 'Group Work', icon: <span className="text-xl">👥</span> },
+      { key: 'study_mode', label: 'Study Mode', icon: <span className="text-xl">🧠</span> },
+      { key: 'messages', label: <span className="flex justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full px-1.5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: <span className="text-xl">💬</span> },
       { key: 'profile', label: 'Profile', icon: <span className="text-xl">👤</span> },
-      { key: 'timetable', label: 'Schedule', icon: <span className="text-xl">🗓️</span> },
-      { key: 'attendance', label: 'Log', icon: <span className="text-xl">📅</span> },
+      { key: 'timetable', label: 'Timetable', icon: <span className="text-xl">🗓️</span> },
+      { key: 'attendance', label: 'Attendance', icon: <span className="text-xl">📅</span> },
   ];
 
   const renderContent = () => {
@@ -367,7 +367,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                           <div className="relative group bg-slate-800/50 backdrop-blur-md border border-slate-700 rounded-2xl p-6 hover:border-yellow-500/50 transition-all duration-300 hover:shadow-[0_0_20px_rgba(234,179,8,0.15)] overflow-hidden">
                               <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-30 transition-opacity text-yellow-400 text-6xl font-black">!</div>
                               <div className="relative z-10">
-                                  <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Pending Missions</p>
+                                  <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Pending Assignments</p>
                                   <p className="text-4xl font-black text-white mb-1">{pendingCount}</p>
                                   <p className="text-xs text-yellow-400 font-mono">{pendingCount > 0 ? 'ACTION REQUIRED' : 'ALL CLEAR'}</p>
                               </div>
@@ -378,13 +378,13 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                           <div className="relative group bg-slate-800/50 backdrop-blur-md border border-slate-700 rounded-2xl p-6 hover:border-blue-500/50 transition-all duration-300 hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] overflow-hidden cursor-pointer" onClick={() => setActiveTab('live_lesson')}>
                               <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-30 transition-opacity text-blue-400 text-6xl font-black">●</div>
                               <div className="relative z-10">
-                                  <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Live Signal</p>
+                                  <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Live Class</p>
                                   {liveLesson ? (
                                       <>
                                           <p className="text-2xl font-bold text-white mb-1 truncate">{liveLesson.topic}</p>
                                           <div className="flex items-center gap-2">
                                               <span className="w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
-                                              <p className="text-xs text-red-400 font-mono">TRANSMISSION ACTIVE</p>
+                                              <p className="text-xs text-red-400 font-mono">SESSION ACTIVE</p>
                                           </div>
                                       </>
                                   ) : (
@@ -450,7 +450,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                       <div className="flex items-center justify-between">
                           <h2 className="text-3xl font-bold text-white flex items-center gap-3">
                               <span className="bg-blue-600 text-white text-lg p-2 rounded-lg shadow-lg shadow-blue-600/20">📝</span>
-                              MISSION LOG
+                              ASSIGNMENTS
                           </h2>
                           <div className="text-sm text-slate-400 font-mono hidden sm:block">
                               SYNCING... COMPLETED
@@ -502,7 +502,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                                               )}
                                           </div>
                                           <Button size="sm" onClick={() => handleAssignmentClick(assignment)} className={status === 'Graded' ? 'bg-green-600 hover:bg-green-500' : ''}>
-                                              {sub ? 'View Intel' : 'Engage'}
+                                              {sub ? 'View Details' : 'Start'}
                                           </Button>
                                       </div>
                                   </div>
@@ -511,7 +511,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                           {assignments.length === 0 && (
                               <div className="col-span-full flex flex-col items-center justify-center py-20 text-slate-600">
                                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-16 h-16 mb-4 opacity-20"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
-                                  <p className="text-lg font-medium">All missions completed.</p>
+                                  <p className="text-lg font-medium">All assignments completed.</p>
                                   <p className="text-sm">Stand by for further instructions.</p>
                               </div>
                           )}
@@ -536,7 +536,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                       <div className="bg-slate-800/80 backdrop-blur p-4 border-b border-slate-700 flex justify-between items-center">
                           <div>
                               <h2 className="text-lg font-bold text-white">{studentGroup.name}</h2>
-                              <p className="text-xs text-blue-400 font-mono uppercase tracking-wider">MISSION: {studentGroup.assignmentTitle}</p>
+                              <p className="text-xs text-blue-400 font-mono uppercase tracking-wider">TASK: {studentGroup.assignmentTitle}</p>
                           </div>
                           <div className="flex -space-x-2">
                               {studentGroup.members.map((m, i) => (
@@ -564,8 +564,8 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
               ) : (
                   <div className="flex flex-col items-center justify-center h-full text-center p-8">
                       <div className="text-6xl mb-4 opacity-50">🛡️</div>
-                      <h2 className="text-2xl font-bold mb-2">No Squad Assigned</h2>
-                      <p className="text-slate-400">You have not been drafted into a fireteam yet.</p>
+                      <h2 className="text-2xl font-bold mb-2">No Group Assigned</h2>
+                      <p className="text-slate-400">You have not been assigned to a group project yet.</p>
                   </div>
               );
           case 'study_mode':
@@ -617,9 +617,9 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                   <div className="flex justify-between items-center mb-6 flex-shrink-0 pb-4 border-b border-slate-700">
                       <div>
                           <h2 className="text-2xl font-bold text-white">{viewingAssignment.title}</h2>
-                          <p className="text-blue-400 text-xs font-mono mt-1 uppercase">Mission Briefing</p>
+                          <p className="text-blue-400 text-xs font-mono mt-1 uppercase">Assignment Brief</p>
                       </div>
-                      <Button variant="secondary" onClick={() => setViewingAssignment(null)}>Abort</Button>
+                      <Button variant="secondary" onClick={() => setViewingAssignment(null)}>Close</Button>
                   </div>
                   <div className="flex-grow overflow-y-auto p-2 space-y-6 custom-scrollbar">
                       <div className="prose-styles prose-invert bg-slate-900/50 p-6 rounded-xl border border-slate-700">
@@ -634,7 +634,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                       
                       {!submissions[viewingAssignment.id] ? (
                           <div className="mt-8 border-t border-slate-700 pt-6">
-                              <h4 className="font-bold text-lg mb-4 text-white flex items-center gap-2"><span className="text-green-400">◈</span> Submit Findings</h4>
+                              <h4 className="font-bold text-lg mb-4 text-white flex items-center gap-2"><span className="text-green-400">◈</span> Submit Work</h4>
                               {viewingAssignment.type === 'Objective' && viewingAssignment.quiz ? (
                                   <div className="space-y-6">
                                       {viewingAssignment.quiz.quiz.map((q, i) => (
@@ -656,20 +656,20 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                                   </div>
                               ) : (
                                   <div className="space-y-4">
-                                      <textarea value={textSubmission} onChange={e => setTextSubmission(e.target.value)} placeholder="Enter your mission report here..." rows={8} className="w-full p-4 bg-slate-900 rounded-xl border border-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:outline-none text-slate-200 placeholder-slate-600" />
+                                      <textarea value={textSubmission} onChange={e => setTextSubmission(e.target.value)} placeholder="Enter your answer here..." rows={8} className="w-full p-4 bg-slate-900 rounded-xl border border-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:outline-none text-slate-200 placeholder-slate-600" />
                                       <div>
-                                          <label className="block text-sm font-medium text-slate-400 mb-2">Attach Evidence (Optional)</label>
+                                          <label className="block text-sm font-medium text-slate-400 mb-2">Attach File (Optional)</label>
                                           <input type="file" onChange={e => setFileSubmission(e.target.files?.[0] || null)} className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer bg-slate-900 rounded-lg border border-slate-700" />
                                       </div>
                                   </div>
                               )}
                               <Button onClick={handleSubmitAssignment} disabled={isSubmitting} className="mt-6 w-full py-4 text-lg shadow-xl shadow-blue-600/20">
-                                  {isSubmitting ? 'Transmitting...' : 'Complete Mission'}
+                                  {isSubmitting ? 'Submitting...' : 'Submit Assignment'}
                               </Button>
                           </div>
                       ) : (
                           <div className="mt-6 p-6 bg-green-900/20 border border-green-500/30 rounded-xl">
-                              <h4 className="font-bold text-green-400 mb-2 flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg> Mission Accomplished</h4>
+                              <h4 className="font-bold text-green-400 mb-2 flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg> Submitted</h4>
                               <p className="text-sm text-slate-300 font-mono">Timestamp: {submissions[viewingAssignment.id].submittedAt.toDate().toLocaleString()}</p>
                               {submissions[viewingAssignment.id].grade && (
                                   <div className="mt-4 pt-4 border-t border-green-500/30">
@@ -693,7 +693,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                   <img src={selectedFlyer.imageUrl} alt={selectedFlyer.title} className="w-full h-auto" />
                   <div className="p-6 bg-slate-800">
                       <h2 className="text-2xl font-bold text-white">{selectedFlyer.title}</h2>
-                      <p className="text-slate-400 text-sm mt-1 font-mono">TRANSMISSION ORIGIN: {selectedFlyer.publisherName} // {selectedFlyer.createdAt.toDate().toLocaleDateString()}</p>
+                      <p className="text-slate-400 text-sm mt-1 font-mono">SOURCE: {selectedFlyer.publisherName} // {selectedFlyer.createdAt.toDate().toLocaleDateString()}</p>
                   </div>
               </div>
           </div>
