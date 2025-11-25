@@ -2,7 +2,7 @@
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 
-const Timestamp = firebase.firestore.Timestamp;
+// Removed unsafe global execution: const Timestamp = firebase.firestore.Timestamp;
 
 export type UserRole = 'student' | 'teacher' | 'parent' | 'admin';
 export type AdminType = 'super' | 'co-admin';
@@ -162,6 +162,7 @@ export interface LiveAction {
     targetStudentId?: string; // If set, only this student sees it (Direct Question)
     targetStudentName?: string;
     timestamp: number;
+    // Context for AI generation
     relatedSlideContent?: string; 
 }
 
@@ -179,12 +180,12 @@ export interface LiveLesson {
   lessonPlan: LiveLessonStep[];
   // Denormalized for easy student access
   currentBoardContent: string;
-  currentAudioUrl?: string;
+  currentAudioUrl?: string; // URL of the audio file for the current step
   currentQuestion: LiveLessonStep['question'] | null;
   sourcePresentationId?: string;
   
   activeAction?: LiveAction | null; // The current transient event (Poll/Question)
-
+  
   drawingData?: DrawingElement[];
   pointerPosition?: { x: number; y: number } | null;
 
@@ -198,6 +199,7 @@ export interface LiveLesson {
           students: {uid: string, name: string}[];
       } 
   } | null;
+  
   raisedHands?: string[]; // UIDs of students with raised hands
 }
 
@@ -220,9 +222,9 @@ export interface LiveLessonResponse {
   studentId: string;
   studentName: string;
   questionId?: string;
-  actionId?: string;
+  actionId?: string; // Links response to a specific LiveAction
   answer: string;
-  confusionPoint?: string;
+  confusionPoint?: string; // Specific text they clicked on if they said "No"
   isCorrect?: boolean;
   timestamp: firebase.firestore.Timestamp;
 }
@@ -347,7 +349,6 @@ export interface TeachingMaterial {
   createdAt: firebase.firestore.Timestamp;
 }
 
-// FIX: Added missing VideoContent interface.
 export interface VideoContent {
   id: string;
   title: string;

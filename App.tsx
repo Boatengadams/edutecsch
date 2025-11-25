@@ -2,15 +2,15 @@
 import React, { useState, useEffect, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useAuthentication, AuthenticationContext } from './hooks/useAuth';
-import { firebaseAuth, db, firebase } from './services/firebase';
+import { firebaseAuth, db, firebase, rtdb } from './services/firebase';
 import type { UserProfile, SchoolSettings, SubscriptionStatus, UserRole } from './types';
 import 'firebase/compat/auth';
 import AuthForm from './components/AuthForm';
 import RoleSelector from './components/RoleSelector';
 import { TeacherView } from './components/TeacherView';
 import { StudentView } from './components/StudentView';
-// FIX: Changed to named imports to resolve "no default export" error.
-import { AdminView } from './components/AdminView';
+// FIX: Changed to default import for AdminView.
+import AdminView from './components/AdminView';
 import { ParentView } from './components/ParentView';
 import Spinner from './components/common/Spinner';
 import Button from './components/common/Button';
@@ -209,6 +209,7 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
     const handleSignOut = async () => {
         if (userProfile) {
              try {
+                // 1. Log the logout activity to Firestore
                 await db.collection('userActivity').add({
                     userId: userProfile.uid,
                     userName: userProfile.name || 'Unknown User',
@@ -217,6 +218,14 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
                     action: 'logout',
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
+
+                // 2. Explicitly set presence to 'offline' in Realtime Database for immediate UI update
+                const userStatusDatabaseRef = rtdb.ref('/status/' + userProfile.uid);
+                await userStatusDatabaseRef.update({
+                    state: 'offline',
+                    last_changed: firebase.database.ServerValue.TIMESTAMP,
+                });
+
             } catch (e) {
                 console.error("Error logging logout", e);
             }

@@ -80,9 +80,10 @@ export const useAllOnlineUsers = () => {
                 ...data[key]
             }));
 
-            // Filter only those currently online
-            const active = users.filter(u => u.state === 'online');
-            setOnlineUsers(active);
+            // Sort by last_changed descending (most recent activity first)
+            users.sort((a, b) => b.last_changed - a.last_changed);
+
+            setOnlineUsers(users);
         });
 
         return () => {

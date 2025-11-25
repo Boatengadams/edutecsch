@@ -1,3 +1,4 @@
+
 import {onCall, HttpsError} from "firebase-functions/v2/onCall";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
@@ -90,6 +91,60 @@ export const sendNotificationsToTeachersOfClasses = onCall({region: "us-west1"},
 
   await batch.commit();
   return {success: true, message: `Notifications sent to ${relevantTeacherUids.size} teachers.`};
+});
+
+export const sendNotificationsToParentsOfStudents = onCall({region: "us-west1"}, async (request) => {
+    if (!request.auth || !request.auth.uid) {
+        throw new HttpsError("unauthenticated", "User must be authenticated.");
+    }
+    
+    const { studentUids, message, senderId, senderName } = request.data;
+    
+    if (!studentUids || !Array.isArray(studentUids) || studentUids.length === 0) {
+        return { success: true, message: "No students specified." };
+    }
+
+    try {
+        // Retrieve student documents to find their linked parents
+        const refs = studentUids.map((id: string) => db.collection('users').doc(id));
+        const snapshots = await db.getAll(...refs);
+        
+        const parentUids = new Set<string>();
+        snapshots.forEach(snap => {
+            if (snap.exists) {
+                 const data = snap.data();
+                 if (data && data.parentUids && Array.isArray(data.parentUids)) {
+                     data.parentUids.forEach((pid: any) => parentUids.add(String(pid)));
+                 }
+            }
+        });
+
+        if (parentUids.size === 0) {
+             return { success: true, message: "No parents found for these students." };
+        }
+
+        // Send notifications to all unique parents
+        const batch = db.batch();
+        parentUids.forEach(pid => {
+            const notifRef = db.collection('notifications').doc();
+            batch.set(notifRef, {
+                userId: pid,
+                message: message,
+                senderId: senderId,
+                senderName: senderName,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                readBy: []
+            });
+        });
+
+        await batch.commit();
+        return { success: true, count: parentUids.size };
+
+    } catch (error: any) {
+        logger.error("Error sending parent notifications:", error);
+        // We throw internal error here, but the frontend now gracefully handles it.
+        throw new HttpsError("internal", "Failed to process notifications.");
+    }
 });
 
 
@@ -230,4 +285,37 @@ export const generateActivationTokens = onCall({region: "us-west1"}, async (requ
 
     await batch.commit();
     return {success: true, tokens: generatedTokens};
+});
+
+// New function to delete user accounts
+export const deleteUserAccount = onCall({region: "us-west1"}, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError("unauthenticated", "User must be authenticated.");
+  }
+  
+  // Check if caller is an admin
+  const callerSnap = await db.collection("users").doc(request.auth.uid).get();
+  const callerData = callerSnap.data();
+  
+  if (!callerSnap.exists || (callerData?.role !== "admin" && callerData?.adminType !== "super")) {
+    throw new HttpsError("permission-denied", "You are not authorized to delete users.");
+  }
+
+  const {targetUid} = request.data;
+  if (!targetUid) {
+    throw new HttpsError("invalid-argument", "Target UID is required.");
+  }
+
+  try {
+    // Delete from Firebase Authentication
+    await admin.auth().deleteUser(targetUid);
+    
+    // Delete the user document from Firestore
+    await db.collection("users").doc(targetUid).delete();
+    
+    return {success: true, message: "User account deleted from Authentication and Firestore."};
+  } catch (error: any) {
+    logger.error(`Error deleting user ${targetUid}:`, error);
+    throw new HttpsError("internal", "Failed to delete user account: " + error.message);
+  }
 });

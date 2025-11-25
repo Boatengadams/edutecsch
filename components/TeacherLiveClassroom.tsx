@@ -1,4 +1,5 @@
 
+// ... (imports)
 import React, { useState, useEffect, useRef } from 'react';
 import { db, firebase } from '../services/firebase';
 import type { LiveLesson, LiveLessonStep, LiveLessonResponse, UserProfile, LiveAction, LiveActionType, DrawingElement, Point, DrawingToolType } from '../types';
@@ -16,6 +17,7 @@ interface TeacherLiveClassroomProps {
 }
 
 export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ lessonId, onClose, userProfile }) => {
+  // ... (rest of logic)
   const { showToast } = useToast();
   const [reconstructedLesson, setReconstructedLesson] = useState<LiveLesson | null>(null);
   const [responses, setResponses] = useState<LiveLessonResponse[]>([]);
@@ -50,7 +52,7 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
     return () => unsubscribe();
   }, [lessonId, onClose]);
 
-  // Redraw canvas when drawingData changes
+  // ... (drawing logic useEffects and handlers)
   useEffect(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -198,6 +200,7 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
     }
   }, [reconstructedLesson?.classId]);
 
+  // ... (responses, actions, etc.)
   // Listen for responses specific to the ACTIVE ACTION
   useEffect(() => {
     if (!reconstructedLesson?.activeAction) {
@@ -315,6 +318,7 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
     <div className="h-full flex flex-col bg-slate-950 text-white overflow-hidden">
       {/* Top Bar */}
       <div className="flex items-center justify-between px-6 py-3 bg-slate-900 border-b border-slate-800 shadow-md z-10">
+        {/* ... top bar content ... */}
         <div className="flex items-center gap-4">
             <div className="bg-red-600 px-3 py-1 rounded-full flex items-center gap-2 animate-pulse">
                 <div className="w-2 h-2 bg-white rounded-full"></div>
@@ -373,8 +377,7 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
                  {/* Modern Floating Toolbar (Dock) */}
                  {activeTab === 'board' && (
                      <div className="absolute left-4 top-1/2 transform -translate-y-1/2 z-30 flex flex-col gap-3 bg-slate-800/90 backdrop-blur-xl p-2 rounded-2xl border border-slate-700 shadow-2xl transition-all">
-                         
-                         {/* Main Tools */}
+                         {/* ... toolbar buttons ... */}
                          <button 
                              onClick={() => { setCurrentTool('pen'); setIsShapeMenuOpen(false); setIsColorMenuOpen(false); }} 
                              className={`p-3 rounded-xl transition-all ${currentTool === 'pen' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`}
@@ -545,7 +548,7 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
                                     className="w-full flex items-center justify-between p-2 rounded hover:bg-slate-800 text-left group transition-all"
                                 >
                                     <div className="flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold group-hover:bg-blue-600 transition-colors">{s.name.charAt(0)}</div>
+                                        <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold group-hover:bg-blue-600 transition-colors">{(s.name || '?').charAt(0)}</div>
                                         <span className="text-sm text-slate-300 group-hover:text-white">{s.name}</span>
                                     </div>
                                     <span className="opacity-0 group-hover:opacity-100 text-[10px] text-blue-400 border border-blue-500/30 px-1 rounded">Ask</span>
@@ -560,3 +563,5 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
     </div>
   );
 };
+
+export default TeacherLiveClassroom;

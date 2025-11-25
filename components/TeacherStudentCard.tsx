@@ -47,6 +47,8 @@ const TeacherStudentCard: React.FC<TeacherStudentCardProps> = ({
         return { average, completionRate };
     }, [classAssignments, studentSubmissions]);
 
+    const displayName = student.name || 'Unknown Student';
+
     // Generate a consistent color based on the name
     const getAvatarColor = (name: string) => {
         const colors = [
@@ -73,11 +75,11 @@ const TeacherStudentCard: React.FC<TeacherStudentCardProps> = ({
 
             <div className="relative z-10 flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarColor(student.name)} flex items-center justify-center text-white font-bold text-lg shadow-inner`}>
-                        {student.name.charAt(0)}
+                    <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarColor(displayName)} flex items-center justify-center text-white font-bold text-lg shadow-inner`}>
+                        {displayName.charAt(0)}
                     </div>
                     <div>
-                        <h4 className="font-bold text-slate-200 group-hover:text-white transition-colors line-clamp-1">{student.name}</h4>
+                        <h4 className="font-bold text-slate-200 group-hover:text-white transition-colors line-clamp-1">{displayName}</h4>
                         <p className="text-xs text-slate-400">{student.email || 'No email'}</p>
                     </div>
                 </div>

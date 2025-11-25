@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../services/firebase';
 import { useAuthentication } from '../../hooks/useAuth';
@@ -7,6 +8,7 @@ import Spinner from './Spinner';
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 
+// ... (useDebounce hook remains same)
 const useDebounce = <T,>(value: T, delay: number): T => {
     const [debouncedValue, setDebouncedValue] = useState<T>(value);
     useEffect(() => {
@@ -25,6 +27,7 @@ type SearchResult =
     | ({ type: 'assignment' } & Omit<Assignment, 'type'> & { assignmentType?: AssignmentType });
 
 const GlobalSearch: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+    // ... (logic remains the same)
     const { userProfile } = useAuthentication();
     const [searchTerm, setQuery] = useState('');
     const [results, setResults] = useState<SearchResult[]>([]);
@@ -143,7 +146,7 @@ const GlobalSearch: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             case 'student': return (
                 <div className="space-y-3">
                     <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-400 font-bold text-xl">
-                        {item.name.charAt(0)}
+                        {(item.name || '?').charAt(0)}
                     </div>
                     <div>
                         <h4 className="font-bold text-xl text-slate-200">{item.name}</h4>
@@ -179,8 +182,10 @@ const GlobalSearch: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
     return (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex justify-center items-start pt-20 p-4 z-50" onClick={onClose}>
+            {/* ... rest of JSX (search input, list results) ... */}
             <Card className="w-full max-w-2xl !p-0 overflow-hidden" onClick={e => e.stopPropagation()}>
                 <div className="relative border-b border-slate-700/50">
+                    {/* ... input ... */}
                     <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-slate-400">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
                      </div>
@@ -241,6 +246,7 @@ const GlobalSearch: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                         )}
                     </div>
                 </div>
+                {/* ... footer ... */}
                 <div className="bg-slate-800/50 border-t border-slate-700/50 p-2 px-4 text-xs text-slate-500 flex justify-between">
                     <span><strong>Enter</strong> to select</span>
                     <span><strong>Esc</strong> to close</span>
