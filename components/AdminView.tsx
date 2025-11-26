@@ -112,7 +112,7 @@ const SessionLogsTable: React.FC = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {logs.map(log => (
+                        {logs.map((log) => (
                             <tr key={log.id} className="bg-slate-800 border-b border-slate-700">
                                 <td className="px-4 py-3">{log.timestamp?.toDate().toLocaleString()}</td>
                                 <td className="px-4 py-3 font-medium text-white">{log.userName}</td>
@@ -192,26 +192,22 @@ const AdminSettingsEditor: React.FC<{ settings: SchoolSettings | null }> = ({ se
 const FlyerDesigner: React.FC<{ userProfile: UserProfile }> = ({ userProfile }) => {
     const { showToast } = useToast();
     const [title, setTitle] = useState('');
-    const [image, setImage] = useState<File | null>(null);
+    const [content, setContent] = useState('');
     const [targetAudience, setTargetAudience] = useState<'all' | 'role' | 'selected'>('all');
     const [targetRoles, setTargetRoles] = useState<UserRole[]>([]);
-    const [uploading, setUploading] = useState(false);
+    const [publishing, setPublishing] = useState(false);
 
     const handlePublish = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!title || !image) {
-            showToast("Title and image are required", "error");
+        if (!title || !content) {
+            showToast("Title and content are required", "error");
             return;
         }
-        setUploading(true);
+        setPublishing(true);
         try {
-            const storageRef = storage.ref(`flyers/${Date.now()}_${image.name}`);
-            await storageRef.put(image);
-            const imageUrl = await storageRef.getDownloadURL();
-
             const flyerData: Omit<PublishedFlyer, 'id'> = {
                 title,
-                imageUrl,
+                content,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
                 publisherId: userProfile.uid,
                 publisherName: userProfile.name,
@@ -220,13 +216,55 @@ const FlyerDesigner: React.FC<{ userProfile: UserProfile }> = ({ userProfile }) 
             };
 
             await db.collection('publishedFlyers').add(flyerData);
-            showToast("Flyer published successfully!", "success");
+
+            // --- Send Notifications ---
+            let recipientUids: string[] = [];
+
+            if (targetAudience === 'all') {
+                // Fetch all approved users
+                const usersSnap = await db.collection('users').where('status', '==', 'approved').get();
+                recipientUids = usersSnap.docs.map(doc => doc.id);
+            } else if (targetAudience === 'role' && targetRoles.length > 0) {
+                // Fetch users with specific roles
+                const usersSnap = await db.collection('users')
+                    .where('status', '==', 'approved')
+                    .where('role', 'in', targetRoles)
+                    .get();
+                recipientUids = usersSnap.docs.map(doc => doc.id);
+            }
+
+            // Filter out the publisher
+            recipientUids = recipientUids.filter(uid => uid !== userProfile.uid);
+
+            if (recipientUids.length > 0) {
+                const notificationMessage = `New Notice Posted: ${title}`;
+                const BATCH_SIZE = 500;
+                for (let i = 0; i < recipientUids.length; i += BATCH_SIZE) {
+                    const batch = db.batch();
+                    const chunk = recipientUids.slice(i, i + BATCH_SIZE);
+                    chunk.forEach(uid => {
+                        const ref = db.collection('notifications').doc();
+                        batch.set(ref, {
+                            userId: uid,
+                            senderId: userProfile.uid,
+                            senderName: userProfile.name,
+                            message: notificationMessage,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            readBy: []
+                        });
+                    });
+                    await batch.commit();
+                }
+            }
+            // --------------------------
+
+            showToast(`Notice published! Sent notifications to ${recipientUids.length} users.`, "success");
             setTitle('');
-            setImage(null);
+            setContent('');
         } catch (err: any) {
             showToast(`Error: ${err.message}`, "error");
         } finally {
-            setUploading(false);
+            setPublishing(false);
         }
     };
 
@@ -234,32 +272,42 @@ const FlyerDesigner: React.FC<{ userProfile: UserProfile }> = ({ userProfile }) 
         <Card>
             <h3 className="text-xl font-bold mb-4">Digital Notice Board</h3>
             <form onSubmit={handlePublish} className="space-y-4">
-                <input type="text" placeholder="Notice Title" value={title} onChange={e => setTitle(e.target.value)} className="w-full p-2 bg-slate-700 rounded-md" />
-                <div className="border-2 border-dashed border-slate-600 rounded-md p-4 text-center cursor-pointer hover:border-blue-500 relative">
-                    <input type="file" accept="image/*" onChange={e => setImage(e.target.files?.[0] || null)} className="absolute inset-0 opacity-0 cursor-pointer" />
-                    {image ? <p className="text-blue-400">{image.name}</p> : <p className="text-gray-400">Click to upload flyer image</p>}
-                </div>
-                <div>
-                    <label className="text-sm block mb-1">Target Audience</label>
-                    <select value={targetAudience} onChange={e => setTargetAudience(e.target.value as any)} className="w-full p-2 bg-slate-700 rounded-md">
-                        <option value="all">Everyone</option>
-                        <option value="role">Specific Roles</option>
-                    </select>
-                </div>
-                {targetAudience === 'role' && (
-                    <div className="flex gap-4">
-                        {['student', 'teacher', 'parent'].map(role => (
-                            <label key={role} className="flex items-center gap-2">
-                                <input type="checkbox" checked={targetRoles.includes(role as UserRole)} onChange={e => {
-                                    if (e.target.checked) setTargetRoles([...targetRoles, role as UserRole]);
-                                    else setTargetRoles(targetRoles.filter(r => r !== role));
-                                }} className="rounded bg-slate-700" />
-                                <span className="capitalize">{role}</span>
-                            </label>
-                        ))}
+                <input type="text" placeholder="Notice Title" value={title} onChange={e => setTitle(e.target.value)} className="w-full p-3 bg-slate-700 rounded-md text-white border border-slate-600 focus:ring-2 focus:ring-blue-500 outline-none text-lg font-bold placeholder-slate-400" />
+                <textarea
+                    placeholder="Write your announcement here..."
+                    value={content}
+                    onChange={e => setContent(e.target.value)}
+                    rows={8}
+                    className="w-full p-4 bg-slate-700 rounded-md text-white border border-slate-600 focus:ring-2 focus:ring-blue-500 outline-none resize-y text-base placeholder-slate-400 leading-relaxed"
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="text-sm block mb-1 text-gray-400">Target Audience</label>
+                        <select value={targetAudience} onChange={e => setTargetAudience(e.target.value as any)} className="w-full p-2 bg-slate-700 rounded-md border border-slate-600 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+                            <option value="all">Everyone</option>
+                            <option value="role">Specific Roles</option>
+                        </select>
                     </div>
-                )}
-                <Button type="submit" disabled={uploading} className="w-full">{uploading ? 'Publishing...' : 'Publish Notice'}</Button>
+                    {targetAudience === 'role' && (
+                        <div>
+                            <label className="text-sm block mb-1 text-gray-400">Select Roles</label>
+                            <div className="flex gap-4 p-2 bg-slate-700/50 rounded-md border border-slate-600">
+                                {['student', 'teacher', 'parent'].map(role => (
+                                    <label key={role} className="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" checked={targetRoles.includes(role as UserRole)} onChange={e => {
+                                            if (e.target.checked) setTargetRoles([...targetRoles, role as UserRole]);
+                                            else setTargetRoles(targetRoles.filter(r => r !== role));
+                                        }} className="rounded bg-slate-600 border-slate-500 text-blue-500 focus:ring-blue-500" />
+                                        <span className="capitalize text-gray-200">{role}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+                <Button type="submit" disabled={publishing} className="w-full shadow-lg shadow-blue-600/20 py-3">
+                    {publishing ? 'Publishing...' : 'Publish Notice'}
+                </Button>
             </form>
         </Card>
     );

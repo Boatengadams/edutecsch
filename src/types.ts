@@ -2,7 +2,7 @@
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 
-const Timestamp = firebase.firestore.Timestamp;
+// Removed unsafe global execution: const Timestamp = firebase.firestore.Timestamp;
 
 export type UserRole = 'student' | 'teacher' | 'parent' | 'admin';
 export type AdminType = 'super' | 'co-admin';
@@ -349,7 +349,6 @@ export interface TeachingMaterial {
   createdAt: firebase.firestore.Timestamp;
 }
 
-// FIX: Added missing VideoContent interface.
 export interface VideoContent {
   id: string;
   title: string;
@@ -565,7 +564,8 @@ export interface ReportSummary {
 export interface PublishedFlyer {
     id: string;
     title: string;
-    imageUrl: string;
+    content: string; // Mandatory now
+    imageUrl?: string; // Optional now
     createdAt: firebase.firestore.Timestamp;
     publisherId: string;
     publisherName: string;

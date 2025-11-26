@@ -564,7 +564,8 @@ export interface ReportSummary {
 export interface PublishedFlyer {
     id: string;
     title: string;
-    imageUrl: string;
+    content: string; // Added
+    imageUrl?: string; // Made optional
     createdAt: firebase.firestore.Timestamp;
     publisherId: string;
     publisherName: string;

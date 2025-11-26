@@ -411,31 +411,29 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                           </div>
                       </div>
 
-                      {/* Digital Feed (Notice Board) */}
+                      {/* Digital Feed (Notice Board) - Updated for Text Cards */}
                       {publishedFlyers.length > 0 && (
                           <div className="space-y-4">
                               <div className="flex items-center justify-between">
                                   <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                                      <span className="text-blue-500">◈</span> DIGITAL FEED
+                                      <span className="text-blue-500">📢</span> SCHOOL NOTICES
                                   </h3>
                               </div>
                               <div className="flex gap-4 overflow-x-auto pb-6 custom-scrollbar snap-x">
                                   {publishedFlyers.map(flyer => (
                                       <div 
                                           key={flyer.id} 
-                                          className="flex-shrink-0 w-72 bg-slate-800/80 border border-slate-700 rounded-xl overflow-hidden cursor-pointer hover:scale-105 transition-transform duration-300 snap-center shadow-lg group"
+                                          className="flex-shrink-0 w-80 h-64 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden cursor-pointer hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/20 transition-all duration-300 snap-center flex flex-col group"
                                           onClick={() => setSelectedFlyer(flyer)}
                                       >
-                                          <div className="aspect-video bg-slate-900 relative">
-                                              <img src={flyer.imageUrl} alt={flyer.title} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"/>
-                                              <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent"></div>
+                                          <div className="p-6 flex-grow overflow-hidden relative">
+                                              <h4 className="font-bold text-lg text-white mb-3 line-clamp-2 group-hover:text-blue-400 transition-colors">{flyer.title}</h4>
+                                              <p className="text-slate-400 text-sm line-clamp-6 leading-relaxed">{flyer.content}</p>
+                                              <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-slate-800 to-transparent"></div>
                                           </div>
-                                          <div className="p-4 relative">
-                                              <p className="font-bold truncate text-white text-lg">{flyer.title}</p>
-                                              <div className="flex justify-between items-center mt-2 text-xs text-slate-400 font-mono">
-                                                  <span>{flyer.createdAt.toDate().toLocaleDateString()}</span>
-                                                  <span className="text-blue-400">READ_MORE &gt;</span>
-                                              </div>
+                                          <div className="px-6 py-3 bg-slate-900/50 border-t border-slate-700 flex justify-between items-center text-xs text-slate-500 font-mono">
+                                              <span>{flyer.createdAt.toDate().toLocaleDateString()}</span>
+                                              <span className="text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">Read More &rarr;</span>
                                           </div>
                                       </div>
                                   ))}
@@ -688,12 +686,18 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
 
       {selectedFlyer && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex justify-center items-center p-4 z-50" onClick={() => setSelectedFlyer(null)}>
-              <div className="max-w-4xl w-full max-h-[90vh] overflow-auto relative bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl" onClick={e => e.stopPropagation()}>
-                  <button onClick={() => setSelectedFlyer(null)} className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full hover:bg-white hover:text-black transition-colors z-10">&times;</button>
-                  <img src={selectedFlyer.imageUrl} alt={selectedFlyer.title} className="w-full h-auto" />
-                  <div className="p-6 bg-slate-800">
-                      <h2 className="text-2xl font-bold text-white">{selectedFlyer.title}</h2>
-                      <p className="text-slate-400 text-sm mt-1 font-mono">SOURCE: {selectedFlyer.publisherName} // {selectedFlyer.createdAt.toDate().toLocaleDateString()}</p>
+              <div className="max-w-2xl w-full max-h-[90vh] overflow-auto relative bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="flex justify-between items-center p-6 border-b border-slate-700 bg-slate-800/50">
+                        <h2 className="text-2xl font-bold text-white">{selectedFlyer.title}</h2>
+                        <button onClick={() => setSelectedFlyer(null)} className="bg-slate-700/50 text-slate-300 p-2 rounded-full hover:bg-slate-600 hover:text-white transition-colors">&times;</button>
+                  </div>
+                  
+                  <div className="p-8 overflow-y-auto bg-slate-900 custom-scrollbar">
+                      <p className="text-lg text-slate-200 whitespace-pre-wrap leading-loose">{selectedFlyer.content}</p>
+                  </div>
+                  
+                  <div className="p-4 bg-slate-800 border-t border-slate-700 text-xs text-slate-500 font-mono text-right">
+                      POSTED BY: {selectedFlyer.publisherName.toUpperCase()} // {selectedFlyer.createdAt.toDate().toLocaleDateString()}
                   </div>
               </div>
           </div>
