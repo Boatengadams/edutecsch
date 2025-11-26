@@ -208,29 +208,39 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
     
     const handleSignOut = async () => {
         if (userProfile) {
-             try {
-                // 1. Log the logout activity to Firestore
-                await db.collection('userActivity').add({
-                    userId: userProfile.uid,
-                    userName: userProfile.name || 'Unknown User',
-                    userRole: userProfile.role,
-                    userClass: userProfile.class || userProfile.classTeacherOf || 'N/A',
-                    action: 'logout',
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
+             const logLogout = async () => {
+                 try {
+                    // 1. Log the logout activity to Firestore
+                    await db.collection('userActivity').add({
+                        userId: userProfile.uid,
+                        userName: userProfile.name || 'Unknown User',
+                        userRole: userProfile.role,
+                        userClass: userProfile.class || userProfile.classTeacherOf || 'N/A',
+                        action: 'logout',
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
 
-                // 2. Explicitly set presence to 'offline' in Realtime Database for immediate UI update
-                const userStatusDatabaseRef = rtdb.ref('/status/' + userProfile.uid);
-                await userStatusDatabaseRef.update({
-                    state: 'offline',
-                    last_changed: firebase.database.ServerValue.TIMESTAMP,
-                });
+                    // 2. Explicitly set presence to 'offline' in Realtime Database for immediate UI update
+                    const userStatusDatabaseRef = rtdb.ref('/status/' + userProfile.uid);
+                    await userStatusDatabaseRef.update({
+                        state: 'offline',
+                        last_changed: firebase.database.ServerValue.TIMESTAMP,
+                    });
+                 } catch (e) {
+                    console.error("Error logging logout", e);
+                 }
+             };
 
-            } catch (e) {
-                console.error("Error logging logout", e);
-            }
+             // Race condition: Try to log, but don't wait more than 1 second to ensure sign out happens
+             const timeout = new Promise(resolve => setTimeout(resolve, 1000));
+             await Promise.race([logLogout(), timeout]);
         }
-        firebaseAuth.signOut();
+        
+        try {
+            await firebaseAuth.signOut();
+        } catch (error) {
+            console.error("Sign out error", error);
+        }
     };
 
     const Header = () => (
