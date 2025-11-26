@@ -6,12 +6,15 @@ import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
 import { useToast } from './common/Toast';
+import ConfirmationModal from './common/ConfirmationModal';
 
 const AdminCalendar: React.FC = () => {
     const { showToast } = useToast();
     const [events, setEvents] = useState<SchoolEvent[]>([]);
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [eventToDelete, setEventToDelete] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Form State
     const [title, setTitle] = useState('');
@@ -62,10 +65,17 @@ const AdminCalendar: React.FC = () => {
         }
     };
 
-    const handleDelete = async (id: string) => {
-        if (window.confirm('Delete this event?')) {
-            await db.collection('calendarEvents').doc(id).delete();
-            showToast('Event deleted', 'success');
+    const handleDelete = async () => {
+        if (!eventToDelete) return;
+        setIsDeleting(true);
+        try {
+            await db.collection('calendarEvents').doc(eventToDelete).delete();
+            showToast('Event deleted successfully', 'success');
+        } catch (err: any) {
+            showToast(`Error deleting event: ${err.message}`, 'error');
+        } finally {
+            setIsDeleting(false);
+            setEventToDelete(null);
         }
     };
 
@@ -128,7 +138,7 @@ const AdminCalendar: React.FC = () => {
                                             </div>
                                             {event.description && <p className="text-sm text-slate-500 mt-2">{event.description}</p>}
                                         </div>
-                                        <button onClick={() => handleDelete(event.id)} className="p-2 text-slate-500 hover:text-red-400">
+                                        <button onClick={() => setEventToDelete(event.id)} className="p-2 text-slate-500 hover:text-red-400 transition-colors" title="Delete Event">
                                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
                                         </button>
                                     </div>
@@ -138,6 +148,16 @@ const AdminCalendar: React.FC = () => {
                     </Card>
                 </div>
             </div>
+
+            <ConfirmationModal 
+                isOpen={!!eventToDelete}
+                onClose={() => setEventToDelete(null)}
+                onConfirm={handleDelete}
+                title="Delete Event"
+                message="Are you sure you want to delete this event? This action cannot be undone."
+                confirmButtonText="Yes, Delete"
+                isLoading={isDeleting}
+            />
         </div>
     );
 };

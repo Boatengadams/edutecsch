@@ -21,6 +21,7 @@ import AdminClassManagement from './AdminClassManagement';
 import AdminCalendar from './AdminCalendar';
 import AdminMaterials from './AdminMaterials';
 import SystemActivation from './SystemActivation';
+import ConfirmationModal from './common/ConfirmationModal';
 
 // --- SUB-COMPONENTS ---
 
@@ -285,6 +286,8 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
     const [userClassFilter, setUserClassFilter] = useState<string>('all');
     const [bulkRoleTarget, setBulkRoleTarget] = useState<UserRole>('student');
     
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    
     const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
 
     const [rejectUsers, { loading: deletingUsers }] = useRejectUser();
@@ -319,15 +322,18 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
         });
     }, [allUsers, userSearchTerm, userRoleFilter, userClassFilter]);
 
-    const handleBulkDelete = async () => {
-        if (!confirm(`Are you sure you want to delete ${selectedUserUids.length} users? This action is irreversible.`)) return;
-        
+    const handleBulkDeleteClick = () => {
+        setIsDeleteModalOpen(true);
+    };
+
+    const confirmBulkDelete = async () => {
         const usersToDelete = allUsers
             .filter(u => selectedUserUids.includes(u.uid))
             .map(u => ({ uid: u.uid, role: u.role }));
             
         await rejectUsers(usersToDelete);
         setSelectedUserUids([]);
+        setIsDeleteModalOpen(false);
     };
 
     const handleBulkRoleChange = async () => {
@@ -505,7 +511,7 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
                                                 </select>
                                                 <Button size="sm" onClick={handleBulkRoleChange} disabled={updatingUsers}>Change Role</Button>
                                             </div>
-                                            <Button size="sm" variant="danger" onClick={handleBulkDelete} disabled={deletingUsers}>
+                                            <Button size="sm" variant="danger" onClick={handleBulkDeleteClick} disabled={deletingUsers}>
                                                 {deletingUsers ? 'Deleting...' : 'Delete Users'}
                                             </Button>
                                         </div>
@@ -658,6 +664,15 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
             <main className="flex-1 p-4 sm:p-6 overflow-y-auto bg-slate-950 text-slate-200">
                 {renderContent()}
             </main>
+            <ConfirmationModal
+                isOpen={isDeleteModalOpen}
+                onClose={() => setIsDeleteModalOpen(false)}
+                onConfirm={confirmBulkDelete}
+                title="Confirm Bulk Deletion"
+                message={`Are you sure you want to delete ${selectedUserUids.length} users? This action cannot be undone and will remove all their data immediately.`}
+                isLoading={deletingUsers}
+                confirmButtonText="Yes, Delete Users"
+            />
         </div>
     );
 };

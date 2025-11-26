@@ -1,16 +1,18 @@
 
 import React, { useState, useEffect } from 'react';
-import { db, functions } from '../services/firebase';
+import { db, storage } from '../services/firebase';
 import { TeachingMaterial } from '../types';
 import Card from './common/Card';
 import Spinner from './common/Spinner';
 import { useToast } from './common/Toast';
+import ConfirmationModal from './common/ConfirmationModal';
 
 const AdminMaterials: React.FC = () => {
     const { showToast } = useToast();
     const [materials, setMaterials] = useState<TeachingMaterial[]>([]);
     const [loading, setLoading] = useState(true);
-    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [materialToDelete, setMaterialToDelete] = useState<TeachingMaterial | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
         const unsubscribe = db.collection('teachingMaterials')
@@ -22,17 +24,29 @@ const AdminMaterials: React.FC = () => {
         return () => unsubscribe();
     }, []);
 
-    const handleDelete = async (id: string) => {
-        if (!window.confirm('Permanently delete this material?')) return;
-        setDeletingId(id);
+    const handleDelete = async () => {
+        if (!materialToDelete) return;
+        setIsDeleting(true);
         try {
-            const deleteResource = functions.httpsCallable('deleteResource');
-            await deleteResource({ resourceType: 'teachingMaterial', resourceId: id });
-            showToast('Material deleted', 'success');
+            // 1. Delete file from Storage
+            if (materialToDelete.originalFileName) {
+                const storagePath = `teachingMaterials/${materialToDelete.id}/${materialToDelete.originalFileName}`;
+                try {
+                    await storage.ref(storagePath).delete();
+                } catch (e) {
+                    console.warn("File not found in storage, proceeding to delete document.", e);
+                }
+            }
+
+            // 2. Delete document from Firestore
+            await db.collection('teachingMaterials').doc(materialToDelete.id).delete();
+            
+            showToast('Material deleted successfully.', 'success');
         } catch (err: any) {
             showToast(`Failed to delete: ${err.message}`, 'error');
         } finally {
-            setDeletingId(null);
+            setIsDeleting(false);
+            setMaterialToDelete(null);
         }
     };
 
@@ -71,11 +85,10 @@ const AdminMaterials: React.FC = () => {
                                         <td className="px-4 py-3">{mat.createdAt?.toDate().toLocaleDateString()}</td>
                                         <td className="px-4 py-3 text-right">
                                             <button 
-                                                onClick={() => handleDelete(mat.id)} 
-                                                disabled={deletingId === mat.id}
-                                                className="text-red-400 hover:text-red-300 disabled:opacity-50"
+                                                onClick={() => setMaterialToDelete(mat)} 
+                                                className="text-red-400 hover:text-red-300 transition-colors"
                                             >
-                                                {deletingId === mat.id ? 'Deleting...' : 'Delete'}
+                                                Delete
                                             </button>
                                         </td>
                                     </tr>
@@ -85,6 +98,21 @@ const AdminMaterials: React.FC = () => {
                     </table>
                 </div>
             </Card>
+
+            <ConfirmationModal 
+                isOpen={!!materialToDelete}
+                onClose={() => setMaterialToDelete(null)}
+                onConfirm={handleDelete}
+                title="Delete Material"
+                message={
+                    <span>
+                        Are you sure you want to permanently delete <strong>{materialToDelete?.title}</strong>? 
+                        This will remove the file and its record from the system immediately.
+                    </span>
+                }
+                confirmButtonText="Yes, Delete"
+                isLoading={isDeleting}
+            />
         </div>
     );
 };
