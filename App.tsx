@@ -234,22 +234,31 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
     };
 
     const Header = () => (
-        <header className="sticky top-0 z-20 flex items-center justify-between p-4 bg-slate-900/70 backdrop-blur-md border-b border-slate-800/50 h-[70px] flex-shrink-0 no-print">
-            <div className="flex items-center gap-4">
+        <header className="sticky top-0 z-20 flex items-center justify-between p-4 bg-slate-900/90 backdrop-blur-md border-b border-slate-800/50 h-[70px] flex-shrink-0 no-print transition-all">
+            <div className="flex items-center gap-3 overflow-hidden">
                 <button 
                     onClick={() => setIsSidebarExpanded(!isSidebarExpanded)} 
-                    className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                    className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors flex-shrink-0"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
                 </button>
-                <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 hidden sm:block tracking-tight">
+                <h1 className="text-base md:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 truncate tracking-tight">
                     {schoolSettings?.schoolName}
                 </h1>
             </div>
-            <div className="flex items-center gap-3 md:gap-4">
+            <div className="flex items-center gap-2 md:gap-4">
                 {canSwitch && (
-                    <Button size="sm" onClick={handleRoleSwitch} variant="ghost" className="hidden sm:flex text-xs uppercase tracking-wider font-semibold">
-                        Switch View
+                    <Button 
+                        size="sm" 
+                        onClick={handleRoleSwitch} 
+                        variant="ghost" 
+                        className="text-xs uppercase tracking-wider font-semibold text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 p-2 sm:px-4"
+                        title="Switch View"
+                    >
+                        <span className="hidden sm:inline">Switch View</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 sm:hidden">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                        </svg>
                     </Button>
                 )}
                  <button onClick={() => setShowGlobalSearch(true)} className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 hover:bg-slate-800 hover:border-slate-600 transition-all text-sm text-slate-400">
@@ -257,9 +266,12 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
                     <span className="hidden lg:inline">Search</span>
                     <kbd className="hidden lg:inline px-1.5 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-900 rounded border border-slate-700 ml-2">⌘K</kbd>
                 </button>
+                <button onClick={() => setShowGlobalSearch(true)} className="md:hidden p-2 text-slate-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+                </button>
                 <NotificationsBell />
                 <div className="h-8 w-px bg-slate-700 mx-1 hidden sm:block"></div>
-                <Button size="sm" variant="ghost" onClick={handleSignOut} className="text-red-400 hover:text-red-300 hover:bg-red-400/10">
+                <Button size="sm" variant="ghost" onClick={handleSignOut} className="text-red-400 hover:text-red-300 hover:bg-red-400/10 p-2 sm:px-4">
                     <span className="hidden sm:inline">Sign Out</span>
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 sm:hidden"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>
                 </Button>
@@ -278,7 +290,7 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
     }
 
     return (
-        <div className="min-h-screen flex flex-col font-sans text-slate-200">
+        <div className="h-[100dvh] flex flex-col font-sans text-slate-200 bg-slate-950 overflow-hidden">
             <CursorFollower />
             <Header />
             <div className="flex-1 flex overflow-hidden relative z-10">
@@ -290,13 +302,19 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
 }
 
 export const App: React.FC = () => {
+    // Sidebar default state logic - start collapsed on mobile
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(window.innerWidth >= 1024);
     
     useEffect(() => {
         const handleResize = () => {
-            if (window.innerWidth < 1024) setIsSidebarExpanded(false);
-            else setIsSidebarExpanded(true);
+            // Automatically expand sidebar on large screens, collapse on small
+            if (window.innerWidth >= 1024) {
+                setIsSidebarExpanded(true);
+            } else {
+                setIsSidebarExpanded(false);
+            }
         };
+        
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);

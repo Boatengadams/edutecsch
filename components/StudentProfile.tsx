@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState } from 'react';
 import { UserProfile, Assignment, Submission } from '../types';
 import Card from './common/Card';
@@ -97,7 +98,7 @@ const StudentProfile: React.FC<{ userProfile: UserProfile; assignments: Assignme
       <Card>
         <div className="flex flex-col sm:flex-row items-center gap-6">
           <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-4xl font-bold text-white shadow-lg">
-            {userProfile.name.charAt(0)}
+            {(userProfile.name || '?').charAt(0)}
           </div>
           <div className="flex-grow">
             <h2 className="text-3xl font-bold glow-text">{userProfile.name}</h2>

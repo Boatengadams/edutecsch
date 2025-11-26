@@ -11,10 +11,16 @@ import AdminCreateUserForm from './AdminCreateUserForm';
 import AdminCreateParentForm from './AdminCreateParentForm';
 import TimetableManager from './TimetableManager';
 import { useAllOnlineUsers } from '../hooks/useOnlineStatus';
-import { UserProfile, UserActivityLog, SchoolSettings, GES_CLASSES, PublishedFlyer, UserRole } from '../types';
+import { UserProfile, UserActivityLog, SchoolSettings, GES_CLASSES, PublishedFlyer, UserRole, AttendanceRecord } from '../types';
 import { useApproveUser } from '../hooks/useApproveUser';
 import { useRejectUser } from '../hooks/useRejectUser';
 import { useToast } from './common/Toast';
+import AdminAttendanceDashboard from './AdminAttendanceDashboard';
+import AdminTerminalReports from './AdminTerminalReports';
+import AdminClassManagement from './AdminClassManagement';
+import AdminCalendar from './AdminCalendar';
+import AdminMaterials from './AdminMaterials';
+import SystemActivation from './SystemActivation';
 
 // --- SUB-COMPONENTS ---
 
@@ -48,7 +54,7 @@ const OnlineUsersMonitor: React.FC = () => {
                 {filteredUsers.map(user => (
                     <div key={user.uid} className="flex items-center gap-3 p-3 bg-slate-800 rounded-lg border border-slate-700 shadow-sm">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white ${user.state === 'online' ? 'bg-green-600' : 'bg-gray-600'}`}>
-                            {user.name ? user.name.charAt(0) : '?'}
+                            {(user.name || '?').charAt(0)}
                         </div>
                         <div className="flex-grow min-w-0">
                             <p className="font-semibold truncate text-white">{user.name || 'Unknown'}</p>
@@ -279,6 +285,8 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
     const [userClassFilter, setUserClassFilter] = useState<string>('all');
     const [bulkRoleTarget, setBulkRoleTarget] = useState<UserRole>('student');
     
+    const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+
     const [rejectUsers, { loading: deletingUsers }] = useRejectUser();
     const [approveUsers, { loading: updatingUsers }] = useApproveUser();
     const onlineUsersMap = useAllOnlineUsers(); // Get online statuses
@@ -291,6 +299,16 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
         });
         return () => unsubscribe();
     }, []);
+    
+    // Fetch attendance for dashboard
+    useEffect(() => {
+        if (activeTab === 'attendance') {
+            const unsubscribe = db.collection('attendance').orderBy('date', 'desc').limit(100).onSnapshot(snap => {
+                setAttendanceRecords(snap.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceRecord)));
+            });
+            return () => unsubscribe();
+        }
+    }, [activeTab]);
 
     const filteredUsers = useMemo(() => {
         return allUsers.filter(u => {
@@ -330,9 +348,15 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
         { key: 'dashboard', label: 'Command Center', icon: <span className="text-xl">🚀</span> },
         { key: 'activity_monitoring', label: 'Activity Monitor', icon: <span className="text-xl">📡</span> },
         { key: 'approvals', label: 'Approvals', icon: <span className="text-xl">✅</span> },
+        { key: 'class_management', label: 'Class Management', icon: <span className="text-xl">🏫</span> },
         { key: 'user_management', label: 'User Management', icon: <span className="text-xl">👥</span> },
         { key: 'timetables', label: 'Timetables', icon: <span className="text-xl">🗓️</span> },
+        { key: 'calendar', label: 'School Calendar', icon: <span className="text-xl">📅</span> },
+        { key: 'attendance', label: 'Attendance', icon: <span className="text-xl">📊</span> },
+        { key: 'terminal_reports', label: 'Terminal Reports', icon: <span className="text-xl">📈</span> },
+        { key: 'teaching_materials', label: 'Teaching Material', icon: <span className="text-xl">📚</span> },
         { key: 'communication', label: 'Communication', icon: <span className="text-xl">📢</span> },
+        { key: 'system_activation', label: 'System Activation', icon: <span className="text-xl">🔑</span> },
         { key: 'settings', label: 'Settings', icon: <span className="text-xl">⚙️</span> },
     ];
 
@@ -415,6 +439,12 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
                         <AdminApprovalQueue allUsers={allUsers} />
                     </div>
                 );
+            case 'class_management':
+                return <AdminClassManagement allUsers={allUsers} />;
+            case 'calendar':
+                return <AdminCalendar />;
+            case 'teaching_materials':
+                return <AdminMaterials />;
             case 'user_management':
                 return (
                     <div className="space-y-6">
@@ -483,73 +513,75 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
                                 )}
 
                                 {/* User Table */}
-                                <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-                                    <table className="w-full text-left text-sm text-gray-400">
-                                        <thead className="bg-slate-900 text-gray-200 uppercase text-xs">
-                                            <tr>
-                                                <th className="p-4 w-4">
-                                                    <input type="checkbox" onChange={handleSelectAllUsers} checked={selectedUserUids.length > 0 && selectedUserUids.length === filteredUsers.length} className="rounded bg-slate-700 border-slate-600" />
-                                                </th>
-                                                <th className="p-4">User</th>
-                                                <th className="p-4">Role</th>
-                                                <th className="p-4">Details</th>
-                                                <th className="p-4 text-right">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-700">
-                                            {loadingUsers ? (
-                                                <tr><td colSpan={5} className="p-8 text-center"><Spinner/></td></tr>
-                                            ) : filteredUsers.length === 0 ? (
-                                                <tr><td colSpan={5} className="p-8 text-center">No users found.</td></tr>
-                                            ) : (
-                                                filteredUsers.map(user => {
-                                                    const isOnline = onlineUsersMap.find(u => u.uid === user.uid)?.state === 'online';
-                                                    return (
-                                                        <tr key={user.uid} className={`hover:bg-slate-700/50 ${selectedUserUids.includes(user.uid) ? 'bg-blue-900/10' : ''}`}>
-                                                            <td className="p-4">
-                                                                <input 
-                                                                    type="checkbox" 
-                                                                    checked={selectedUserUids.includes(user.uid)}
-                                                                    onChange={() => setSelectedUserUids(prev => prev.includes(user.uid) ? prev.filter(id => id !== user.uid) : [...prev, user.uid])}
-                                                                    className="rounded bg-slate-700 border-slate-600"
-                                                                />
-                                                            </td>
-                                                            <td className="p-4">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="relative">
-                                                                        <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold">
-                                                                            {user.name.charAt(0)}
+                                <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-x-auto">
+                                    <div className="min-w-[800px]">
+                                        <table className="w-full text-left text-sm text-gray-400">
+                                            <thead className="bg-slate-900 text-gray-200 uppercase text-xs">
+                                                <tr>
+                                                    <th className="p-4 w-4">
+                                                        <input type="checkbox" onChange={handleSelectAllUsers} checked={selectedUserUids.length > 0 && selectedUserUids.length === filteredUsers.length} className="rounded bg-slate-700 border-slate-600" />
+                                                    </th>
+                                                    <th className="p-4">User</th>
+                                                    <th className="p-4">Role</th>
+                                                    <th className="p-4">Details</th>
+                                                    <th className="p-4 text-right">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-700">
+                                                {loadingUsers ? (
+                                                    <tr><td colSpan={5} className="p-8 text-center"><Spinner/></td></tr>
+                                                ) : filteredUsers.length === 0 ? (
+                                                    <tr><td colSpan={5} className="p-8 text-center">No users found.</td></tr>
+                                                ) : (
+                                                    filteredUsers.map(user => {
+                                                        const isOnline = onlineUsersMap.find(u => u.uid === user.uid)?.state === 'online';
+                                                        return (
+                                                            <tr key={user.uid} className={`hover:bg-slate-700/50 ${selectedUserUids.includes(user.uid) ? 'bg-blue-900/10' : ''}`}>
+                                                                <td className="p-4">
+                                                                    <input 
+                                                                        type="checkbox" 
+                                                                        checked={selectedUserUids.includes(user.uid)}
+                                                                        onChange={() => setSelectedUserUids(prev => prev.includes(user.uid) ? prev.filter(id => id !== user.uid) : [...prev, user.uid])}
+                                                                        className="rounded bg-slate-700 border-slate-600"
+                                                                    />
+                                                                </td>
+                                                                <td className="p-4">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="relative">
+                                                                            <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold">
+                                                                                {(user.name || '?').charAt(0)}
+                                                                            </div>
+                                                                            {isOnline && <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-slate-800 rounded-full"></span>}
                                                                         </div>
-                                                                        {isOnline && <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-slate-800 rounded-full"></span>}
+                                                                        <div>
+                                                                            <p className="font-semibold text-white">{user.name}</p>
+                                                                            <p className="text-xs">{user.email}</p>
+                                                                        </div>
                                                                     </div>
-                                                                    <div>
-                                                                        <p className="font-semibold text-white">{user.name}</p>
-                                                                        <p className="text-xs">{user.email}</p>
-                                                                    </div>
-                                                                </div>
-                                                            </td>
-                                                            <td className="p-4">
-                                                                <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
-                                                                    user.role === 'admin' ? 'bg-purple-500/20 text-purple-400' :
-                                                                    user.role === 'teacher' ? 'bg-blue-500/20 text-blue-400' :
-                                                                    'bg-slate-700 text-slate-300'
-                                                                }`}>
-                                                                    {user.role}
-                                                                </span>
-                                                            </td>
-                                                            <td className="p-4">
-                                                                {user.class && <span className="bg-slate-700 px-2 py-1 rounded text-xs mr-2">{user.class}</span>}
-                                                                {user.childUids && user.childUids.length > 0 && <span className="bg-slate-700 px-2 py-1 rounded text-xs">{user.childUids.length} Children</span>}
-                                                            </td>
-                                                            <td className="p-4 text-right">
-                                                                <button className="text-blue-400 hover:text-white text-xs font-medium px-3 py-1 rounded border border-slate-600 hover:bg-slate-700">Edit</button>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })
-                                            )}
-                                        </tbody>
-                                    </table>
+                                                                </td>
+                                                                <td className="p-4">
+                                                                    <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
+                                                                        user.role === 'admin' ? 'bg-purple-500/20 text-purple-400' :
+                                                                        user.role === 'teacher' ? 'bg-blue-500/20 text-blue-400' :
+                                                                        'bg-slate-700 text-slate-300'
+                                                                    }`}>
+                                                                        {user.role}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="p-4">
+                                                                    {user.class && <span className="bg-slate-700 px-2 py-1 rounded text-xs mr-2">{user.class}</span>}
+                                                                    {user.childUids && user.childUids.length > 0 && <span className="bg-slate-700 px-2 py-1 rounded text-xs">{user.childUids.length} Children</span>}
+                                                                </td>
+                                                                <td className="p-4 text-right">
+                                                                    <button className="text-blue-400 hover:text-white text-xs font-medium px-3 py-1 rounded border border-slate-600 hover:bg-slate-700">Edit</button>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
 
@@ -588,6 +620,10 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
                         )}
                     </div>
                 );
+            case 'attendance':
+                return <AdminAttendanceDashboard allUsers={allUsers} attendanceRecords={attendanceRecords} />;
+            case 'terminal_reports':
+                return <AdminTerminalReports schoolSettings={schoolSettings} user={user} />;
             case 'communication':
                 return (
                     <div className="space-y-6">
@@ -602,6 +638,8 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
                         <AdminSettingsEditor settings={schoolSettings} />
                     </div>
                 );
+            case 'system_activation':
+                return <SystemActivation subscriptionStatus={subscriptionStatus} />;
             default:
                 return <div>Select a tab</div>;
         }

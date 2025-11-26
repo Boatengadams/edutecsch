@@ -2,9 +2,9 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuthentication } from '../hooks/useAuth';
 import { db, storage, functions, firebase } from '../services/firebase';
-// FIX: Correctly import values vs types to avoid duplicate identifier errors.
-import { GES_STANDARD_CURRICULUM, GES_CLASSES } from '../types';
-import type { Assignment, Submission, UserProfile, TeachingMaterial, GeneratedContent, SubjectsByClass, Timetable, Quiz, Presentation, LiveTutoringSession, AttendanceRecord, AttendanceStatus, Notification, GES_SUBJECTS, TerminalReport, TerminalReportMark, ReportSummary, SchoolSettings, VideoContent, SchoolEvent, TimetableData, TimetablePeriod, LiveLesson, LiveLessonStep, Group, GroupMember, GroupMessage, Conversation, Slide } from '../types';
+// FIX: GES_STANDARD_CURRICULUM is a value, so it's imported separately from the types.
+import { GES_STANDARD_CURRICULUM } from '../types';
+import type { Assignment, Submission, UserProfile, TeachingMaterial, GeneratedContent, SubjectsByClass, GES_CLASSES, Timetable, Quiz, Presentation, LiveTutoringSession, AttendanceRecord, AttendanceStatus, Notification, GES_SUBJECTS, TerminalReport, TerminalReportMark, ReportSummary, SchoolSettings, VideoContent, SchoolEvent, TimetableData, TimetablePeriod, LiveLesson, LiveLessonStep, Group, GroupMember, GroupMessage, Conversation, Slide } from '../types';
 import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
@@ -24,6 +24,7 @@ import VideoGenerator from './VideoGenerator';
 import TeacherCreateStudentForm from './TeacherCreateStudentForm';
 import TeacherCreateParentForm from './TeacherCreateParentForm';
 import SnapToRegister from './SnapToRegister';
+// FIX: Changed import of TeacherLiveClassroom to be a named import as it is not a default export.
 import { TeacherLiveClassroom } from './TeacherLiveClassroom';
 import BECEPastQuestionsView from './common/BECEPastQuestionsView';
 import MessagingView from './MessagingView';
@@ -43,6 +44,7 @@ const getGrade = (score: number) => {
     return 'F';
 };
 
+// FIX: Added missing compressImage function definition.
 const compressImage = (file: Blob, quality = 0.85): Promise<Blob> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -147,21 +149,21 @@ const GroupDetailsModal: React.FC<{
     
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex justify-center items-center p-4 z-50">
-            <Card className="w-full max-w-5xl h-[85vh] flex flex-col !bg-slate-800 !border-slate-700 shadow-2xl">
+            <Card className="w-full max-w-5xl h-[90vh] sm:h-[85vh] flex flex-col !bg-slate-800 !border-slate-700 shadow-2xl">
                 <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-700">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center text-2xl">🤝</div>
                         <div>
-                            <h2 className="text-2xl font-bold text-white">{group.name}</h2>
+                            <h2 className="text-xl md:text-2xl font-bold text-white truncate max-w-[200px] sm:max-w-md">{group.name}</h2>
                             <p className="text-sm text-purple-300">{group.classId} • {group.subject}</p>
                         </div>
                     </div>
                     <Button variant="secondary" onClick={onClose} className="!rounded-full">Close</Button>
                 </div>
                 
-                <div className="flex-grow grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-hidden">
+                <div className="flex-grow grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-y-auto lg:overflow-hidden">
                     {/* Left Panel: Details & Grading */}
-                    <div className="lg:col-span-4 flex flex-col gap-6 overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="lg:col-span-4 flex flex-col gap-6 pr-2">
                         <div className="bg-slate-700/30 p-4 rounded-xl border border-slate-700">
                             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Assignment Brief</h4>
                             <p className="font-semibold text-white text-lg mb-1">{group.assignmentTitle}</p>
@@ -216,7 +218,7 @@ const GroupDetailsModal: React.FC<{
                     </div>
 
                     {/* Right Panel: Chat */}
-                    <div className="lg:col-span-8 h-full min-h-[400px]">
+                    <div className="lg:col-span-8 h-[500px] lg:h-full min-h-[400px]">
                          <TeacherGroupChatView group={group} />
                     </div>
                 </div>
@@ -395,16 +397,16 @@ const TeacherDashboard: React.FC<{
     return (
         <div className="space-y-8">
             {/* Hero Section */}
-            <div className="relative bg-gradient-to-r from-indigo-900 to-purple-900 p-8 rounded-3xl overflow-hidden shadow-2xl border border-indigo-500/30">
+            <div className="relative bg-gradient-to-r from-indigo-900 to-purple-900 p-6 sm:p-8 rounded-3xl overflow-hidden shadow-2xl border border-indigo-500/30">
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
                 <div className="relative z-10">
-                    <h2 className="text-4xl font-black text-white mb-2 tracking-tight">Welcome Back, {userProfile.name.split(' ')[0]}!</h2>
-                    <p className="text-indigo-200">Ready to shape the future today?</p>
+                    <h2 className="text-2xl sm:text-4xl font-black text-white mb-2 tracking-tight">Welcome Back, {userProfile.name.split(' ')[0]}!</h2>
+                    <p className="text-indigo-200 text-sm sm:text-base">Ready to shape the future today?</p>
                 </div>
             </div>
 
             {/* Quick Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="bg-slate-800/60 backdrop-blur-md border border-slate-700 p-6 rounded-2xl relative overflow-hidden group hover:border-blue-500/50 transition-colors">
                     <div className="absolute top-0 right-0 p-4 opacity-10 text-6xl group-hover:scale-110 transition-transform">🎓</div>
                     <p className="text-sm text-slate-400 uppercase tracking-wider font-bold">Total Students</p>
@@ -431,12 +433,12 @@ const TeacherDashboard: React.FC<{
                     </h3>
                     <div className="space-y-4">
                         {upcomingAssignments.length > 0 ? upcomingAssignments.map(a => (
-                            <div key={a.id} className="flex justify-between items-center p-4 bg-slate-700/50 rounded-xl hover:bg-slate-700 transition-colors">
+                            <div key={a.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-slate-700/50 rounded-xl hover:bg-slate-700 transition-colors gap-2">
                                 <div>
-                                    <p className="font-semibold text-white">{a.title}</p>
+                                    <p className="font-semibold text-white truncate max-w-[250px]">{a.title}</p>
                                     <p className="text-xs text-slate-400 mt-1">{a.classId} • {a.subject}</p>
                                 </div>
-                                <div className="text-right">
+                                <div className="text-right self-end sm:self-auto">
                                     <span className="text-xs font-mono text-blue-300 bg-blue-500/10 px-2 py-1 rounded">
                                         {new Date(a.dueDate!).toLocaleDateString(undefined, {month:'short', day:'numeric'})}
                                     </span>
@@ -454,12 +456,12 @@ const TeacherDashboard: React.FC<{
                          {recentSubmissionsToGrade.length > 0 ? recentSubmissionsToGrade.map(s => {
                              const assignment = assignments.find(a => a.id === s.assignmentId);
                              return (
-                                <div key={s.id} className="flex justify-between items-center p-4 bg-slate-700/50 rounded-xl hover:bg-slate-700 transition-colors">
+                                <div key={s.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-slate-700/50 rounded-xl hover:bg-slate-700 transition-colors gap-2">
                                     <div>
                                         <p className="font-semibold text-white">{s.studentName}</p>
                                         <p className="text-xs text-slate-400 mt-1 truncate max-w-[200px]">{assignment?.title || 'Unknown Assignment'}</p>
                                     </div>
-                                    <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded uppercase">Review</span>
+                                    <span className="self-end sm:self-auto px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded uppercase">Review</span>
                                 </div>
                              )
                          }) : <p className="text-slate-500 text-center py-8">All caught up!</p>}
@@ -964,9 +966,9 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
             }, { merge: true });
             
             // Send notifications for absences
-            try {
-                const absentStudentIds = classStudents.filter(s => attendanceData[s.uid] === 'Absent').map(s => s.uid);
-                if (absentStudentIds.length > 0) {
+            const absentStudentIds = classStudents.filter(s => attendanceData[s.uid] === 'Absent').map(s => s.uid);
+            if (absentStudentIds.length > 0) {
+                 try {
                      const sendNotifications = functions.httpsCallable('sendNotificationsToParentsOfStudents');
                      await sendNotifications({
                          studentUids: absentStudentIds,
@@ -974,12 +976,11 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                          senderId: user.uid,
                          senderName: userProfile.name,
                      });
-                }
-            } catch (notificationError) {
-                console.error("Failed to send absentee notifications:", notificationError);
-                // Don't block the success message, just log the error
+                 } catch (notifyErr) {
+                     console.error("Failed to send notifications:", notifyErr);
+                     // Don't block success message
+                 }
             }
-
             setToast({ message: "Attendance saved successfully.", type: 'success' });
         } catch(err: any) {
             console.error(err);
@@ -1212,20 +1213,20 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
 
                  return (
                     <div className="space-y-6">
-                         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                              <h2 className="text-3xl font-bold">My Students</h2>
-                             <div className="flex gap-2">
-                                <div className="relative">
+                             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                                <div className="relative flex-grow sm:flex-grow-0">
                                     <input 
                                         type="text" 
                                         placeholder="Search students..." 
                                         value={studentSearchTerm}
                                         onChange={(e) => setStudentSearchTerm(e.target.value)}
-                                        className="pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                        className="w-full sm:w-64 pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                                     />
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">🔍</span>
                                 </div>
-                                <Button onClick={() => setShowCreateParentModal(true)}>Create Parent Account</Button>
+                                <Button onClick={() => setShowCreateParentModal(true)} className="w-full sm:w-auto">Create Parent Account</Button>
                              </div>
                          </div>
                          
@@ -1265,24 +1266,26 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
             case 'assignments':
                 return (
                     <div className="space-y-6">
-                        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <h2 className="text-3xl font-bold">Assignments</h2>
-                            <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-2">
-                                    <label htmlFor="class-filter" className="text-sm text-gray-400">Class:</label>
-                                    <select id="class-filter" value={classFilter} onChange={e => setClassFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm">
-                                        <option value="all">All Classes</option>
-                                        {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
+                                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                                    <div className="flex items-center gap-2 flex-grow sm:flex-grow-0">
+                                        <label htmlFor="class-filter" className="text-sm text-gray-400 whitespace-nowrap">Class:</label>
+                                        <select id="class-filter" value={classFilter} onChange={e => setClassFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm w-full sm:w-auto">
+                                            <option value="all">All Classes</option>
+                                            {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-grow sm:flex-grow-0">
+                                         <label htmlFor="subject-filter" className="text-sm text-gray-400 whitespace-nowrap">Subject:</label>
+                                        <select id="subject-filter" value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm w-full sm:w-auto">
+                                            <option value="all">All Subjects</option>
+                                            {subjectsForFilter.map(s => <option key={s} value={s}>{s}</option>)}
+                                        </select>
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                     <label htmlFor="subject-filter" className="text-sm text-gray-400">Subject:</label>
-                                    <select id="subject-filter" value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm">
-                                        <option value="all">All Subjects</option>
-                                        {subjectsForFilter.map(s => <option key={s} value={s}>{s}</option>)}
-                                    </select>
-                                </div>
-                                <Button onClick={handleCreateNewAssignment}>+ Create</Button>
+                                <Button onClick={handleCreateNewAssignment} className="w-full sm:w-auto">+ Create</Button>
                             </div>
                         </div>
 
@@ -1348,14 +1351,14 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
             case 'group_work':
                 return (
                      <div className="space-y-6">
-                        <div className="flex justify-between items-center">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <h2 className="text-3xl font-bold">Group Projects</h2>
-                            <div className="flex items-center gap-4">
-                               <select value={groupClassFilter} onChange={e => setGroupClassFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm">
+                            <div className="flex items-center gap-4 w-full sm:w-auto">
+                               <select value={groupClassFilter} onChange={e => setGroupClassFilter(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm flex-grow sm:flex-grow-0">
                                     <option value="all">All Classes</option>
                                     {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
                                </select>
-                                <Button onClick={() => { setEditingGroup(null); setShowCreateGroupModal(true); }}>+ New Group</Button>
+                                <Button onClick={() => { setEditingGroup(null); setShowCreateGroupModal(true); }} className="flex-grow sm:flex-grow-0">+ New Group</Button>
                             </div>
                         </div>
                         
@@ -1378,7 +1381,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                                             <div className="flex -space-x-2 overflow-hidden">
                                                 {group.members.map((m, i) => (
                                                     <div key={i} className="inline-block h-8 w-8 rounded-full ring-2 ring-slate-800 bg-slate-700 flex items-center justify-center text-xs font-bold text-white" title={m.name}>
-                                                        {m.name.charAt(0)}
+                                                        {m.name ? m.name.charAt(0) : '?'}
                                                     </div>
                                                 ))}
                                             </div>
@@ -1404,9 +1407,9 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
             case 'timetable':
                 return (
                     <div className="space-y-6">
-                        <div className="flex justify-between items-center">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <h2 className="text-3xl font-bold">My Timetable</h2>
-                            <select value={timetableClass} onChange={e => setTimetableClass(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600">
+                            <select value={timetableClass} onChange={e => setTimetableClass(e.target.value)} className="w-full sm:w-auto p-2 bg-slate-700 rounded-md border border-slate-600">
                                 {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                         </div>
@@ -1465,7 +1468,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                                 <h2 className="text-3xl font-bold">Attendance Register</h2>
                                 <p className="text-blue-300 font-medium">{userProfile.classTeacherOf} &bull; {new Date(attendanceDate).toLocaleDateString(undefined, {weekday:'long', month:'long', day:'numeric'})}</p>
                             </div>
-                            <div className="flex items-center gap-4 bg-slate-900/50 p-2 rounded-xl border border-slate-700">
+                            <div className="flex items-center gap-4 bg-slate-900/50 p-2 rounded-xl border border-slate-700 w-full md:w-auto justify-between md:justify-start">
                                 <input type="date" value={attendanceDate} onChange={e => setAttendanceDate(e.target.value)} className="p-2 bg-slate-800 rounded-lg text-sm border border-slate-600 focus:border-blue-500 outline-none" />
                                 <Button onClick={handleSaveAttendance} disabled={isSavingAttendance}>{isSavingAttendance ? 'Saving...' : 'Save Register'}</Button>
                             </div>
@@ -1487,25 +1490,25 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                              </div>
                          </div>
 
-                         <div className="flex justify-between items-center mb-4 p-3 bg-slate-800/50 rounded-lg">
+                         <div className="flex flex-col sm:flex-row justify-between items-center mb-4 p-3 bg-slate-800/50 rounded-lg gap-2">
                             <span className="text-xs text-slate-400 uppercase font-bold">Batch Actions</span>
-                            <div className="flex gap-2">
-                                <button onClick={() => handleMarkAll('Present')} className="px-3 py-1 text-xs bg-slate-700 hover:bg-green-900/50 text-green-300 rounded border border-slate-600 transition-colors">Mark All Present</button>
-                                <button onClick={() => handleMarkAll('Absent')} className="px-3 py-1 text-xs bg-slate-700 hover:bg-red-900/50 text-red-300 rounded border border-slate-600 transition-colors">Mark All Absent</button>
+                            <div className="flex gap-2 w-full sm:w-auto">
+                                <button onClick={() => handleMarkAll('Present')} className="flex-1 sm:flex-none px-3 py-1 text-xs bg-slate-700 hover:bg-green-900/50 text-green-300 rounded border border-slate-600 transition-colors">Mark All Present</button>
+                                <button onClick={() => handleMarkAll('Absent')} className="flex-1 sm:flex-none px-3 py-1 text-xs bg-slate-700 hover:bg-red-900/50 text-red-300 rounded border border-slate-600 transition-colors">Mark All Absent</button>
                             </div>
                          </div>
 
                          <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
                              {classStudents.map(student => (
-                                 <div key={student.uid} className="flex items-center justify-between p-3 bg-slate-800 rounded-xl border border-slate-700 hover:border-slate-600 transition-all">
+                                 <div key={student.uid} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-slate-800 rounded-xl border border-slate-700 hover:border-slate-600 transition-all gap-3">
                                      <div className="flex items-center gap-3">
                                          <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center font-bold text-slate-300">
-                                             {student.name.charAt(0)}
+                                             {(student.name || '?').charAt(0)}
                                          </div>
                                          <span className="font-medium text-white">{student.name}</span>
                                      </div>
                                      
-                                     <div className="flex bg-slate-900 p-1 rounded-lg">
+                                     <div className="flex bg-slate-900 p-1 rounded-lg w-full sm:w-auto">
                                          {(['Present', 'Absent', 'Late'] as AttendanceStatus[]).map(status => {
                                              const isActive = attendanceData[student.uid] === status;
                                              let activeClass = '';
@@ -1517,7 +1520,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                                                  <button
                                                      key={status}
                                                      onClick={() => handleAttendanceChange(student.uid, status)}
-                                                     className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${isActive ? activeClass : 'text-slate-500 hover:text-slate-300'}`}
+                                                     className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-md transition-all ${isActive ? activeClass : 'text-slate-500 hover:text-slate-300'}`}
                                                  >
                                                      {status}
                                                  </button>
@@ -1538,95 +1541,96 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                                  <h2 className="text-2xl font-bold text-white">Terminal Reports</h2>
                                  <p className="text-xs text-slate-400 mt-1">Enter marks and generate end-of-term reports.</p>
                              </div>
-                             <div className="flex flex-wrap items-center gap-3">
-                                <select value={reportClass} onChange={e => setReportClass(e.target.value)} className="p-2 bg-slate-800 rounded-lg border border-slate-600 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                                <select value={reportClass} onChange={e => setReportClass(e.target.value)} className="flex-grow p-2 bg-slate-800 rounded-lg border border-slate-600 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                                     {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
-                                <select value={reportSubject} onChange={e => setReportSubject(e.target.value)} disabled={subjectsForReport.length === 0} className="p-2 bg-slate-800 rounded-lg border border-slate-600 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                                <select value={reportSubject} onChange={e => setReportSubject(e.target.value)} disabled={subjectsForReport.length === 0} className="flex-grow p-2 bg-slate-800 rounded-lg border border-slate-600 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                                     {subjectsForReport.length > 0 ? subjectsForReport.map(s => <option key={s} value={s}>{s}</option>) : <option>No subjects</option>}
                                 </select>
-                                <div className="h-8 w-px bg-slate-700 mx-2"></div>
-                                <button onClick={handleAutoFillScores} className="px-3 py-2 bg-yellow-600/20 text-yellow-400 border border-yellow-600/50 rounded-lg text-sm hover:bg-yellow-600/30 transition-colors flex items-center gap-2">
+                                <div className="hidden md:block h-8 w-px bg-slate-700 mx-2"></div>
+                                <button onClick={handleAutoFillScores} className="flex-grow md:flex-grow-0 px-3 py-2 bg-yellow-600/20 text-yellow-400 border border-yellow-600/50 rounded-lg text-sm hover:bg-yellow-600/30 transition-colors flex items-center justify-center gap-2">
                                     ✨ Auto-fill
                                 </button>
-                                <Button onClick={calculateTotalsAndSave} disabled={isSavingMarks} className="shadow-lg shadow-blue-600/20">
+                                <Button onClick={calculateTotalsAndSave} disabled={isSavingMarks} className="flex-grow md:flex-grow-0 shadow-lg shadow-blue-600/20">
                                     {isSavingMarks ? 'Saving...' : 'Save Changes'}
                                 </Button>
                              </div>
                         </div>
                         
-                         <div className="overflow-auto border border-slate-700 rounded-xl shadow-inner custom-scrollbar flex-grow">
-                             <table className="min-w-full text-sm border-collapse">
-                                 <thead className="bg-slate-800 sticky top-0 z-20">
-                                    <tr>
-                                        <th rowSpan={2} className="p-3 text-left border-b border-r border-slate-600 font-bold text-slate-300 min-w-[180px] sticky left-0 bg-slate-800 z-30 shadow-lg">STUDENT NAME</th>
-                                        <th colSpan={4} className="p-2 border-b border-r border-slate-600 text-center bg-blue-900/20 text-blue-200 font-bold">CLASS ASSESSMENT (15 each)</th>
-                                        <th rowSpan={2} className="p-2 border-b border-r border-slate-600 text-center w-20 font-bold bg-slate-700/50 text-slate-300">CLASS (50%)</th>
-                                        <th rowSpan={2} className="p-2 border-b border-r border-slate-600 text-center w-24 font-bold bg-purple-900/20 text-purple-200">EXAM (100)</th>
-                                        <th rowSpan={2} className="p-2 border-b border-r border-slate-600 text-center w-20 font-bold bg-slate-700/50 text-slate-300">EXAM (50%)</th>
-                                        <th colSpan={3} className="p-2 border-b border-slate-600 text-center bg-green-900/20 text-green-200 font-bold">FINAL GRADING</th>
-                                    </tr>
-                                    <tr className="text-xs text-slate-400">
-                                        <th className="p-2 border-b border-r border-slate-600 font-medium text-center w-20">ASSIGNMENTS (15)</th>
-                                        <th className="p-2 border-b border-r border-slate-600 font-medium text-center w-20">GROUP (15)</th>
-                                        <th className="p-2 border-b border-r border-slate-600 font-medium text-center w-20">TEST (15)</th>
-                                        <th className="p-2 border-b border-r border-slate-600 font-medium text-center w-20">PROJECT (15)</th>
-                                        <th className="p-2 border-b border-r border-slate-600 font-bold text-white bg-slate-900/50">TOTAL (100)</th>
-                                        <th className="p-2 border-b border-r border-slate-600 font-bold text-white bg-slate-900/50">GRADE</th>
-                                        <th className="p-2 border-b border-slate-600 font-bold text-white bg-slate-900/50">POS.</th>
-                                    </tr>
-                                 </thead>
-                                 <tbody className="divide-y divide-slate-800 bg-slate-900/30">
-                                    {studentsForReport.map((student, index) => {
-                                        const mark = marks[student.uid] || {};
-                                        const totalClassScore = (mark.indivTest || 0) + (mark.groupWork || 0) + (mark.classTest || 0) + (mark.project || 0);
-                                        const scaledClassScore = (totalClassScore / 60) * 50;
-                                        const scaledExamScore = ((mark.endOfTermExams || 0) / 100) * 50;
-                                        const overallTotal = scaledClassScore + scaledExamScore;
-                                        const grade = getGrade(overallTotal);
+                         <div className="overflow-auto border border-slate-700 rounded-xl shadow-inner custom-scrollbar flex-grow relative">
+                             <div className="min-w-[1000px]"> {/* Force min width for scroll */}
+                                 <table className="w-full text-sm border-collapse">
+                                     <thead className="bg-slate-800 sticky top-0 z-20">
+                                        <tr>
+                                            <th rowSpan={2} className="p-3 text-left border-b border-r border-slate-600 font-bold text-slate-300 min-w-[180px] sticky left-0 bg-slate-800 z-30 shadow-lg">STUDENT NAME</th>
+                                            <th colSpan={4} className="p-2 border-b border-r border-slate-600 text-center bg-blue-900/20 text-blue-200 font-bold">CLASS ASSESSMENT (15 each)</th>
+                                            <th rowSpan={2} className="p-2 border-b border-r border-slate-600 text-center w-20 font-bold bg-slate-700/50 text-slate-300">CLASS (50%)</th>
+                                            <th rowSpan={2} className="p-2 border-b border-r border-slate-600 text-center w-24 font-bold bg-purple-900/20 text-purple-200">EXAM (100)</th>
+                                            <th rowSpan={2} className="p-2 border-b border-r border-slate-600 text-center w-20 font-bold bg-slate-700/50 text-slate-300">EXAM (50%)</th>
+                                            <th colSpan={3} className="p-2 border-b border-slate-600 text-center bg-green-900/20 text-green-200 font-bold">FINAL GRADING</th>
+                                        </tr>
+                                        <tr className="text-xs text-slate-400">
+                                            <th className="p-2 border-b border-r border-slate-600 font-medium text-center w-20">ASSIGNMENTS (15)</th>
+                                            <th className="p-2 border-b border-r border-slate-600 font-medium text-center w-20">GROUP (15)</th>
+                                            <th className="p-2 border-b border-r border-slate-600 font-medium text-center w-20">TEST (15)</th>
+                                            <th className="p-2 border-b border-r border-slate-600 font-medium text-center w-20">PROJECT (15)</th>
+                                            <th className="p-2 border-b border-r border-slate-600 font-bold text-white bg-slate-900/50">TOTAL (100)</th>
+                                            <th className="p-2 border-b border-r border-slate-600 font-bold text-white bg-slate-900/50">GRADE</th>
+                                            <th className="p-2 border-b border-slate-600 font-bold text-white bg-slate-900/50">POS.</th>
+                                        </tr>
+                                     </thead>
+                                     <tbody className="divide-y divide-slate-800 bg-slate-900/30">
+                                        {studentsForReport.map((student, index) => {
+                                            const mark = marks[student.uid] || {};
+                                            const totalClassScore = (mark.indivTest || 0) + (mark.groupWork || 0) + (mark.classTest || 0) + (mark.project || 0);
+                                            const scaledClassScore = (totalClassScore / 60) * 50;
+                                            const scaledExamScore = ((mark.endOfTermExams || 0) / 100) * 50;
+                                            const overallTotal = scaledClassScore + scaledExamScore;
+                                            const grade = getGrade(overallTotal);
 
-                                        let gradeColor = 'text-slate-400';
-                                        if (grade === 'A') gradeColor = 'text-green-400 font-black';
-                                        else if (grade.startsWith('B')) gradeColor = 'text-green-300 font-bold';
-                                        else if (grade === 'F') gradeColor = 'text-red-500 font-black';
-                                        else if (grade.startsWith('D')) gradeColor = 'text-yellow-400 font-bold';
+                                            let gradeColor = 'text-slate-400';
+                                            if (grade === 'A') gradeColor = 'text-green-400 font-black';
+                                            else if (grade.startsWith('B')) gradeColor = 'text-green-300 font-bold';
+                                            else if (grade === 'F') gradeColor = 'text-red-500 font-black';
+                                            else if (grade.startsWith('D')) gradeColor = 'text-yellow-400 font-bold';
 
-                                        return (
-                                            <tr key={student.uid} className="hover:bg-slate-800 transition-colors group">
-                                                <td className="p-3 text-left border-r border-slate-700 font-medium text-white sticky left-0 bg-slate-900 group-hover:bg-slate-800 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.2)] whitespace-nowrap uppercase">
-                                                    {student.name}
-                                                </td>
-                                                {['indivTest', 'groupWork', 'classTest', 'project'].map((field) => (
-                                                    <td key={field} className="p-1 border-r border-slate-700 bg-blue-900/5">
+                                            return (
+                                                <tr key={student.uid} className="hover:bg-slate-800 transition-colors group">
+                                                    <td className="p-3 text-left border-r border-slate-700 font-medium text-white sticky left-0 bg-slate-900 group-hover:bg-slate-800 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.2)] whitespace-nowrap uppercase">
+                                                        {student.name}
+                                                    </td>
+                                                    {['indivTest', 'groupWork', 'classTest', 'project'].map((field) => (
+                                                        <td key={field} className="p-1 border-r border-slate-700 bg-blue-900/5">
+                                                            <input 
+                                                                type="number" step="0.1" min="0" max="15" 
+                                                                value={mark[field as keyof TerminalReportMark] ?? ''} 
+                                                                onChange={e => handleMarkChange(student.uid, field as keyof TerminalReportMark, e.target.value)} 
+                                                                className="w-full h-8 bg-transparent text-center focus:bg-slate-700 focus:ring-1 focus:ring-blue-500 outline-none rounded text-slate-300 placeholder-slate-700 font-mono"
+                                                                placeholder="-"
+                                                            />
+                                                        </td>
+                                                    ))}
+                                                    <td className="p-2 text-center font-bold border-r border-slate-700 text-slate-300 bg-slate-800/50">{scaledClassScore.toFixed(1)}</td>
+                                                    <td className="p-1 border-r border-slate-700 bg-purple-900/5">
                                                         <input 
-                                                            type="number" step="0.1" min="0" max="15" 
-                                                            value={mark[field as keyof TerminalReportMark] ?? ''} 
-                                                            onChange={e => handleMarkChange(student.uid, field as keyof TerminalReportMark, e.target.value)} 
-                                                            className="w-full h-8 bg-transparent text-center focus:bg-slate-700 focus:ring-1 focus:ring-blue-500 outline-none rounded text-slate-300 placeholder-slate-700 font-mono"
+                                                            type="number" step="0.1" min="0" max="100" 
+                                                            value={mark.endOfTermExams ?? ''} 
+                                                            onChange={e => handleMarkChange(student.uid, 'endOfTermExams', e.target.value)} 
+                                                            className="w-full h-8 bg-transparent text-center focus:bg-slate-700 focus:ring-1 focus:ring-purple-500 outline-none rounded text-white font-bold font-mono"
                                                             placeholder="-"
                                                         />
                                                     </td>
-                                                ))}
-                                                <td className="p-2 text-center font-bold border-r border-slate-700 text-slate-300 bg-slate-800/50">{scaledClassScore.toFixed(1)}</td>
-                                                <td className="p-1 border-r border-slate-700 bg-purple-900/5">
-                                                    <input 
-                                                        type="number" step="0.1" min="0" max="100" 
-                                                        value={mark.endOfTermExams ?? ''} 
-                                                        onChange={e => handleMarkChange(student.uid, 'endOfTermExams', e.target.value)} 
-                                                        className="w-full h-8 bg-transparent text-center focus:bg-slate-700 focus:ring-1 focus:ring-purple-500 outline-none rounded text-white font-bold font-mono"
-                                                        placeholder="-"
-                                                    />
-                                                </td>
-                                                <td className="p-2 text-center text-slate-400 border-r border-slate-700 bg-slate-800/50">{scaledExamScore.toFixed(1)}</td>
-                                                <td className="p-2 text-center font-black text-lg border-r border-slate-700 text-white">{overallTotal.toFixed(1)}</td>
-                                                <td className={`p-2 text-center text-lg border-r border-slate-700 ${gradeColor}`}>{grade}</td>
-                                                <td className="p-2 text-center font-medium text-slate-500">{mark.position}</td>
-                                            </tr>
-                                        );
-                                    })}
-                                 </tbody>
-                             </table>
-                         </div>
+                                                    <td className="p-2 text-center font-medium border-r border-slate-700 text-slate-400 bg-slate-800/50">{scaledExamScore.toFixed(1)}</td>
+                                                    <td className="p-2 text-center font-black border-r border-slate-700 text-white text-lg bg-slate-900/50">{overallTotal.toFixed(1)}</td>
+                                                    <td className={`p-2 text-center text-lg border-r border-slate-700 bg-slate-900/50 ${gradeColor}`}>{grade}</td>
+                                                    <td className="p-2 text-center font-bold text-white bg-slate-900/50">{mark.position || '-'}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                     </tbody>
+                                 </table>
+                             </div>
                     </Card>
                 );
             case 'past_questions':
@@ -1777,7 +1781,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
              {showCreateParentModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
                     <Card className="w-full max-w-md">
-                        <TeacherCreateParentForm allStudents={students} />
+                        <TeacherCreateParentForm allStudents={students} setToast={setToast} />
                         <Button variant="secondary" onClick={() => setShowCreateParentModal(false)} className="w-full mt-2">Cancel</Button>
                     </Card>
                 </div>
@@ -1814,4 +1818,4 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
     );
 };
 
-export default TeacherView;
+export const TeacherViewComponent = TeacherView; // Ensure named export is available if needed
