@@ -15,23 +15,298 @@ export const BECE_SUBJECTS = [
 ];
 
 export const beceDiagrams: { [key: string]: string } = {
-  'is_2023_q1a_repro_systems': `<div class="my-4 flex justify-center"><img src="https://i.imgur.com/7gq1o8A.png" alt="Diagram of male and female reproductive systems" class="max-w-full h-auto rounded-lg bg-white p-2"></div>`,
-  'is_2023_q1b_farm_tools': `<div class="my-4 flex justify-center"><img src="https://i.imgur.com/jIuJ4gL.png" alt="Diagram of farm tools" class="max-w-full h-auto rounded-lg bg-white p-2"></div>`,
+  'is_2025_q1a_cycle': `
+    <div class="my-4 flex justify-center">
+      <svg width="500" height="400" viewBox="0 0 500 400" xmlns="http://www.w3.org/2000/svg" style="background-color:white; border-radius:8px; padding:10px; border:1px solid #e2e8f0;">
+        <!-- Definitions for markers -->
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
+          </marker>
+        </defs>
+
+        <!-- Stage A (Left) -->
+        <ellipse cx="80" cy="200" rx="40" ry="25" fill="#e0f2fe" stroke="#0284c7" stroke-width="2" />
+        <text x="80" y="205" text-anchor="middle" font-weight="bold" font-size="16">A</text>
+
+        <!-- Stage B (Top) -->
+        <ellipse cx="250" cy="50" rx="40" ry="25" fill="#e0f2fe" stroke="#0284c7" stroke-width="2" />
+        <text x="250" y="55" text-anchor="middle" font-weight="bold" font-size="16">B</text>
+
+        <!-- Stage C (Center) -->
+        <ellipse cx="250" cy="200" rx="40" ry="25" fill="#e0f2fe" stroke="#0284c7" stroke-width="2" />
+        <text x="250" y="205" text-anchor="middle" font-weight="bold" font-size="16">C</text>
+
+        <!-- Stage D (Below C) -->
+        <ellipse cx="250" cy="300" rx="40" ry="25" fill="#e0f2fe" stroke="#0284c7" stroke-width="2" />
+        <text x="250" y="305" text-anchor="middle" font-weight="bold" font-size="16">D</text>
+        
+        <!-- Fossil Fuel (Bottom of D) -->
+        <ellipse cx="250" cy="370" rx="50" ry="20" fill="#fef3c7" stroke="#d97706" stroke-width="2" />
+        <text x="250" y="375" text-anchor="middle" font-size="12" font-weight="bold">Fossil Fuel</text>
+        <line x1="250" y1="325" x2="250" y2="350" stroke="#333" stroke-width="2" />
+
+        <!-- Factories (Right) -->
+        <ellipse cx="420" cy="100" rx="60" ry="30" fill="#fee2e2" stroke="#dc2626" stroke-width="2" />
+        <text x="420" y="105" text-anchor="middle" font-size="12" font-weight="bold">Factories</text>
+
+        <!-- Arrows & Labels -->
+        <!-- A -> B (P) -->
+        <path d="M95 180 Q 150 100 215 60" stroke="#333" stroke-width="2" fill="none" marker-end="url(#arrowhead)" />
+        <text x="140" y="110" font-weight="bold" font-size="14">P</text>
+
+        <!-- B -> C (Q) -->
+        <line x1="250" y1="75" x2="250" y2="165" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)" />
+        <text x="260" y="120" font-weight="bold" font-size="14">Q</text>
+        <text x="260" y="140" font-size="10" fill="#666">animal respiration</text>
+
+        <!-- B -> A (From previous request) -->
+        <path d="M215 55 Q 120 100 85 175" stroke="#333" stroke-width="2" fill="none" marker-end="url(#arrowhead)" />
+
+        <!-- C -> D -->
+        <line x1="250" y1="225" x2="250" y2="265" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)" />
+
+        <!-- D -> A (S) -->
+        <path d="M215 310 Q 120 310 90 235" stroke="#333" stroke-width="2" fill="none" marker-end="url(#arrowhead)" />
+        <text x="150" y="330" font-weight="bold" font-size="14">S</text>
+
+        <!-- B -> Factories (T) -->
+        <line x1="290" y1="60" x2="370" y2="90" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)" />
+        <text x="330" y="70" font-weight="bold" font-size="14">T</text>
+      </svg>
+    </div>
+  `,
+  'is_2025_q1b_farming': `
+    <div class="my-4 flex flex-col md:flex-row justify-center gap-8">
+      <!-- System K -->
+      <div class="flex flex-col items-center">
+        <h4 class="font-bold mb-2">System K</h4>
+        <svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" style="background-color:white; border-radius:8px; padding:5px; border:1px solid #e2e8f0;">
+          <defs>
+            <marker id="arrowheadK" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#15803d" />
+            </marker>
+          </defs>
+          
+          <!-- Blocks -->
+          <rect x="20" y="20" width="70" height="70" fill="#dcfce7" stroke="#166534" />
+          <text x="55" y="50" text-anchor="middle" font-size="12" font-weight="bold">A</text>
+          <text x="55" y="70" text-anchor="middle" font-size="10">Year 1</text>
+
+          <rect x="110" y="20" width="70" height="70" fill="#dcfce7" stroke="#166534" />
+          <text x="145" y="50" text-anchor="middle" font-size="12" font-weight="bold">B</text>
+          <text x="145" y="70" text-anchor="middle" font-size="10">Year 4</text>
+
+          <rect x="110" y="110" width="70" height="70" fill="#dcfce7" stroke="#166534" />
+          <text x="145" y="140" text-anchor="middle" font-size="12" font-weight="bold">C</text>
+          <text x="145" y="160" text-anchor="middle" font-size="10">Year 7</text>
+
+          <rect x="20" y="110" width="70" height="70" fill="#dcfce7" stroke="#166534" />
+          <text x="55" y="140" text-anchor="middle" font-size="12" font-weight="bold">D</text>
+          <text x="55" y="160" text-anchor="middle" font-size="10">Year 10</text>
+
+          <!-- Arrows -->
+          <line x1="90" y1="55" x2="110" y2="55" stroke="#15803d" stroke-width="2" marker-end="url(#arrowheadK)" />
+          <line x1="145" y1="90" x2="145" y2="110" stroke="#15803d" stroke-width="2" marker-end="url(#arrowheadK)" />
+          <line x1="110" y1="145" x2="90" y2="145" stroke="#15803d" stroke-width="2" marker-end="url(#arrowheadK)" />
+          <line x1="55" y1="110" x2="55" y2="90" stroke="#15803d" stroke-width="2" marker-end="url(#arrowheadK)" />
+        </svg>
+      </div>
+
+      <!-- System L -->
+      <div class="flex flex-col items-center">
+        <h4 class="font-bold mb-2">System L</h4>
+        <svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" style="background-color:white; border-radius:8px; padding:5px; border:1px solid #e2e8f0;">
+           <!-- Divided Farmland -->
+           <rect x="20" y="20" width="160" height="160" fill="none" stroke="#333" stroke-width="2" />
+           <line x1="100" y1="20" x2="100" y2="180" stroke="#333" stroke-width="1" />
+           <line x1="20" y1="100" x2="180" y2="100" stroke="#333" stroke-width="1" />
+           
+           <!-- Plots -->
+           <text x="60" y="60" text-anchor="middle" font-weight="bold">Plot 1</text>
+           <text x="140" y="60" text-anchor="middle" font-weight="bold">Plot 2</text>
+           <text x="140" y="140" text-anchor="middle" font-weight="bold">Plot 3</text>
+           <text x="60" y="140" text-anchor="middle" font-weight="bold">Plot 4</text>
+
+           <!-- Circular Flow Arrows -->
+           <path d="M 70 40 Q 100 20 130 40" fill="none" stroke="#ea580c" stroke-width="2" marker-end="url(#arrowheadK)" />
+           <path d="M 160 70 Q 180 100 160 130" fill="none" stroke="#ea580c" stroke-width="2" marker-end="url(#arrowheadK)" />
+           <path d="M 130 160 Q 100 180 70 160" fill="none" stroke="#ea580c" stroke-width="2" marker-end="url(#arrowheadK)" />
+           <path d="M 40 130 Q 20 100 40 70" fill="none" stroke="#ea580c" stroke-width="2" marker-end="url(#arrowheadK)" />
+        </svg>
+      </div>
+    </div>
+  `,
+  'is_2025_q1c_inclined_plane': `
+    <div class="my-4 flex justify-center">
+      <svg width="500" height="300" viewBox="0 0 500 300" xmlns="http://www.w3.org/2000/svg" style="background-color:white; border-radius:8px; padding:10px; border:1px solid #e2e8f0;">
+        <defs>
+            <marker id="arrowheadF" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#000" />
+            </marker>
+        </defs>
+        
+        <!-- Ground Line -->
+        <line x1="40" y1="280" x2="460" y2="280" stroke="#000" stroke-width="1.5" />
+        
+        <!-- Inclined Plane (Triangle) -->
+        <path d="M40 280 L400 120 L400 280 Z" fill="none" stroke="#000" stroke-width="1.5" />
+        
+        <!-- Slab/Box (W2) -->
+        <!-- Rotated to match slope angle approx 24 deg -->
+        <g transform="translate(200, 210) rotate(-24)">
+            <rect x="-35" y="-25" width="70" height="50" fill="#e5e7eb" stroke="#000" stroke-width="1.5" />
+            <text x="0" y="5" text-anchor="middle" font-weight="bold" font-size="18" font-family="serif">W<tspan dy="4" font-size="12">2</tspan></text>
+        </g>
+        
+        <!-- Mason (Stick figure style with volume) -->
+        <g transform="translate(350, 140)">
+             <!-- Head with Hat -->
+             <path d="M0 -15 A10 10 0 1 1 0 5 A10 10 0 1 1 0 -15 Z" fill="white" stroke="black" stroke-width="1.5" />
+             <path d="M-12 -5 L12 -5" stroke="black" stroke-width="1.5" fill="none" /> <!-- Hat brim -->
+             <path d="M-10 -5 Q 0 -18 10 -5" fill="white" stroke="black" stroke-width="1.5" /> <!-- Hat top -->
+             
+             <!-- Body (Leaning forward) -->
+             <path d="M0 5 L15 40" stroke="black" stroke-width="1.5" fill="none" />
+             
+             <!-- Legs (Walking) -->
+             <path d="M15 40 L0 75 L10 78" stroke="black" stroke-width="1.5" fill="none" /> <!-- Back leg -->
+             <path d="M15 40 L35 70 L45 70" stroke="black" stroke-width="1.5" fill="none" /> <!-- Front leg -->
+             
+             <!-- Arms (Reaching back to rope) -->
+             <path d="M10 15 L-10 30" stroke="black" stroke-width="1.5" fill="none" />
+        </g>
+        
+        <!-- Rope -->
+        <line x1="235" y1="195" x2="340" y2="160" stroke="#000" stroke-width="1.5" />
+        
+        <!-- Force I (Tension) -->
+        <line x1="280" y1="180" x2="310" y2="170" stroke="#000" stroke-width="1.5" marker-end="url(#arrowheadF)" />
+        <text x="290" y="165" font-weight="bold" font-size="16" font-family="serif">I</text>
+        
+        <!-- Force II (Weight) -->
+        <line x1="200" y1="210" x2="200" y2="270" stroke="#000" stroke-width="1.5" marker-end="url(#arrowheadF)" />
+        <text x="210" y="270" font-weight="bold" font-size="16" font-family="serif">II</text>
+        
+        <!-- Force III (Reaction) -->
+        <!-- Perpendicular to slope from base of box -->
+        <line x1="190" y1="235" x2="175" y2="195" stroke="#000" stroke-width="1.5" marker-end="url(#arrowheadF)" />
+        <text x="165" y="225" font-weight="bold" font-size="16" font-family="serif">III</text>
+
+        <!-- Label for Figure 1(c) -->
+        <text x="250" y="330" text-anchor="middle" font-weight="bold" font-size="14">Figure 1(c)</text>
+      </svg>
+    </div>
+  `,
+  'is_2025_q1d_experiments': `
+    <div class="my-4 flex flex-col lg:flex-row justify-center gap-8">
+      <!-- Setup A: Distillation -->
+      <div class="flex flex-col items-center">
+        <h4 class="font-bold mb-2 text-lg">A</h4>
+        <svg width="250" height="350" viewBox="0 0 250 350" xmlns="http://www.w3.org/2000/svg" style="background-color:white; border-radius:8px; padding:5px; border:1px solid #e2e8f0;">
+          <defs>
+             <marker id="arrowD" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                <polygon points="0 0, 6 3, 0 6" fill="#000" />
+             </marker>
+          </defs>
+          
+          <!-- Retort Stand -->
+          <rect x="40" y="310" width="60" height="10" fill="white" stroke="black" stroke-width="1.5"/>
+          <line x1="70" y1="310" x2="70" y2="50" stroke="black" stroke-width="2" />
+          <line x1="70" y1="140" x2="110" y2="140" stroke="black" stroke-width="1.5" /> <!-- Clamp -->
+          
+          <!-- Heat Source (i) -->
+          <rect x="100" y="280" width="20" height="40" fill="white" stroke="black" stroke-width="1.5"/>
+          <path d="M105 280 Q 110 240 115 280" fill="white" stroke="black" stroke-width="1.5" />
+          <text x="90" y="290" font-weight="bold" font-size="14" font-family="serif">i</text>
+
+          <!-- Boiling Flask (IV) -->
+          <circle cx="110" cy="210" r="35" fill="none" stroke="black" stroke-width="1.5" />
+          <rect x="100" y="160" width="20" height="50" fill="white" stroke="none" /> <!-- Mask for neck -->
+          <line x1="100" y1="180" x2="100" y2="100" stroke="black" stroke-width="1.5" /> <!-- Left Neck -->
+          <line x1="120" y1="180" x2="120" y2="130" stroke="black" stroke-width="1.5" /> <!-- Right Neck base -->
+          <text x="70" y="220" font-weight="bold" font-size="14" font-family="serif">IV</text>
+
+          <!-- Thermometer (I) -->
+          <line x1="110" y1="120" x2="110" y2="60" stroke="black" stroke-width="1.5" />
+          <circle cx="110" cy="125" r="3" fill="black" />
+          <line x1="110" y1="80" x2="80" y2="80" stroke="black" stroke-width="1" />
+          <text x="65" y="85" font-weight="bold" font-size="14" font-family="serif">I</text>
+          
+          <!-- Liebig Condenser (V, II) -->
+          <!-- Outer Jacket -->
+          <path d="M120 130 L190 200" stroke="black" stroke-width="20" stroke-linecap="butt" stroke-opacity="0.1" />
+          <line x1="120" y1="125" x2="195" y2="200" stroke="black" stroke-width="1.5" /> <!-- Top edge -->
+          <line x1="125" y1="135" x2="185" y2="195" stroke="black" stroke-width="1.5" /> <!-- Bottom edge -->
+          
+          <!-- Inner Tube -->
+          <line x1="120" y1="130" x2="200" y2="210" stroke="black" stroke-width="1.5" /> 
+          
+          <line x1="115" y1="150" x2="90" y2="150" stroke="black" stroke-width="1" />
+          <text x="75" y="155" font-weight="bold" font-size="14" font-family="serif">V</text>
+
+          <line x1="170" y1="170" x2="170" y2="210" stroke="black" stroke-width="1" />
+          <text x="165" y="225" font-weight="bold" font-size="14" font-family="serif">II</text>
+
+          <!-- Water Out/In Labels -->
+          <line x1="180" y1="185" x2="190" y2="175" stroke="black" stroke-width="1" marker-end="url(#arrowD)" />
+          <text x="195" y="175" font-size="10" font-family="serif">Water out</text>
+          
+          <line x1="140" y1="165" x2="150" y2="175" stroke="black" stroke-width="1" marker-end="url(#arrowD)" />
+          <text x="115" y="185" font-size="10" font-family="serif">Water in</text>
+
+          <!-- Receiver Flask (III) -->
+          <path d="M190 250 L210 250 L220 300 L180 300 Z" fill="none" stroke="black" stroke-width="1.5" />
+          <text x="225" y="280" font-weight="bold" font-size="14" font-family="serif">III</text>
+          
+          <!-- Drip -->
+          <path d="M200 210 L200 230" stroke="black" stroke-width="1" stroke-dasharray="2,2" />
+          <circle cx="200" cy="240" r="2" fill="black" />
+        </svg>
+      </div>
+
+      <!-- Setup B: Magnetism -->
+      <div class="flex flex-col items-center">
+        <h4 class="font-bold mb-2 text-lg">B</h4>
+        <svg width="200" height="350" viewBox="0 0 200 350" xmlns="http://www.w3.org/2000/svg" style="background-color:white; border-radius:8px; padding:5px; border:1px solid #e2e8f0;">
+           <!-- Horseshoe Magnet (VI) -->
+           <!-- Back curve -->
+           <path d="M60 80 L60 150 Q 60 190 100 190 Q 140 190 140 150 L140 80" fill="none" stroke="black" stroke-width="25" stroke-linecap="butt" />
+           <!-- Front face/gap -->
+           <path d="M60 80 L60 150 Q 60 190 100 190 Q 140 190 140 150 L140 80" fill="none" stroke="white" stroke-width="22" stroke-linecap="butt" />
+           <path d="M60 80 L60 150 Q 60 190 100 190 Q 140 190 140 150 L140 80" fill="none" stroke="black" stroke-width="1.5" />
+           
+           <!-- Shading for magnet poles -->
+           <rect x="48" y="130" width="24" height="20" fill="#555" />
+           <rect x="128" y="130" width="24" height="20" fill="#555" />
+
+           <line x1="50" y1="110" x2="20" y2="110" stroke="black" stroke-width="1" />
+           <text x="5" y="115" font-weight="bold" font-size="14" font-family="serif">VI</text>
+
+           <!-- Petri Dish -->
+           <ellipse cx="100" cy="250" rx="70" ry="15" fill="none" stroke="black" stroke-width="1.5" />
+           <path d="M30 250 V 270 A 70 15 0 0 0 170 270 V 250" fill="none" stroke="black" stroke-width="1.5" />
+           
+           <!-- Iron Filings (VII) -->
+           <!-- Clumped at poles -->
+           <path d="M50 150 Q 60 200 70 150" fill="black" />
+           <path d="M130 150 Q 140 200 150 150" fill="black" />
+           <!-- Scattering in dish -->
+           <g fill="black">
+              <circle cx="80" cy="250" r="1" /><circle cx="90" cy="255" r="1" />
+              <circle cx="100" cy="245" r="1" /><circle cx="110" cy="252" r="1" />
+              <circle cx="120" cy="248" r="1" />
+           </g>
+           
+           <line x1="170" y1="220" x2="140" y2="160" stroke="black" stroke-width="1" />
+           <text x="175" y="225" font-weight="bold" font-size="14" font-family="serif">VII</text>
+        </svg>
+      </div>
+    </div>
+  `,
   'is_2023_q1c_symbols_answer': `<div class="my-4 flex justify-center"><img src="https://i.imgur.com/G9c2X3f.png" alt="Electronic component symbols" class="max-w-full h-auto rounded-lg bg-white p-2"></div>`,
   'is_2023_q1c_circuit_answer': `<div class="my-4 flex justify-center"><img src="https://i.imgur.com/fLz8w2D.png" alt="Circuit diagram for forward biasing" class="max-w-full h-auto rounded-lg bg-white p-2"></div>`,
   'is_2023_q5c_foodweb_answer': `<div class="my-4 flex justify-center"><img src="https://i.imgur.com/3fR1zYw.png" alt="Food web diagram" class="max-w-full h-auto rounded-lg bg-white p-2"></div>`,
-  'fig1a': `<div class="my-4 flex justify-center">
-    <img src="https://storage.googleapis.com/aistudio-hub-generative-ai-app-builder-public/user-assets/2024-07-16/16:21:28.989Z/image-1.jpeg" alt="Figure 1(a) diagram of a natural cycle" class="max-w-full h-auto rounded-lg" style="max-height: 500px; clip-path: inset(8% 0 48% 0); -webkit-clip-path: inset(8% 0 48% 0);">
-  </div>`,
-  'fig1b': `<div class="my-4 flex justify-center">
-    <img src="https://storage.googleapis.com/aistudio-hub-generative-ai-app-builder-public/user-assets/2024-07-16/16:21:28.989Z/image-1.jpeg" alt="Figure 1(b) diagram of farming systems" class="max-w-full h-auto rounded-lg" style="max-height: 500px; clip-path: inset(48% 0 10% 0); -webkit-clip-path: inset(48% 0 10% 0);">
-  </div>`,
-  'fig1c': `<div class="my-4 flex justify-center">
-    <img src="https://storage.googleapis.com/aistudio-hub-generative-ai-app-builder-public/user-assets/2024-07-16/16:21:28.990Z/image-0.jpeg" alt="Figure 1(c) diagram of an inclined plane" class="max-w-full h-auto rounded-lg" style="max-height: 500px; clip-path: inset(3% 0 52% 0); -webkit-clip-path: inset(3% 0 52% 0);">
-  </div>`,
-  'fig1d': `<div class="my-4 flex justify-center">
-    <img src="https://storage.googleapis.com/aistudio-hub-generative-ai-app-builder-public/user-assets/2024-07-16/16:21:28.990Z/image-0.jpeg" alt="Figure 1(d) diagram of experimental setups A and B" class="max-w-full h-auto rounded-lg" style="max-height: 500px; clip-path: inset(52% 0 4% 0); -webkit-clip-path: inset(52% 0 4% 0);">
-  </div>`,
   'computing_q1a_flowchart_answer': `<div class="my-4 flex justify-center">
      <img src="https://storage.googleapis.com/aistudio-hub-generative-ai-app-builder-public/user-assets/2024-07-22/19:48:30.939Z/image-4.jpeg" alt="Flowchart Answer" class="max-w-sm h-auto rounded-lg bg-white p-2">
   </div>`,
@@ -138,48 +413,48 @@ export const beceQuestions: PastQuestionPaper[] = [
                     sub_questions: [
                         {
                             number: '(a)',
-                            text: 'The diagrams below are illustrations of the male and female reproductive systems for humans. Study them carefully and answer the questions that follow.',
-                            diagramId: 'is_2023_q1a_repro_systems',
+                            text: 'The diagram below illustrates a natural cycle labeled Figure 1a. Study it carefully and answer the questions that follow.',
+                            diagramId: 'is_2025_q1a_cycle',
                             answer: '',
                             sub_parts: [
-                                { number: '(i)', text: 'Name each of the parts labelled I, II, V, VI, VII and VIII.', answer: '<ul><li>I - womb (wall) / uterus</li><li>II - fallopian tube / oviduct</li><li>V - ovary</li><li>VI - vas deferens / sperm duct</li><li>VII - penis</li><li>VIII - testis</li></ul>' },
-                                { number: '(ii)', text: 'State the function of each of the parts labelled III, IV and VII.', answer: '<ul><li><strong>III:</strong> contracts / relaxes during child birth / protects foetus.</li><li><strong>IV:</strong> receives the penis / semen / sperm during sexual intercourse / for sexual intercourse / passage of foetus / passage of menstrual fluid <em>(any one)</em>.</li><li><strong>VII:</strong> passage for sperm / semen / for sexual intercourse.</li></ul>' },
-                                { number: '(iii)', text: 'Name the labelled part where each of the following processes take place:<br>(α) Fertilization;<br>(β) Production of sperm;<br>(γ) Ovulation.', answer: '<ul><li>(α) Fertilization occurs: <strong>fallopian tube / oviduct</strong></li><li>(β) Sperm is produced: <strong>testis</strong></li><li>(γ) Ovulation occurs: <strong>ovary</strong></li></ul>' },
-                                { number: '(iv)', text: 'Name two common infectious diseases that affect both the male and female reproductive system.', answer: '<ul><li>syphilis</li><li>herpes (simplex virus)</li><li>chancroid</li><li>chlamydia</li><li>gonorrhea / gonorrhoea</li><li>candidiasis / whites / thrush</li></ul><p><em>(Any two)</em></p>' }
+                                { number: '(i)', text: 'Identify the natural cycle illustrated in the diagram.', answer: 'Carbon Cycle' },
+                                { number: '(ii)', text: 'Name the stages labelled A, B, C and D.', answer: '<ul><li>A: Atmosphere / Air (CO₂)</li><li>B: Plants / Producers</li><li>C: Animals / Consumers</li><li>D: Decomposers / Soil</li></ul>' },
+                                { number: '(iii)', text: 'Name the processes labelled P, Q, S and T.', answer: '<ul><li>P: Photosynthesis</li><li>Q: Feeding / Consumption</li><li>S: Decomposition / Decay (releasing CO₂)</li><li>T: Combustion / Burning (Industrial emission)</li></ul>' },
+                                { number: '(iv)', text: 'State one importance of the cycle to the environment.', answer: 'It ensures the continuous availability of carbon in the ecosystem for life processes. / It helps maintain the balance of atmospheric carbon dioxide.' }
                             ]
                         },
                         {
                             number: '(b)',
-                            text: 'The diagrams below are illustrations of different devices used in the farm. Study them carefully and answer the questions that follow.',
-                            diagramId: 'is_2023_q1b_farm_tools',
+                            text: 'The diagrams below labeled K and L illustrate two different farming systems. Study them carefully and answer the questions that follow.',
+                            diagramId: 'is_2025_q1b_farming',
                             answer: '',
                             sub_parts: [
-                                { number: '(i)', text: 'Give a common name for the devices illustrated.', answer: 'garden / farm tools / farm implements / farming tool' },
-                                { number: '(ii)', text: 'Name each of the devices labelled A, B and C.', answer: '<ul><li>A - mattock</li><li>B - Peg</li><li>C - Hand fork</li></ul>' },
-                                { number: '(iii)', text: 'State one use of each of the devices named in (ii).', answer: '<ul><li><strong>A:</strong> removes of stump roots / for stumping / cutting off exposed plant roots.</li><li><strong>B:</strong> for making spots on land (for correct spacing of plants).</li><li><strong>C:</strong> for removing weeds on garden beds / to loosen hard soil surface / for stirring / for mixing fertilizers around plants.</li></ul>' },
-                                { number: '(iv)', text: 'State two effects of the use of the device C on the soil.', answer: '<ul><li>improves aeration</li><li>improves water entry / circulation in soil</li><li>improves structure of soil</li></ul><p><em>(Any two)</em></p>' },
-                                { number: '(v)', text: 'State two ways of prolonging the usefulness of the device labelled A.', answer: '<ul><li>clean tool after use</li><li>use it for the right work / purpose</li><li>repair broken handle</li><li>keep in a cool dry place</li><li>oil metallic part before storage</li><li>sharpen cutting edges</li><li>ensure metallic blade is tightly fitted to wooden handle</li><li>keeping tools in termite free area</li></ul><p><em>(Any two)</em></p>' }
+                                { number: '(i)', text: 'Identify the farming systems labelled K and L.', answer: '<ul><li>K: Shifting Cultivation / Land Rotation</li><li>L: Crop Rotation</li></ul>' },
+                                { number: '(ii)', text: 'State two differences between system K and system L.', answer: '<ul><li>In K, the farmer moves to a new land when fertility declines, while in L, the farmer farms on the same piece of land continuously.</li><li>K requires a large area of land, while L requires less land.</li><li>K helps check pests and diseases by leaving land fallow, while L checks pests by changing crop types.</li></ul>' },
+                                { number: '(iii)', text: 'State two advantages of system L over system K.', answer: '<ul><li>It ensures continuous use of the land (economical land use).</li><li>It improves soil fertility through the use of legumes.</li><li>It helps control soil erosion (land is always covered).</li><li>Yield is usually higher due to better management.</li></ul>' },
+                                { number: '(iv)', text: 'In system K, why does the farmer move from farmland A to B?', answer: 'Because the soil fertility in farmland A has declined / nutrients are depleted.' }
                             ]
                         },
                         {
                             number: '(c)',
-                            text: '',
+                            text: 'Figure 1(c) is an illustration of a mason pulling a slab by means of a rope up an inclined plane. The labels I, II and III represent forces acting on the slab.<br>Study the figure carefully and answer the questions that follow.',
+                            diagramId: 'is_2025_q1c_inclined_plane',
                             answer: '',
                             sub_parts: [
-                                { number: '(i)', text: 'Draw the symbols for each of the following electronic components:<br>(α) Resistor; (β) (p-n junction) diode; (γ) Cell; (δ) Light Emitting Diode / LED.', answer: '<div class="diagram-container" data-diagramid="is_2023_q1c_symbols_answer"></div>' },
-                                { number: '(ii)', text: 'Use the symbols drawn in (i) together with a switch to draw a circuit diagram to demonstrate forward biasing of a (p-n junction) diode and the light emitting diode.', answer: '<div class="diagram-container" data-diagramid="is_2023_q1c_circuit_answer"></div>' },
-                                { number: '(iii)', text: 'State the effect of the resistor on the (p-n junction) diode and the light emitting diode when the circuit is closed.', answer: 'Resistor limits current in the circuit and thereby protects diode and LED from burning off.' }
+                                { number: '(i)', text: 'Give three examples of the use of inclined planes in everyday life.', answer: '<ul><li>Ramps for loading vehicles</li><li>Staircases</li><li>Ladders leaning against a wall</li><li>Chutes / Slides</li><li>Roads winding up a hill</li></ul>' },
+                                { number: '(ii)', text: 'Given that I is 400 N and moves a distance of 10 m whiles II is 100 N and moves a distance of 5 m, calculate the:<br>(α) work output;<br>(β) work input;<br>(γ) efficiency.', answer: '<p><strong>(α) Work Output:</strong><br>Work Output = Load (Weight) × Distance moved by load (Vertical height)<br>= 100 N × 5 m<br>= <strong>500 J</strong></p><p><strong>(β) Work Input:</strong><br>Work Input = Effort (Force I) × Distance moved by effort (Length of plane)<br>= 400 N × 10 m<br>= <strong>4000 J</strong></p><p><strong>(γ) Efficiency:</strong><br>Efficiency = (Work Output / Work Input) × 100%<br>= (500 / 4000) × 100%<br>= 0.125 × 100%<br>= <strong>12.5%</strong></p>' }
                             ]
                         },
                         {
                             number: '(d)',
-                            text: 'The following activities were carried out in the laboratory. Study them carefully and answer the questions that follow.<br>I. 10 g of iodated salt was added to 150 ml of water in a beaker. The mixture was stirred thoroughly.<br>II. Vegetable oil was added to a quantity of water in a corked flask and shaken vigorously then allowed to stand for some time.<br>III. Few grams of grinded charcoal was added to water in a beaker and stirred vigorously and then allowed to stand.',
+                            text: 'Figure 1(d) is an illustration of experimental set-ups A and B used to demonstrate a scientific principle. Study the figure carefully and answer the questions that follow.',
+                            diagramId: 'is_2025_q1d_experiments',
                             answer: '',
                             sub_parts: [
-                                { number: '(i)', text: 'State what will be observed in each of the activities I, II and III.', answer: '<ul><li><strong>I:</strong> the iodated salt dissolved (completely) in the water (forming a miscible solution / mixture).</li><li><strong>II:</strong> the oil is suspended on the surface of the water (forming an immiscible solution / mixture) / the oil and the water will not mix together / the oil and the water separates into individual layers.</li><li><strong>III:</strong> the charcoal does not dissolve in the water / It settles on the surface of the water forming mixture.</li></ul>' },
-                                { number: '(ii)', text: 'Suggest an aim for the experiment.', answer: '<ul><li>to demonstrate the method of preparation of mixtures</li><li>to determine whether a homogeneous mixture / solution or heterogeneous mixture / solution would be formed</li><li>to prepare a mixture / solution</li><li>to determine if the solute will dissolve / mix with the solvent / water to form a solution / mixture</li></ul><p><em>(Any one)</em></p>' },
-                                { number: '(iii)', text: 'State one difference between what is observed in I and III.', answer: 'The mixture / solution in I is Homogeneous, while the mixture / solution in III is heterogeneous. <strong>OR</strong> The solute / iodated salt dissolved (completely) in the solvent / water in I, while the solute / charcoal did not dissolve in the solution / water in III.' },
-                                { number: '(iv)', text: 'State a method of separation for the activity carried out in II.', answer: 'Use of separating funnel.' }
+                                { number: '(i)', text: 'Name the scientific principle being demonstrated in both A and B.', answer: '<ul><li><strong>A:</strong> Distillation / Separation of Mixtures / Evaporation and Condensation</li><li><strong>B:</strong> Magnetism / Magnetic Attraction</li></ul>' },
+                                { number: '(ii)', text: 'Describe briefly the functions of each of the parts labelled II and VI.', answer: '<ul><li><strong>II (Condenser):</strong> To cool and condense hot vapour back into liquid form.</li><li><strong>VI (Magnet):</strong> To attract magnetic materials (iron filings) from a mixture.</li></ul>' },
+                                { number: '(iii)', text: 'Name any two types of materials that could be present in each of the set-ups labelled:<br>(α) III;<br>(β) VII.', answer: '<ul><li><strong>(α) III (Distillate):</strong> Pure water, Alcohol (Ethanol), Distilled liquid.</li><li><strong>(β) VII (Magnetic material):</strong> Iron filings, Nickel, Cobalt, Steel pins.</li></ul>' },
+                                { number: '(iv)', text: 'Give the reason why the direction of water flow in A must not be reversed.', answer: 'To ensure the condenser is completely filled with cold water (jacket is full) for efficient cooling/condensation of the vapour.' }
                             ]
                         }
                     ]
@@ -266,5 +541,196 @@ export const beceQuestions: PastQuestionPaper[] = [
         ]
       }
     ]
-  }
+  },
+  {
+    year: 2025,
+    subject: 'Mathematics',
+    sections: [
+        {
+            title: 'PAPER 2 - SECTION B (Data Interpretation)',
+            instructions: 'Answer all questions.',
+            marks: 30,
+            questions: [
+                {
+                    number: '1',
+                    text: 'The pie chart below shows the distribution of household items sold by a store in a month. Use it to answer the questions that follow.',
+                    diagramId: 'math_2025_pie_chart',
+                    sub_questions: [
+                        { number: '(a)', text: 'If the total number of items sold was 1200, calculate the number of Fans sold.', answer: 'Angle for Fans = 360 - (90+60+120) = 90 degrees.<br>Number of Fans = (90/360) * 1200 = 300 fans.' },
+                        { number: '(b)', text: 'What percentage of the sales corresponds to Televisions?', answer: 'Angle for TV = 120 degrees.<br>Percentage = (120/360) * 100 = 33.33%' }
+                    ]
+                },
+                {
+                    number: '2',
+                    text: 'The graph below shows the journey of Adamu from Town A to Town B.',
+                    diagramId: 'math_2025_graph_answer',
+                    sub_questions: [
+                        { number: '(a)', text: 'Calculate the average speed for the entire journey.', answer: 'Total Distance = 120km. Total Time = 4 hours. Speed = 120/4 = 30 km/h' },
+                        { number: '(b)', text: 'At what time did Adamu stop for a rest?', answer: 'The graph is horizontal between 10:00 am and 10:30 am.' }
+                    ]
+                }
+            ]
+        }
+    ]
+  },
+  {
+    year: 2025,
+    subject: 'Computing',
+    sections: [
+        {
+            title: 'PAPER 2 - PRACTICAL SKILLS',
+            instructions: 'Answer all questions.',
+            marks: 40,
+            questions: [
+                {
+                    number: '1',
+                    text: '(a) Study the flowchart below and describe the process it represents.<br>(b) Identify the network topologies labelled A, B, and C below.',
+                    diagramId: 'computing_q1d_topologies_answer',
+                    sub_questions: [
+                        { number: '(a)', text: 'Identify the flowchart symbols.', diagramId: 'computing_q1a_flowchart_answer', answer: 'The flowchart represents a decision-making process (Diamond shape) leading to either a Process (Rectangle) or End state (Oval).' },
+                        { number: '(b)', text: 'Name the topologies.', answer: 'A: Ring Topology<br>B: Bus Topology<br>C: Mesh Topology' }
+                    ]
+                },
+                {
+                    number: '2',
+                    text: 'The image below shows a spreadsheet interface. Write the formula to calculate the total for the selected range.',
+                    diagramId: 'computing_q2c_excel_question',
+                    answer: '=SUM(B2:B5)'
+                }
+            ]
+        }
+    ]
+  },
+  {
+    year: 2025,
+    subject: 'Career Technology',
+    sections: [
+        {
+            title: 'PAPER 2 - DESIGN & MAKE',
+            instructions: 'Answer all questions.',
+            marks: 30,
+            questions: [
+                {
+                    number: '1',
+                    text: 'Figure 1 shows a wooden artifact. Name the artifact and state two tools used in making it.',
+                    diagramId: 'ct_money_box',
+                    answer: 'Artifact: Money Box.<br>Tools: Tenon saw, Jack plane, Hammer, Chisel.'
+                },
+                {
+                    number: '2',
+                    text: 'Figure 2 shows an L-shaped block. Draw the plan view.',
+                    diagramId: 'ct_l_shape',
+                    answer: 'The plan view would be two rectangles joined at a right angle, viewed from above.'
+                }
+            ]
+        }
+    ]
+  },
+  {
+    year: 2025,
+    subject: 'French',
+    sections: [
+        {
+            title: 'PAPER 1 - COMPREHENSION',
+            instructions: 'Lisez le passage et répondez aux questions.',
+            marks: 20,
+            questions: [
+                {
+                    number: '1',
+                    text: 'Read the WhatsApp message below and answer the questions.',
+                    diagramId: 'french_2025_whatsapp',
+                    sub_questions: [
+                        { number: '(a)', text: 'Qui a envoyé le message?', answer: 'C\'est Janice qui a envoyé le message.' },
+                        { number: '(b)', text: 'Où se trouve Janice?', answer: 'Elle est à Cape Coast.' },
+                        { number: '(c)', text: 'Pourquoi invite-t-elle son ami?', answer: 'Pour son anniversaire.' }
+                    ]
+                }
+            ]
+        }
+    ]
+  },
+  { 
+    year: 2025, 
+    subject: 'English Language', 
+    sections: [{ 
+        title: 'PAPER 2 - ESSAY', 
+        instructions: 'Answer one question from this section.', 
+        marks: 30, 
+        questions: [{ 
+            number: '1', 
+            text: 'Your friend in another school has written to you about his/her difficulties in Science. Write a reply to him/her explaining at least three ways he/she can improve his/her grades.', 
+            answer: 'Content: 10 marks (clarity of points). Organization: 5 marks (letter format). Expression: 10 marks. Mechanical Accuracy: 5 marks.' 
+        }] 
+    }] 
+  },
+  { 
+    year: 2025, 
+    subject: 'Religious and Moral Education', 
+    sections: [{ 
+        title: 'PAPER 2 - RELIGION', 
+        instructions: 'Answer all questions.', 
+        marks: 40, 
+        questions: [{ 
+            number: '1', 
+            text: '(a) Describe the call of Mohammed.<br>(b) State three moral lessons that can be learnt from the call of Mohammed.', 
+            answer: '(a) Mohammed was called at Mount Hira... (b) Obedience, Patience, Humility.' 
+        }] 
+    }] 
+  },
+  { 
+    year: 2025, 
+    subject: 'Basic Design and Technology', 
+    sections: [{ 
+        title: 'PAPER 2 - CORE SKILLS', 
+        instructions: 'Answer all questions.', 
+        marks: 30, 
+        questions: [{ 
+            number: '1', 
+            text: 'State three properties of Aluminum that make it suitable for cooking utensils.', 
+            answer: '1. It is a good conductor of heat.<br>2. It is lightweight.<br>3. It does not rust/corrode easily.' 
+        }] 
+    }] 
+  },
+  { 
+    year: 2025, 
+    subject: 'I.C.T', 
+    sections: [{ 
+        title: 'PAPER 2 - THEORY', 
+        instructions: 'Answer all questions.', 
+        marks: 30, 
+        questions: [{ 
+            number: '1', 
+            text: 'List four hardware components of a computer system and state one function of each.', 
+            answer: '<ul><li>Mouse: Input device for pointing.</li><li>Keyboard: Input device for typing.</li><li>Monitor: Output device for display.</li><li>System Unit: Contains the CPU and memory.</li></ul>' 
+        }] 
+    }] 
+  },
+  { 
+    year: 2025, 
+    subject: 'Ghanaian Language', 
+    sections: [{ 
+        title: 'PAPER 2 - COMPOSITION', 
+        instructions: 'Answer all questions.', 
+        marks: 40, 
+        questions: [{ 
+            number: '1', 
+            text: 'Translate the following sentence into your language: "The sun is shining brightly today."', 
+            answer: 'Varies by language (e.g., Twi: Awia no rebɔ kɛseɛ nnɛ).' 
+        }] 
+    }] 
+  },
+  { 
+    year: 2025, 
+    subject: 'Creative Arts and Design', 
+    sections: [{ 
+        title: 'PAPER 2 - VISUAL ARTS', 
+        instructions: 'Answer all questions.', 
+        marks: 30, 
+        questions: [{ 
+            number: '1', 
+            text: 'Define the term "Perspective" in drawing and mention two types.', 
+            answer: 'Perspective is the art of drawing solid objects on a two-dimensional surface so as to give the right impression of their height, width, depth, and position in relation to each other. Types: 1-point perspective, 2-point perspective.' 
+        }] 
+    }] 
+  },
 ];
