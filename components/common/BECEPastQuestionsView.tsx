@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import Card from './Card';
 import { beceQuestions, BECE_SUBJECTS, beceDiagrams } from '../../data/becePastQuestions';
@@ -7,7 +8,7 @@ const years = Array.from({ length: 26 }, (_, i) => 2025 - i);
 
 const BECEPastQuestionsView: React.FC = () => {
     const [selectedYear, setSelectedYear] = useState(2025);
-    const [selectedSubject, setSelectedSubject] = useState('Social Studies');
+    const [selectedSubject, setSelectedSubject] = useState('Integrated Science');
     const [activePaper, setActivePaper] = useState<'Objective' | 'Theory'>('Objective');
     
     const [aiSystemInstruction, setAiSystemInstruction] = useState('');

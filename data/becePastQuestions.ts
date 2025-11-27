@@ -1,3 +1,4 @@
+
 export const BECE_SUBJECTS = [
     'Integrated Science',
     'Mathematics',
@@ -123,7 +124,7 @@ export interface PastQuestionPaper {
 
 export const beceQuestions: PastQuestionPaper[] = [
   {
-    year: 2023,
+    year: 2025,
     subject: 'Integrated Science',
     sections: [
         {
