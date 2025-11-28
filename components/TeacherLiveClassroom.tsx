@@ -14,11 +14,11 @@ interface TeacherLiveClassroomProps {
   lessonId: string;
   onClose: () => void;
   userProfile: UserProfile;
+  setToast: (toast: { message: string, type: 'success' | 'error' } | null) => void;
 }
 
-export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ lessonId, onClose, userProfile }) => {
-  // ... (rest of logic)
-  const { showToast } = useToast();
+export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ lessonId, onClose, userProfile, setToast }) => {
+  const { showToast: useShowToast } = useToast(); // Local context toast if needed
   const [reconstructedLesson, setReconstructedLesson] = useState<LiveLesson | null>(null);
   const [responses, setResponses] = useState<LiveLessonResponse[]>([]);
   const [studentsInClass, setStudentsInClass] = useState<UserProfile[]>([]);
@@ -184,7 +184,7 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
           await db.collection('liveLessons').doc(lessonId).update({
               drawingData: []
           });
-          showToast('Board cleared', 'success');
+          setToast({ message: 'Board cleared', type: 'success' });
       }
   };
 
@@ -236,7 +236,7 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
       await db.collection('liveLessons').doc(lessonId).update({
           activeAction: safeAction
       });
-      showToast(`Action Sent: ${type === 'direct_question' ? 'Direct Question' : text}`, 'success');
+      setToast({ message: `Action Sent: ${type === 'direct_question' ? 'Direct Question' : text}`, type: 'success' });
   };
 
   const handleGenerateSmartExplanation = async (confusionText: string) => {
@@ -264,7 +264,7 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
           
       } catch(err) {
           console.error(err);
-          showToast('Failed to generate explanation', 'error');
+          setToast({ message: 'Failed to generate explanation', type: 'error' });
       } finally {
           setIsGeneratingExplanation(false);
       }
@@ -288,6 +288,25 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
       drawingData: [],
       pointerPosition: null,
     });
+    
+    // Automatically trigger question if present in new slide
+    if (nextSlide.question) {
+        // Determine action type based on question type
+        if (nextSlide.question.type === 'Theory') {
+             // For theory, we just want discussion, maybe "Ask for Questions" implicitly, 
+             // or a custom "Discuss" action. For now, let's just show it on board.
+             // If you want to force a prompt, uncomment below:
+             // triggerAction('direct_question', nextSlide.question.text);
+        } else {
+             // Objective - Trigger Poll
+             // Wait a moment for slide to load then trigger poll
+             setTimeout(() => {
+                 if (nextSlide.question?.options) {
+                    triggerAction('poll', nextSlide.question.text, undefined, nextSlide.question.options);
+                 }
+             }, 1000);
+        }
+    }
   };
 
   const handleEndLesson = async () => {

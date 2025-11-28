@@ -106,50 +106,34 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
   
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
-      const objectiveQuestionSchema = {
-        type: Type.OBJECT,
-        properties: {
-          question: { type: Type.STRING, description: 'The question text.' },
-          options: { type: Type.ARRAY, description: 'An array of 4 string options for the multiple choice.', items: { type: Type.STRING } },
-          correctAnswer: { type: Type.STRING, description: 'The text of the correct option.' },
-        },
-        required: ['question', 'options', 'correctAnswer'],
-      };
-  
-      const theoryQuestionSchema = {
-          type: Type.OBJECT,
-          properties: {
-            question: { type: Type.STRING, description: 'The main theory question text.' },
-            sub_questions: { type: Type.ARRAY, description: 'An array of sub-question strings, if any.', items: { type: Type.STRING } },
-          },
-          required: ['question'],
-      };
       
-      const schemaProperties: any = {};
-      const requiredProperties: string[] = [];
-  
-      if (aiQuestionType === 'Objective' || aiQuestionType === 'Mixed') {
-          schemaProperties.objectiveQuestions = { type: Type.ARRAY, items: objectiveQuestionSchema };
-          requiredProperties.push('objectiveQuestions');
-      }
-      if (aiQuestionType === 'Theory' || aiQuestionType === 'Mixed') {
-          schemaProperties.theoryQuestions = { type: Type.ARRAY, items: theoryQuestionSchema };
-          requiredProperties.push('theoryQuestions');
-      }
-  
+      // Update schema to match the professional standard used in PresentationGenerator
       const responseSchema = {
           type: Type.OBJECT,
-          properties: schemaProperties,
-          required: requiredProperties,
+          properties: {
+              quiz: {
+                  type: Type.ARRAY,
+                  items: {
+                      type: Type.OBJECT,
+                      properties: {
+                          question: { type: Type.STRING },
+                          options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                          correctAnswer: { type: Type.STRING },
+                          explanation: { type: Type.STRING },
+                      },
+                      required: ['question', 'correctAnswer']
+                  }
+              }
+          }
       };
   
       const prompt = `You are an expert educator creating an assignment for a '${classId}' class on the subject of '${subject}'. The topic is '${topicForAI}'.
   
       Generate an assignment with ${aiNumQuestions} questions based on the type '${aiQuestionType}'.
       
-      - For 'Objective' questions, provide a clear question, exactly four distinct multiple-choice options, and identify the correct answer text. The options should be plausible.
-      - For 'Theory' questions, provide an open-ended question that encourages critical thinking. You can include sub-parts.
+      - For 'Objective' questions, provide a clear question, exactly four distinct multiple-choice options, and identify the correct answer text.
+      - For 'Theory' questions, provide an open-ended question. Leave 'options' empty. Provide a model answer as 'correctAnswer'.
+      - Include a brief 'explanation' for the answer.
       
       Your response MUST be a valid JSON object matching the provided schema.`;
   
@@ -163,47 +147,29 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
       });
   
       const result = JSON.parse(response.text);
-      let generatedDescription = '';
-      let answerKey = '';
+      let generatedDescription = `Assignment on ${topicForAI}. Please complete all questions.`;
       let generatedQuiz: QuizQuestion[] = [];
-  
-      if (result.objectiveQuestions) {
-          generatedDescription += `This is a quiz for the topic "${topicForAI}". Please select the correct answer for each question.\n\n`;
-          answerKey += 'OBJECTIVE ANSWERS\n';
-          result.objectiveQuestions.forEach((q: any, index: number) => {
-              answerKey += `${index + 1}. ${q.correctAnswer}\n`;
-
-              generatedQuiz.push({
-                  question: q.question,
-                  options: q.options,
-                  correctAnswer: q.correctAnswer,
-              });
-          });
-      }
-  
-      if (result.theoryQuestions) {
-          generatedDescription += (generatedDescription ? '\n\n' : '') + 'THEORY QUESTIONS\n\n';
-          result.theoryQuestions.forEach((q: any, index: number) => {
-              generatedDescription += `Question ${index + 1}: ${q.question}\n`;
-              if (q.sub_questions && q.sub_questions.length > 0) {
-                  q.sub_questions.forEach((sub: string, subIndex: number) => {
-                      generatedDescription += `  ${String.fromCharCode(97 + subIndex)}) ${sub}\n`;
-                  });
-              }
-              generatedDescription += '\n';
-          });
+      
+      if (result.quiz && Array.isArray(result.quiz)) {
+           generatedQuiz = result.quiz.map((q: any) => ({
+               question: q.question,
+               options: q.options || [],
+               correctAnswer: q.correctAnswer,
+               explanation: q.explanation,
+               type: (q.options && q.options.length > 0) ? 'Objective' : 'Theory'
+           }));
       }
   
       setTitle(`Assignment: ${topicForAI}`);
-      setDescription(`${generatedDescription}${answerKey ? `\n\nTEACHER'S ANSWER KEY (Important: Remove before saving!)\n${answerKey}` : ''}`);
+      setDescription(generatedDescription);
 
       if (generatedQuiz.length > 0) {
         setQuiz({ quiz: generatedQuiz });
-        if (result.theoryQuestions) {
-            setAssignmentType('Theory'); // If mixed, default to theory for text entry, quiz data is still saved
-        } else {
-            setAssignmentType('Objective');
-        }
+        // If user asked for Theory or Mixed, we default the main assignment type to Theory so text can be entered if needed,
+        // but we store the quiz data. However, standard logic:
+        // If ALL are objective, use Objective type. Else Theory.
+        const allObjective = generatedQuiz.every(q => q.type === 'Objective');
+        setAssignmentType(allObjective ? 'Objective' : 'Theory');
       } else {
         setQuiz(null);
         setAssignmentType('Theory');
@@ -243,7 +209,9 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
         scheduledAt: scheduledAt ? firebase.firestore.Timestamp.fromDate(new Date(scheduledAt)) : null,
       };
 
-      if (assignmentType === 'Objective') {
+      // Always save quiz data if present, regardless of assignment type label,
+      // so mixed assignments can use the quiz data for the objective parts.
+      if (quiz) {
         assignmentData.quiz = quiz;
       } else {
         assignmentData.quiz = null;
@@ -341,7 +309,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
                         <label htmlFor="assignmentType" className="block text-sm font-medium text-gray-300">Type</label>
                         <select id="assignmentType" value={assignmentType} onChange={e => setAssignmentType(e.target.value as AssignmentType)} required className="w-full mt-1 p-2 rounded bg-slate-700 border border-slate-600">
                             <option value="Theory">Theory</option>
-                            <option value="Objective">Objective (Quiz)</option>
+                            <option value="Objective">Objective</option>
                         </select>
                     </div>
                 </div>
@@ -352,11 +320,11 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
                     <input type="text" placeholder="Assignment Topic (for AI)" value={topicForAI} onChange={e => setTopicForAI(e.target.value)} className="w-full p-2 bg-slate-700 rounded-md border border-slate-600" />
                     <div className="flex flex-wrap items-end gap-4">
                         <div>
-                            <label htmlFor="ai-num-q" className="text-sm">Number of Questions</label>
-                            <input id="ai-num-q" type="number" value={aiNumQuestions} onChange={e => setAiNumQuestions(parseInt(e.target.value))} min="1" max="10" className="w-24 mt-1 p-2 bg-slate-700 rounded-md border border-slate-600" />
+                            <label htmlFor="ai-num-q" className="text-sm">Questions</label>
+                            <input id="ai-num-q" type="number" value={aiNumQuestions} onChange={e => setAiNumQuestions(parseInt(e.target.value))} min="1" max="20" className="w-20 mt-1 p-2 bg-slate-700 rounded-md border border-slate-600" />
                         </div>
                         <div>
-                            <label htmlFor="ai-q-type" className="text-sm">Question Type</label>
+                            <label htmlFor="ai-q-type" className="text-sm">Format</label>
                             <select id="ai-q-type" value={aiQuestionType} onChange={e => setAiQuestionType(e.target.value as any)} className="w-full mt-1 p-2 bg-slate-700 rounded-md border border-slate-600">
                                 <option value="Objective">Objective</option>
                                 <option value="Theory">Theory</option>
@@ -372,21 +340,25 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ isOpen, onClose, assi
 
                 <input type="text" placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} required className="w-full p-2 bg-slate-700 rounded-md border border-slate-600" />
                 
-                <textarea placeholder="Description" value={description} onChange={e => setDescription(e.target.value)} required rows={8} className="w-full p-2 bg-slate-700 rounded-md border border-slate-600" />
+                <textarea placeholder="Description" value={description} onChange={e => setDescription(e.target.value)} required rows={6} className="w-full p-2 bg-slate-700 rounded-md border border-slate-600" />
                 
-                {assignmentType === 'Objective' && quiz && (
-                    <div className="mt-4 p-4 bg-slate-800 rounded-lg space-y-4">
-                        <h4 className="font-semibold text-gray-300">Objective Questions Preview</h4>
+                {quiz && quiz.quiz && quiz.quiz.length > 0 && (
+                    <div className="mt-4 p-4 bg-slate-800 rounded-lg space-y-4 border border-slate-700">
+                        <h4 className="font-semibold text-gray-300">Generated Questions ({quiz.quiz.length})</h4>
                         {quiz.quiz.map((q, index) => (
-                            <div key={index} className="text-sm">
+                            <div key={index} className="text-sm border-b border-slate-700 pb-2 last:border-0">
                                 <p className="font-semibold text-gray-200">{index + 1}. {q.question}</p>
-                                <ul className="list-disc list-inside pl-4 text-gray-400">
-                                    {q.options.map((opt, optIndex) => (
-                                        <li key={optIndex} className={opt === q.correctAnswer ? 'text-green-400' : ''}>
-                                            {opt} {opt === q.correctAnswer && '(Correct)'}
-                                        </li>
-                                    ))}
-                                </ul>
+                                {q.options && q.options.length > 0 ? (
+                                    <ul className="list-disc list-inside pl-4 text-gray-400 mt-1">
+                                        {q.options.map((opt, optIndex) => (
+                                            <li key={optIndex} className={opt === q.correctAnswer ? 'text-green-400 font-medium' : ''}>
+                                                {opt} {opt === q.correctAnswer && '(Answer)'}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <p className="text-green-400 mt-1">Answer: {q.correctAnswer}</p>
+                                )}
                             </div>
                         ))}
                     </div>

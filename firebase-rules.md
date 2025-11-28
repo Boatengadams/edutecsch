@@ -290,7 +290,7 @@ service cloud.firestore {
 
       allow get: if isCallerApproved()
         && getCaller().data.role == 'teacher'
-        && request.auth.uid in resource.data.collaboratorUids;
+        && (request.auth.uid in resource.data.collaboratorUids || resource.data.teacherId == request.auth.uid);
 
       allow list: if isCallerApproved()
         && getCaller().data.role == 'teacher';
@@ -301,7 +301,7 @@ service cloud.firestore {
 
       allow update: if isCallerApproved()
         && getCaller().data.role == 'teacher'
-        && request.auth.uid in resource.data.collaboratorUids;
+        && (request.auth.uid in resource.data.collaboratorUids || resource.data.teacherId == request.auth.uid);
 
       allow delete: if
         isCallerAdmin()

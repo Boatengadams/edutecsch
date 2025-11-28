@@ -147,8 +147,9 @@ export interface LiveLessonStep {
   question: {
     id: string;
     text: string;
-    options: string[];
+    options?: string[]; // Optional for theory
     correctAnswer: string;
+    type?: 'Objective' | 'Theory'; // Add type
   } | null;
 }
 
@@ -423,8 +424,10 @@ export interface Presentation {
 }
 export interface QuizQuestion {
     question: string;
-    options: string[];
-    correctAnswer: string;
+    options?: string[]; // Made optional for theory
+    correctAnswer: string; // For theory, this can be a sample answer
+    explanation?: string; // Reasoning
+    type?: 'Objective' | 'Theory';
 }
 export interface Quiz {
     quiz: QuizQuestion[];
@@ -564,8 +567,8 @@ export interface ReportSummary {
 export interface PublishedFlyer {
     id: string;
     title: string;
-    content: string; // Added
-    imageUrl?: string; // Made optional
+    content: string; // Mandatory now
+    imageUrl?: string; // Optional now
     createdAt: firebase.firestore.Timestamp;
     publisherId: string;
     publisherName: string;

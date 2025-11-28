@@ -136,7 +136,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIs
         setPublishedFlyers(prev => {
             const all = [...prev, ...flyers];
             const unique = Array.from(new Map(all.map(item => [item.id, item])).values());
-            return unique.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()).slice(0, 20);
+            return unique.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0)).slice(0, 20);
         });
     }));
     unsubscribers.push(...unsubFlyers);
@@ -394,7 +394,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIs
                                     <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-slate-800 to-transparent"></div>
                                 </div>
                                 <div className="px-6 py-3 bg-slate-900/50 border-t border-slate-700 flex justify-between items-center text-xs text-slate-500 font-mono">
-                                    <span>{flyer.createdAt.toDate().toLocaleDateString()}</span>
+                                    <span>{flyer.createdAt?.toDate().toLocaleDateString()}</span>
                                     <span className="text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">Read More &rarr;</span>
                                 </div>
                             </button>
@@ -525,7 +525,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIs
                         </div>
                         
                         <div className="p-4 bg-slate-800 border-t border-slate-700 text-xs text-slate-500 font-mono text-right">
-                            POSTED BY: {selectedFlyer.publisherName.toUpperCase()} // {selectedFlyer.createdAt.toDate().toLocaleDateString()}
+                            POSTED BY: {selectedFlyer.publisherName.toUpperCase()} // {selectedFlyer.createdAt?.toDate().toLocaleDateString()}
                         </div>
                     </div>
                 </div>

@@ -182,10 +182,30 @@ const BECEPastQuestionsView: React.FC = () => {
                                                                              {sub.diagramId && beceDiagrams[sub.diagramId] && (
                                                                                 <div className="my-2 bg-white p-1 rounded inline-block max-w-full" dangerouslySetInnerHTML={{ __html: beceDiagrams[sub.diagramId] }} />
                                                                             )}
-                                                                            {isRevealed && (
+                                                                            {/* Standard Answer */}
+                                                                            {isRevealed && sub.answer && (
                                                                                  <div className="mt-1 ml-6 p-2 bg-blue-900/10 rounded border-l-2 border-blue-500/30 text-sm text-blue-100">
                                                                                      <div dangerouslySetInnerHTML={{ __html: sub.answer.replace(/<div class="diagram-container" data-diagramid="([^"]*)"><\/div>/g, (match, p1) => beceDiagrams[p1] || '') }} />
                                                                                  </div>
+                                                                            )}
+                                                                            
+                                                                            {/* Sub-parts (e.g. i, ii, iii) */}
+                                                                            {sub.sub_parts && (
+                                                                                <div className="mt-2 space-y-2 ml-4 border-l border-slate-700 pl-3">
+                                                                                    {sub.sub_parts.map((part, partIndex) => (
+                                                                                        <div key={partIndex}>
+                                                                                            <div className="flex gap-2 mb-1">
+                                                                                                <span className="text-xs font-bold text-slate-400 flex-shrink-0">{part.number}</span>
+                                                                                                <div className="text-xs text-slate-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: part.text }} />
+                                                                                            </div>
+                                                                                            {isRevealed && part.answer && (
+                                                                                                <div className="mt-1 ml-6 p-2 bg-green-900/20 rounded border-l-2 border-green-500/30 text-xs text-green-200">
+                                                                                                    <div dangerouslySetInnerHTML={{ __html: part.answer }} />
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
                                                                             )}
                                                                         </div>
                                                                     ))}

@@ -153,7 +153,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
         setPublishedFlyers(prev => {
             const all = [...prev, ...flyers];
             const unique = Array.from(new Map(all.map(item => [item.id, item])).values());
-            return unique.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()).slice(0, 20);
+            return unique.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0)).slice(0, 20);
         });
     }));
     unsubscribers.push(...unsubFlyers);
@@ -432,7 +432,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                                               <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-slate-800 to-transparent"></div>
                                           </div>
                                           <div className="px-6 py-3 bg-slate-900/50 border-t border-slate-700 flex justify-between items-center text-xs text-slate-500 font-mono">
-                                              <span>{flyer.createdAt.toDate().toLocaleDateString()}</span>
+                                              <span>{flyer.createdAt?.toDate().toLocaleDateString()}</span>
                                               <span className="text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">Read More &rarr;</span>
                                           </div>
                                       </div>
@@ -668,7 +668,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                       ) : (
                           <div className="mt-6 p-6 bg-green-900/20 border border-green-500/30 rounded-xl">
                               <h4 className="font-bold text-green-400 mb-2 flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg> Submitted</h4>
-                              <p className="text-sm text-slate-300 font-mono">Timestamp: {submissions[viewingAssignment.id].submittedAt.toDate().toLocaleString()}</p>
+                              <p className="text-sm text-slate-300 font-mono">Timestamp: {submissions[viewingAssignment.id].submittedAt?.toDate()?.toLocaleString()}</p>
                               {submissions[viewingAssignment.id].grade && (
                                   <div className="mt-4 pt-4 border-t border-green-500/30">
                                       <p className="text-lg"><strong className="text-green-300">Score:</strong> {submissions[viewingAssignment.id].grade}</p>
@@ -697,7 +697,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                   </div>
                   
                   <div className="p-4 bg-slate-800 border-t border-slate-700 text-xs text-slate-500 font-mono text-right">
-                      POSTED BY: {selectedFlyer.publisherName.toUpperCase()} // {selectedFlyer.createdAt.toDate().toLocaleDateString()}
+                      POSTED BY: {selectedFlyer.publisherName.toUpperCase()} // {selectedFlyer.createdAt?.toDate().toLocaleDateString()}
                   </div>
               </div>
           </div>

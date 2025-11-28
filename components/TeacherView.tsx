@@ -32,6 +32,8 @@ import html2canvas from 'html2canvas';
 import { ProgressDashboard } from './ProgressDashboard';
 import TimetableManager from './TimetableManager';
 import TeacherStudentCard from './TeacherStudentCard';
+import TeacherMyVoice from './TeacherMyVoice';
+import TeacherAITools from './TeacherAITools';
 
 const getGrade = (score: number) => {
     if (score >= 80) return 'A';
@@ -968,18 +970,13 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
             // Send notifications for absences
             const absentStudentIds = classStudents.filter(s => attendanceData[s.uid] === 'Absent').map(s => s.uid);
             if (absentStudentIds.length > 0) {
-                 try {
-                     const sendNotifications = functions.httpsCallable('sendNotificationsToParentsOfStudents');
-                     await sendNotifications({
-                         studentUids: absentStudentIds,
-                         message: `Your child, ${classStudents.find(s=>s.uid === absentStudentIds[0])?.name}, was marked absent from class on ${new Date(attendanceDate).toLocaleDateString()}. Please contact the school if this is an error.`,
-                         senderId: user.uid,
-                         senderName: userProfile.name,
-                     });
-                 } catch (notifyErr) {
-                     console.error("Failed to send notifications:", notifyErr);
-                     // Don't block success message
-                 }
+                 const sendNotifications = functions.httpsCallable('sendNotificationsToParentsOfStudents');
+                 await sendNotifications({
+                     studentUids: absentStudentIds,
+                     message: `Your child, ${classStudents.find(s=>s.uid === absentStudentIds[0])?.name}, was marked absent from class on ${new Date(attendanceDate).toLocaleDateString()}. Please contact the school if this is an error.`,
+                     senderId: user.uid,
+                     senderName: userProfile.name,
+                 });
             }
             setToast({ message: "Attendance saved successfully.", type: 'success' });
         } catch(err: any) {
@@ -1179,6 +1176,8 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
         { key: 'attendance', label: 'Attendance', icon: <span className="text-xl">📅</span> },
         { key: 'terminal_reports', label: 'Terminal Reports', icon: <span className="text-xl">📊</span> },
         { key: 'past_questions', label: 'BECE Questions', icon: <span className="text-xl">📝</span> },
+        { key: 'my_voice', label: 'My Voice', icon: <span className="text-xl">🎙️</span> },
+        { key: 'ai_tools', label: 'AI Copilot', icon: <span className="text-xl">🤖</span> },
     ];
     
     if (!user || !userProfile) {
@@ -1334,7 +1333,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                 );
             case 'live_lesson':
                 return activeLiveLesson ? 
-                        <TeacherLiveClassroom lessonId={activeLiveLesson.id} onClose={() => {}} userProfile={userProfile} />
+                        <TeacherLiveClassroom lessonId={activeLiveLesson.id} onClose={() => {}} setToast={setToast} userProfile={userProfile} />
                         :
                         <div className="flex flex-col items-center justify-center h-full p-8 text-center">
                             <div className="w-24 h-24 bg-slate-800 rounded-full flex items-center justify-center mb-6 shadow-xl border border-slate-700">
@@ -1436,7 +1435,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                                         <div className="flex flex-wrap gap-2 mb-4">
                                             {content.classes.map(c => <span key={c} className="text-[10px] bg-slate-700 px-2 py-1 rounded text-slate-300">{c}</span>)}
                                         </div>
-                                        <p className="text-xs text-gray-500">Created: {content.createdAt.toDate().toLocaleDateString()}</p>
+                                        <p className="text-xs text-gray-500">Created: {content.createdAt?.toDate().toLocaleDateString()}</p>
                                     </div>
                                     <div className="mt-4 pt-4 border-t border-slate-700/50 grid grid-cols-2 gap-2">
                                         <Button size="sm" onClick={() => handleStartLiveLesson(content)} className="col-span-2">🚀 Launch Live</Button>
@@ -1635,6 +1634,10 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                 );
             case 'past_questions':
                 return <BECEPastQuestionsView />;
+            case 'my_voice':
+                return <TeacherMyVoice userProfile={userProfile} />;
+            case 'ai_tools':
+                return <TeacherAITools students={students} userProfile={userProfile} />;
             default:
                 return <div>Select a tab</div>;
         }
