@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { useAuthentication } from '../hooks/useAuth';
 import { UserRole, GES_CLASSES, GES_SUBJECTS } from '../types';
@@ -22,7 +23,7 @@ const RoleSelector: React.FC = () => {
     e.preventDefault();
     if (!user || !selectedRole || !name.trim()) return;
 
-    await registerProfile(user, {
+    const success = await registerProfile(user, {
         name,
         role: selectedRole,
         studentClass: selectedRole === 'student' ? studentClass : undefined,
@@ -30,6 +31,12 @@ const RoleSelector: React.FC = () => {
         teacherSubjects: selectedRole === 'teacher' ? teacherSubjects : undefined,
         childEmails: selectedRole === 'parent' ? childEmails : undefined,
     });
+
+    if (success) {
+        // Reload page to re-initialize auth listeners and fetch the new profile cleanly
+        // This is crucial to fix the "Missing permissions" error that occurs if the old listener is dead
+        window.location.reload();
+    }
   };
   
   const handleTeacherClassChange = (className: string) => {

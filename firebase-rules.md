@@ -36,27 +36,27 @@ service cloud.firestore {
     }
 
     function isAuthorizedToCreateUser(newUserId) {
-      let caller = getCaller().data;
-      let isTeacher = caller.role == 'teacher';
-      let isAdmin   = caller.role == 'admin' || caller.isAlsoAdmin == true;
-
+      // Inlined logic to avoid top-level 'let' evaluation if caller doesn't exist
       return isSignedIn()
-        && (isAdmin || isTeacher)
+        && callerExists()
         && request.resource.data.uid == newUserId
         && request.resource.data.status == 'pending'
         && 'name' in request.resource.data
         && 'email' in request.resource.data
         && 'role' in request.resource.data
         && (
-          isAdmin ||
+          // Admin can create any user
+          (getCaller().data.role == 'admin' || getCaller().data.isAlsoAdmin == true)
+          ||
+          // Teachers can create specific users
           (
-            isTeacher &&
+            getCaller().data.role == 'teacher' &&
             (
               (
                 request.resource.data.role == 'student' &&
                 (
-                  request.resource.data.class in caller.classesTaught ||
-                  request.resource.data.class == caller.classTeacherOf
+                  request.resource.data.class in getCaller().data.classesTaught ||
+                  request.resource.data.class == getCaller().data.classTeacherOf
                 )
               ) ||
               (
@@ -64,9 +64,9 @@ service cloud.firestore {
                 exists(/databases/$(database)/documents/users/$(request.resource.data.childUids[0])) &&
                 (
                   get(/databases/$(database)/documents/users/$(request.resource.data.childUids[0])).data.class 
-                    in caller.classesTaught ||
+                    in getCaller().data.classesTaught ||
                   get(/databases/$(database)/documents/users/$(request.resource.data.childUids[0])).data.class 
-                    == caller.classTeacherOf
+                    == getCaller().data.classTeacherOf
                 )
               )
             )
@@ -79,8 +79,11 @@ service cloud.firestore {
     // USERS
     // ---------------------
     match /users/{userId} {
-      // Allow a user to read their own profile explicitly without checking approval status
-      allow get: if isSignedIn() && (request.auth.uid == userId || isCallerApproved());
+      // Explicitly allow users to read their own document (even if pending or non-existent/null check)
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      
+      // Allow approved users to read other profiles (for linking, checking teachers etc)
+      allow get: if isCallerApproved();
       
       // Allow listing users only if the caller is approved (e.g. Admins/Teachers/Approved Students)
       allow list: if isCallerApproved();

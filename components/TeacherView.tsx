@@ -1177,7 +1177,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
         { key: 'terminal_reports', label: 'Terminal Reports', icon: <span className="text-xl">📊</span> },
         { key: 'past_questions', label: 'BECE Questions', icon: <span className="text-xl">📝</span> },
         { key: 'my_voice', label: 'My Voice', icon: <span className="text-xl">🎙️</span> },
-        { key: 'ai_tools', label: 'AI Copilot', icon: <span className="text-xl">🤖</span> },
+        { key: 'ai_tools', label: 'coptlot', icon: <span className="text-xl">🤖</span> },
     ];
     
     if (!user || !userProfile) {
@@ -1821,4 +1821,4 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
     );
 };
 
-export const TeacherViewComponent = TeacherView; // Ensure named export is available if needed
+export const TeacherViewComponent = TeacherView;

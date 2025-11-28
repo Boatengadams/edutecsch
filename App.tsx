@@ -1,4 +1,7 @@
 
+
+
+
 import React, { useState, useEffect, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useAuthentication, AuthenticationContext } from './hooks/useAuth';
@@ -88,7 +91,11 @@ const AuthenticationProvider: React.FC<{ children: ReactNode }> = ({ children })
             setLoading(false);
           },
           err => {
-            console.error(`Error fetching user profile for UID ${firebaseUser.uid}:`, err.message);
+            // Suppress "Missing or insufficient permissions" error for cleaner console during registration flow
+            // This happens when a user exists in Auth but not yet in Firestore (pending creation)
+            if (err.code !== 'permission-denied' && !err.message.includes("Missing or insufficient permissions")) {
+                console.error(`Error fetching user profile for UID ${firebaseUser.uid}:`, err.message);
+            }
             setUserProfile(null);
             setLoading(false);
           });
