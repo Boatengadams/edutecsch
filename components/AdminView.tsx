@@ -22,6 +22,7 @@ import AdminCalendar from './AdminCalendar';
 import AdminMaterials from './AdminMaterials';
 import SystemActivation from './SystemActivation';
 import ConfirmationModal from './common/ConfirmationModal';
+import SubscriptionCalculator from './SubscriptionCalculator';
 
 // --- SUB-COMPONENTS ---
 
@@ -693,7 +694,15 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
                     </div>
                 );
             case 'system_activation':
-                return <SystemActivation subscriptionStatus={subscriptionStatus} />;
+                return (
+                    <div className="space-y-6">
+                        <h2 className="text-3xl font-bold">System Activation</h2>
+                        <div className="grid grid-cols-1 gap-6">
+                            <SystemActivation subscriptionStatus={subscriptionStatus} />
+                            <SubscriptionCalculator allUsers={allUsers} />
+                        </div>
+                    </div>
+                );
             default:
                 return <div>Select a tab</div>;
         }

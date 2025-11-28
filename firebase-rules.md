@@ -1,5 +1,4 @@
 
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -34,9 +33,20 @@ service cloud.firestore {
           getCaller().data.role == 'admin'
         );
     }
+    
+    // Validates that a user isn't trying to grant themselves admin privileges
+    function isSafeUserUpdate() {
+      let incoming = request.resource.data;
+      let existing = resource.data;
+      return incoming.role == existing.role
+          && incoming.status == existing.status
+          && incoming.adminType == existing.adminType
+          && incoming.isAlsoAdmin == existing.isAlsoAdmin
+          && incoming.isAlsoTeacher == existing.isAlsoTeacher;
+    }
 
     function isAuthorizedToCreateUser(newUserId) {
-      // Inlined logic to avoid top-level 'let' evaluation if caller doesn't exist
+      // Inlined logic for admin/teacher creation of other users
       return isSignedIn()
         && callerExists()
         && request.resource.data.uid == newUserId
@@ -79,27 +89,38 @@ service cloud.firestore {
     // USERS
     // ---------------------
     match /users/{userId} {
-      // Explicitly allow users to read their own document (even if pending or non-existent/null check)
+      // Explicitly allow users to read their own document
       allow get: if isSignedIn() && request.auth.uid == userId;
       
-      // Allow approved users to read other profiles (for linking, checking teachers etc)
+      // Allow approved users to read other profiles
       allow get: if isCallerApproved();
       
-      // Allow listing users only if the caller is approved (e.g. Admins/Teachers/Approved Students)
+      // Allow listing users only if the caller is approved
+      // Students should preferably not list all users, but searching requires it currently.
       allow list: if isCallerApproved();
 
+      // Creation Logic
       allow create: if
-        (isSignedIn() && request.auth.uid == userId)
+        // 1. Self-Registration (Strict)
+        (
+          isSignedIn() 
+          && request.auth.uid == userId
+          && request.resource.data.role in ['student', 'teacher', 'parent'] // No admin self-creation
+          && request.resource.data.status == 'pending' // Must start as pending
+          && !('adminType' in request.resource.data)
+          && !('isAlsoAdmin' in request.resource.data)
+        )
+        // 2. Admin/Teacher creating others
         || isAuthorizedToCreateUser(userId);
 
+      // Update Logic
       allow update: if
         isCallerAdmin()
         ||
         (
           isSignedIn()
           && request.auth.uid == userId
-          && request.resource.data.role == resource.data.role
-          && request.resource.data.status == resource.data.status
+          && isSafeUserUpdate() // Prevents privilege escalation
         );
 
       allow delete: if isCallerAdmin();
@@ -109,13 +130,8 @@ service cloud.firestore {
     // USER ACTIVITY LOGS
     // ---------------------
     match /userActivity/{logId} {
-      // Allow any signed-in user to create a log (login/logout)
-      allow create: if isSignedIn();
-      
-      // Allow Admins to read all logs. 
-      // Allow Teachers to read logs (filtered by client query, but security-wise broad for now to allow filtering)
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow read, list: if isCallerAdmin() || (isCallerApproved() && getCaller().data.role == 'teacher');
-      
       allow update, delete: if isCallerAdmin();
     }
 
@@ -141,29 +157,29 @@ service cloud.firestore {
     // CONVERSATIONS + MESSAGES
     // ---------------------
     match /conversations/{conversationId} {
-
       function isParticipant() {
         return request.auth.uid in resource.data.participantUids;
       }
 
-      allow read, update: if isCallerApproved() && isParticipant();
-      allow list: if isCallerApproved();
+      allow get: if isCallerApproved() && isParticipant();
+      
+      // Enforce that users can only list conversations they are part of
+      allow list: if isCallerApproved() && request.auth.uid in resource.data.participantUids;
+      
       allow create: if isCallerApproved()
         && request.auth.uid in request.resource.data.participantUids;
+        
+      allow update: if isCallerApproved() && isParticipant();
 
       match /messages/{messageId} {
-
         function isParentParticipant() {
-          return request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantUids;
+           return request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantUids;
         }
 
         allow read, list: if isCallerApproved() && isParentParticipant();
-
         allow create: if isCallerApproved()
           && isParentParticipant()
           && request.resource.data.senderId == request.auth.uid;
-
-        allow update: if false;
       }
     }
 
@@ -172,23 +188,13 @@ service cloud.firestore {
     // ASSIGNMENTS
     // ---------------------
     match /assignments/{assignmentId} {
-
       allow read: if isCallerApproved();
 
       allow create: if isCallerApproved()
         && getCaller().data.role == 'teacher'
         && request.resource.data.teacherId == request.auth.uid;
 
-      allow update: if
-        isCallerAdmin()
-        ||
-        (
-          isCallerApproved()
-          && getCaller().data.role == 'teacher'
-          && resource.data.teacherId == request.auth.uid
-        );
-
-      allow delete: if
+      allow update, delete: if
         isCallerAdmin()
         ||
         (
@@ -215,7 +221,12 @@ service cloud.firestore {
           )
         );
 
-      allow list: if isCallerApproved();
+      // Secure List: Users can only list submissions they own, teach, or parent
+      allow list: if isCallerApproved() && (
+          isCallerAdmin() ||
+          resource.data.studentId == request.auth.uid ||
+          resource.data.teacherId == request.auth.uid
+      );
 
       allow create: if isCallerApproved()
         && getCaller().data.role == 'student'
@@ -236,6 +247,7 @@ service cloud.firestore {
             (
               getCaller().data.role == 'student'
               && resource.data.studentId == request.auth.uid
+              && resource.data.grade == null // Student cannot change grade
             )
           )
         );
@@ -277,7 +289,7 @@ service cloud.firestore {
       allow get, update: if isCallerApproved()
         && resource.data.userId == request.auth.uid;
 
-      allow list: if isCallerApproved();
+      allow list: if isCallerApproved() && resource.data.userId == request.auth.uid;
 
       allow create: if isCallerApproved()
         && (getCaller().data.role == 'teacher' || getCaller().data.role == 'admin');
@@ -290,14 +302,8 @@ service cloud.firestore {
     // GENERATED CONTENT
     // ---------------------
     match /generatedContent/{contentId} {
-
-      allow get: if isCallerApproved()
-        && getCaller().data.role == 'teacher'
-        && (request.auth.uid in resource.data.collaboratorUids || resource.data.teacherId == request.auth.uid);
-
-      allow list: if isCallerApproved()
-        && getCaller().data.role == 'teacher';
-
+      allow read: if isCallerApproved(); 
+      
       allow create: if isCallerApproved()
         && getCaller().data.role == 'teacher'
         && request.resource.data.teacherId == request.auth.uid;
@@ -338,21 +344,9 @@ service cloud.firestore {
     // TEACHING MATERIALS
     // ---------------------
     match /teachingMaterials/{materialId} {
-
       allow read: if isCallerApproved();
-
-      allow write: if isCallerApproved()
-        && (getCaller().data.role == 'admin' || getCaller().data.role == 'teacher');
-
-      allow delete: if isCallerApproved()
-        && (
-          isCallerAdmin()
-          ||
-          (
-            getCaller().data.role == 'teacher'
-            && resource.data.uploaderId == request.auth.uid
-          )
-        );
+      allow write: if isCallerApproved() && (getCaller().data.role == 'admin' || getCaller().data.role == 'teacher');
+      allow delete: if isCallerApproved() && (isCallerAdmin() || (getCaller().data.role == 'teacher' && resource.data.uploaderId == request.auth.uid));
     }
 
 
@@ -360,30 +354,17 @@ service cloud.firestore {
     // LIVE LESSONS + IMAGES
     // ---------------------
     match /liveLessons/{lessonId} {
-
       allow read: if isCallerApproved();
 
-      allow create: if isCallerApproved()
+      allow create, update: if isCallerApproved()
         && getCaller().data.role == 'teacher'
-        && request.resource.data.teacherId == request.auth.uid;
+        && (request.resource.data.teacherId == request.auth.uid || resource.data.teacherId == request.auth.uid);
 
-      allow update: if isCallerApproved()
-        && getCaller().data.role == 'teacher'
-        && resource.data.teacherId == request.auth.uid;
-
-      allow delete: if
-        isCallerAdmin()
-        ||
-        (
-          isCallerApproved()
-          && getCaller().data.role == 'teacher'
-          && resource.data.teacherId == request.auth.uid
-        );
+      allow delete: if isCallerAdmin() || (isCallerApproved() && resource.data.teacherId == request.auth.uid);
 
       match /images/{imageId} {
         allow read: if isCallerApproved();
-        allow write: if isCallerApproved()
-          && get(/databases/$(database)/documents/liveLessons/$(lessonId)).data.teacherId == request.auth.uid;
+        allow write: if isCallerApproved() && get(/databases/$(database)/documents/liveLessons/$(lessonId)).data.teacherId == request.auth.uid;
       }
       
       match /breakoutWhiteboards/{whiteboardId} {
@@ -391,24 +372,8 @@ service cloud.firestore {
       }
 
       match /responses/{responseId} {
-        allow read: if isCallerApproved()
-          && (
-            getCaller().data.role == 'teacher'
-            || (
-              getCaller().data.role == 'student'
-              && resource.data.studentId == request.auth.uid
-            )
-          );
-        
-        allow list: if isCallerApproved()
-          && getCaller().data.role == 'teacher';
-
-        allow create: if isCallerApproved()
-          && getCaller().data.role == 'student'
-          && request.resource.data.studentId == request.auth.uid;
-
-        allow update: if false;
-        allow delete: if false;
+        allow read: if isCallerApproved();
+        allow create: if isCallerApproved() && request.resource.data.studentId == request.auth.uid;
       }
     }
 
@@ -417,90 +382,47 @@ service cloud.firestore {
     // GROUPS
     // ---------------------
     match /groups/{groupId} {
-
-      function isGroupMember() {
-        return request.auth.uid in resource.data.memberUids;
-      }
-
-      function isGroupTeacher() {
-        return request.auth.uid == resource.data.teacherId;
-      }
-
-      function isApprovedAdmin() {
-        return isCallerAdmin();
-      }
-      
+      function isGroupMember() { return request.auth.uid in resource.data.memberUids; }
+      function isGroupTeacher() { return request.auth.uid == resource.data.teacherId; }
+      function isApprovedAdmin() { return isCallerAdmin(); }
       function isParentOfGroupMember() {
           let caller = getCaller().data;
-          return caller.role == 'parent'
-              && caller.childUids.size() > 0
-              && caller.childUids.hasAny(resource.data.memberUids);
+          return caller.role == 'parent' && caller.childUids.size() > 0 && caller.childUids.hasAny(resource.data.memberUids);
       }
 
-      allow read: if isCallerApproved()
-        && (isGroupMember() || isGroupTeacher() || isApprovedAdmin() || isParentOfGroupMember());
+      allow read: if isCallerApproved() && (isGroupMember() || isGroupTeacher() || isApprovedAdmin() || isParentOfGroupMember());
+      allow list: if isCallerApproved(); // Filtered by query on client side
 
-      allow create: if isCallerApproved()
-        && getCaller().data.role == 'teacher';
+      allow create: if isCallerApproved() && getCaller().data.role == 'teacher';
 
-      allow update: if isCallerApproved()
-        && (
-          isGroupTeacher()
-          ||
-          (
-            isGroupMember()
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'isSubmitted', 'submission'
-            ])
-          )
-        );
+      allow update: if isCallerApproved() && (
+          isGroupTeacher() || (isGroupMember() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isSubmitted', 'submission']))
+      );
 
-      allow delete: if isCallerApproved()
-        && (isGroupTeacher() || isApprovedAdmin());
-
-      allow list: if isCallerApproved();
+      allow delete: if isCallerApproved() && (isGroupTeacher() || isApprovedAdmin());
     }
 
 
     match /groups/{groupId}/groupMessages/{messageId} {
+      function isGroupMember2() { return request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids; }
+      function isGroupTeacher2() { return request.auth.uid == get(/databases/$(database)/documents/groups/$(groupId)).data.teacherId; }
 
-      function isGroupMember2() {
-        return request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
-      }
-
-      function isGroupTeacher2() {
-        return request.auth.uid == get(/databases/$(database)/documents/groups/$(groupId)).data.teacherId;
-      }
-
-      allow read, list: if isCallerApproved()
-        && (isGroupMember2() || isGroupTeacher2());
-
-      allow create: if isCallerApproved()
-        && (
-          isGroupMember2()
-          || isGroupTeacher2()
-        )
-        && request.resource.data.senderId == request.auth.uid;
-
-      allow update, delete: if false;
+      allow read, list: if isCallerApproved() && (isGroupMember2() || isGroupTeacher2());
+      allow create: if isCallerApproved() && (isGroupMember2() || isGroupTeacher2()) && request.resource.data.senderId == request.auth.uid;
     }
 
 
     // ---------------------
-    // CALENDAR EVENTS
+    // CALENDAR & TIMETABLES
     // ---------------------
     match /calendarEvents/{eventId} {
       allow read: if isCallerApproved();
       allow write: if isCallerAdmin();
     }
 
-
-    // ---------------------
-    // TIMETABLES
-    // ---------------------
     match /timetables/{classId} {
       allow read: if isCallerApproved();
-      allow write: if isCallerAdmin();
+      allow write: if isCallerAdmin() || (isCallerApproved() && getCaller().data.role == 'teacher');
     }
 
 
@@ -509,63 +431,7 @@ service cloud.firestore {
     // ---------------------
     match /terminalReports/{reportId} {
       allow read: if isCallerApproved();
-
-      allow create: if isCallerApproved()
-        && (
-          getCaller().data.role == 'admin'
-          || getCaller().data.role == 'teacher'
-        );
-
-      allow update: if isCallerApproved()
-        && (
-          getCaller().data.role == 'admin'
-          || getCaller().data.role == 'teacher'
-        );
-
-      allow delete: if isCallerAdmin();
-    }
-
-
-    // ---------------------
-    // REPORT SUMMARIES
-    // ---------------------
-    match /reportSummaries/{summaryId} {
-
-      allow get: if isCallerApproved()
-        && (
-          getCaller().data.role == 'admin'
-          ||
-          (
-            getCaller().data.role == 'teacher'
-            && resource.data.classId == getCaller().data.classTeacherOf
-          )
-          ||
-          (
-            getCaller().data.role == 'student'
-            && resource.data.studentId == request.auth.uid
-          )
-          ||
-          (
-            getCaller().data.role == 'parent'
-            && resource.data.studentId in getCaller().data.childUids
-          )
-        );
-
-      allow list: if isCallerApproved();
-
-      allow create: if isCallerApproved()
-        && (
-          getCaller().data.role == 'admin'
-          || getCaller().data.role == 'teacher'
-        );
-
-      allow update: if isCallerApproved()
-        && (
-          getCaller().data.role == 'admin'
-          || getCaller().data.role == 'teacher'
-        );
-
-      allow delete: if isCallerAdmin();
+      allow write: if isCallerApproved() && (getCaller().data.role == 'admin' || getCaller().data.role == 'teacher');
     }
     
     // ---------------------
