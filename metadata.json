@@ -1,5 +1,5 @@
 {
-  "name": "EduTec ",
+  "name": "EDUTECSCH",
   "description": "A web application for teachers and students to manage assignments. Teachers can create and grade assignments, while students can view and submit their work. The app uses Firebase for authentication, database, and storage.",
   "requestFramePermissions": [
     "camera",

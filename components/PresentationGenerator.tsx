@@ -470,7 +470,7 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
 
                         {/* Footer */}
                         <div className="h-12 px-8 flex items-center justify-between border-t border-white/5 bg-black/20 backdrop-blur-sm text-xs font-mono text-slate-500 z-20">
-                            <span>{schoolSettings?.schoolName || 'UTOPIA'}</span>
+                            <span>{schoolSettings?.schoolName || 'EDUTECSCH'}</span>
                             <span>{subject.toUpperCase()}</span>
                         </div>
                   </div>

@@ -41,7 +41,7 @@ const AuthenticationProvider: React.FC<{ children: ReactNode }> = ({ children })
             setSchoolSettings(docSnap.data() as SchoolSettings);
         } else {
              setSchoolSettings({
-                schoolName: "UTOPIA INTERNATIONAL SCHOOL",
+                schoolName: "EDUTECSCH",
                 schoolMotto: "Shaping the Future, One Student at a Time.",
                 academicYear: `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`
             });
@@ -162,7 +162,7 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (i
                 <div className="relative z-10 flex flex-col items-center">
                     <div className="w-16 h-16 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-8 shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
                     <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 tracking-widest uppercase mb-2">
-                        {schoolSettings?.schoolName || 'EDUTEC'}
+                        {schoolSettings?.schoolName || 'EDUTECSCH'}
                     </h1>
                     <p className="text-sm font-medium text-slate-500 tracking-[0.2em] animate-pulse">SYSTEM INITIALIZING</p>
                 </div>

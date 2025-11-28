@@ -373,7 +373,7 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
                  {/* Slide Content Layer */}
                  <div className="absolute inset-0 flex items-center justify-center overflow-y-auto p-8 z-0">
                      <div className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center">
-                         <span className="text-9xl font-bold text-slate-700">UTOPIA</span>
+                         <span className="text-9xl font-bold text-slate-700">EDUTECSCH</span>
                      </div>
                      <div className="prose-styles prose-2xl text-center max-w-4xl" dangerouslySetInnerHTML={{ __html: reconstructedLesson.currentBoardContent }} />
                  </div>

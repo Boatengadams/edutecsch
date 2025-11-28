@@ -104,7 +104,7 @@ const SnapToRegister: React.FC<SnapToRegisterProps> = ({ onClose, roleToRegister
     
     const fileInputRef = useRef<HTMLInputElement>(null);
     
-    const schoolIdentifier = (schoolSettings?.schoolName || 'UTOPIA').substring(0, 2).toLowerCase();
+    const schoolIdentifier = (schoolSettings?.schoolName || 'EDUTECSCH').substring(0, 2).toLowerCase();
 
     const regenerateCredentials = useCallback((users: ParsedUser[]): ParsedUser[] => {
         const targetClass = teacherClassId || classIdForStudents;

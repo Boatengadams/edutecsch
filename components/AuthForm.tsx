@@ -79,7 +79,7 @@ const AuthForm: React.FC = () => {
              </div>
              
              <h1 className="text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight tracking-tight">
-                {settings?.schoolName || 'UTOPIA INTERNATIONAL'}
+                {settings?.schoolName || 'EDUTECSCH'}
              </h1>
              <p className="text-lg text-slate-400 font-light leading-relaxed max-w-md border-l-2 border-blue-500/50 pl-4">
                 {settings?.schoolMotto || 'Shaping the Future, One Student at a Time.'}

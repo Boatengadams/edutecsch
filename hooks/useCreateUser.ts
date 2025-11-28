@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { secondaryAuth, db, firebase } from '../services/firebase';
 import type { UserRole, UserProfile } from '../types';
@@ -23,7 +24,7 @@ const generateCredentials = (name: string, classId: string, schoolName: string):
 
     const nameForEmail = (nameParts.length > 1 ? nameParts[1] : nameParts[0]).toLowerCase().replace(/[^a-z0-9]/g, "");
 
-    const schoolIdentifier = (schoolName || 'UTOPIA').substring(0, 2).toLowerCase();
+    const schoolIdentifier = (schoolName || 'EDUTECSCH').substring(0, 2).toLowerCase();
 
     const getClassIdentifier = (cId: string): string => {
         if (!cId) return '';

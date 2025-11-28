@@ -67,7 +67,7 @@ const StudentReportCard: React.FC<{
                     <span className="text-2xl sm:text-3xl">🎓</span>
                 </div>
                 <div className="text-center flex-grow px-4">
-                    <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-widest font-sans text-black leading-tight">{schoolSettings?.schoolName || 'UTOPIA INTERNATIONAL SCHOOL'}</h1>
+                    <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-widest font-sans text-black leading-tight">{schoolSettings?.schoolName || 'EDUTECSCH'}</h1>
                     <p className="text-xs sm:text-sm italic font-semibold text-gray-800 mt-1">"{schoolSettings?.schoolMotto || 'Excellence in Education'}"</p>
                     <p className="text-[10px] sm:text-xs mt-1 text-black">Email: info@utopia.edu | Tel: +233 20 000 0000</p>
                     <div className="mt-3 inline-block bg-black text-white px-6 sm:px-8 py-1 rounded-sm uppercase text-xs sm:text-sm font-bold tracking-widest">
