@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { db, firebase } from '../services/firebase';
-import { Timetable, TimetableData, TimetablePeriod, GES_STANDARD_CURRICULUM } from '../types';
+import { Timetable, TimetableData, TimetablePeriod, GES_STANDARD_CURRICULUM, GES_CLASSES } from '../types';
 import Button from './common/Button';
 import Card from './common/Card';
 import Spinner from './common/Spinner';
@@ -31,6 +31,18 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
     const [breakDuration, setBreakDuration] = useState(30);
     const [lunchTime, setLunchTime] = useState("12:30");
     const [lunchDuration, setLunchDuration] = useState(45);
+    
+    // Advanced Generator Settings
+    const [showGenOptions, setShowGenOptions] = useState(false);
+    const [customInstructions, setCustomInstructions] = useState("");
+    const [targetClasses, setTargetClasses] = useState<string[]>([classId]);
+
+    useEffect(() => {
+        // Reset target class when prop changes, unless menu is open
+        if (!showGenOptions) {
+            setTargetClasses([classId]);
+        }
+    }, [classId, showGenOptions]);
 
     useEffect(() => {
         const fetchTimetable = async () => {
@@ -53,62 +65,92 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
     }, [classId]);
 
     const handleGenerateAI = async () => {
+        if (targetClasses.length === 0) {
+            showToast("Please select at least one class.", "error");
+            return;
+        }
+
         setIsGenerating(true);
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const subjects = GES_STANDARD_CURRICULUM[classId] || GES_STANDARD_CURRICULUM['Basic 1']; // Fallback
             
-            const prompt = `
-                Generate a school timetable for a class in Ghana (Level: ${classId}).
-                
-                **Constraints:**
-                - Days: Monday to Friday.
-                - Start Time: ${startTime}.
-                - Period Duration: ${periodDuration} minutes.
-                - First Break: At ${breakTime} for ${breakDuration} minutes. Label subject as "Snack Break".
-                - Second Break: At ${lunchTime} for ${lunchDuration} minutes. Label subject as "Lunch Break".
-                - Closing Time: Approximately 3:00 PM.
-                - Subjects to distribute: ${subjects.join(', ')}.
-                - Core subjects (Math, English, Science) should appear more frequently.
-                - Include a daily "Worship" or "Assembly" period at the very start (before ${startTime} if needed, or as first period).
-                
-                **Output Format:**
-                Return ONLY a valid JSON object matching this structure:
-                {
-                    "Monday": [ { "subject": "Math", "startTime": "08:00", "endTime": "08:45" }, ... ],
-                    "Tuesday": ...
-                }
-                
-                Ensure time slots are continuous.
-            `;
+            let successCount = 0;
 
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-pro-preview',
-                contents: prompt,
-                config: {
-                    responseMimeType: 'application/json',
-                    responseSchema: {
-                        type: Type.OBJECT,
-                        properties: {
-                            Monday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
-                            Tuesday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
-                            Wednesday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
-                            Thursday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
-                            Friday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+            // Iterate through selected classes
+            for (const targetClassId of targetClasses) {
+                const subjects = GES_STANDARD_CURRICULUM[targetClassId] || GES_STANDARD_CURRICULUM['Basic 1']; // Fallback
+                
+                const prompt = `
+                    Generate a school timetable for a class in Ghana (Level: ${targetClassId}).
+                    
+                    **Constraints:**
+                    - Days: Monday to Friday.
+                    - Start Time: ${startTime}.
+                    - Period Duration: ${periodDuration} minutes.
+                    - First Break: At ${breakTime} for ${breakDuration} minutes. Label subject as "Snack Break".
+                    - Second Break: At ${lunchTime} for ${lunchDuration} minutes. Label subject as "Lunch Break".
+                    - Closing Time: Approximately 3:00 PM.
+                    - Subjects to distribute: ${subjects.join(', ')}.
+                    - Core subjects (Math, English, Science) should appear more frequently.
+                    - Include a daily "Worship" or "Assembly" period at the very start.
+                    
+                    **Additional User Instructions:**
+                    ${customInstructions}
+                    
+                    **Output Format:**
+                    Return ONLY a valid JSON object matching this structure:
+                    {
+                        "Monday": [ { "subject": "Math", "startTime": "08:00", "endTime": "08:45" }, ... ],
+                        "Tuesday": ...
+                    }
+                    
+                    Ensure time slots are continuous.
+                `;
+
+                const response = await ai.models.generateContent({
+                    model: 'gemini-3-pro-preview',
+                    contents: prompt,
+                    config: {
+                        responseMimeType: 'application/json',
+                        responseSchema: {
+                            type: Type.OBJECT,
+                            properties: {
+                                Monday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                                Tuesday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                                Wednesday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                                Thursday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                                Friday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                            }
                         }
                     }
-                }
-            });
+                });
 
-            const generatedData = JSON.parse(response.text);
-            setTimetable({
-                id: classId,
-                classId: classId,
-                timetableData: generatedData,
-                updatedAt: firebase.firestore.Timestamp.now()
-            });
-            setEditMode(true);
-            showToast("Timetable generated! Review and save.", "success");
+                const generatedData = JSON.parse(response.text);
+                
+                const newTimetable = {
+                    id: targetClassId,
+                    classId: targetClassId,
+                    timetableData: generatedData,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+
+                // Save immediately to DB
+                await db.collection('timetables').doc(targetClassId).set(newTimetable);
+                
+                // If this is the currently viewed class, update local state
+                if (targetClassId === classId) {
+                    setTimetable({
+                         ...newTimetable,
+                         updatedAt: firebase.firestore.Timestamp.now()
+                    });
+                    setEditMode(true);
+                }
+                
+                successCount++;
+            }
+
+            showToast(`Generated timetables for ${successCount} classes successfully!`, "success");
+            setShowGenOptions(false);
 
         } catch (err: any) {
             console.error("AI Generation failed:", err);
@@ -143,40 +185,89 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
         setTimetable({ ...timetable, timetableData: newData });
     };
 
+    const toggleClassSelection = (cId: string) => {
+        setTargetClasses(prev => 
+            prev.includes(cId) ? prev.filter(c => c !== cId) : [...prev, cId]
+        );
+    };
+
     if (loading) return <div className="flex justify-center p-10"><Spinner /></div>;
 
     return (
         <div className="space-y-6">
             {!readOnly && (
                 <Card className="border-blue-500/30 bg-blue-900/10">
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                        <div className="flex flex-wrap gap-4 items-center">
-                            <div>
-                                <label className="block text-xs text-gray-400 mb-1">Start Time</label>
-                                <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="bg-slate-800 border border-slate-600 rounded p-1 text-sm" />
+                    <div className="space-y-4">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div className="flex flex-wrap gap-4 items-center">
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1">Start Time</label>
+                                    <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="bg-slate-800 border border-slate-600 rounded p-1 text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1">Period (mins)</label>
+                                    <input type="number" value={periodDuration} onChange={e => setPeriodDuration(Number(e.target.value))} className="bg-slate-800 border border-slate-600 rounded p-1 text-sm w-16" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1">Snack Break</label>
+                                    <input type="time" value={breakTime} onChange={e => setBreakTime(e.target.value)} className="bg-slate-800 border border-slate-600 rounded p-1 text-sm" />
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-xs text-gray-400 mb-1">Period (mins)</label>
-                                <input type="number" value={periodDuration} onChange={e => setPeriodDuration(Number(e.target.value))} className="bg-slate-800 border border-slate-600 rounded p-1 text-sm w-16" />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-gray-400 mb-1">Snack Break</label>
-                                <input type="time" value={breakTime} onChange={e => setBreakTime(e.target.value)} className="bg-slate-800 border border-slate-600 rounded p-1 text-sm" />
-                            </div>
-                        </div>
-                        <div className="flex gap-2">
-                            <Button onClick={handleGenerateAI} disabled={isGenerating} className="shadow-lg shadow-blue-500/20">
-                                {isGenerating ? <Spinner /> : '✨ Generate with AI'}
-                            </Button>
-                            {timetable && !editMode && (
-                                <Button variant="secondary" onClick={() => setEditMode(true)}>Edit Manually</Button>
-                            )}
-                            {editMode && (
-                                <Button variant="primary" onClick={handleSave} disabled={isSaving}>
-                                    {isSaving ? 'Saving...' : 'Save Changes'}
+                            
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={() => setShowGenOptions(!showGenOptions)}
+                                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${showGenOptions ? 'bg-slate-700 text-white' : 'text-blue-400 hover:bg-slate-800'}`}
+                                >
+                                    {showGenOptions ? 'Hide Options' : 'Advanced Options'}
+                                </button>
+                                <Button onClick={handleGenerateAI} disabled={isGenerating} className="shadow-lg shadow-blue-500/20">
+                                    {isGenerating ? <span className="flex items-center gap-2"><Spinner /> Generating ({targetClasses.length})...</span> : '✨ Generate with AI'}
                                 </Button>
-                            )}
+                                {timetable && !editMode && !showGenOptions && (
+                                    <Button variant="secondary" onClick={() => setEditMode(true)}>Edit Manually</Button>
+                                )}
+                                {editMode && (
+                                    <Button variant="primary" onClick={handleSave} disabled={isSaving}>
+                                        {isSaving ? 'Saving...' : 'Save Changes'}
+                                    </Button>
+                                )}
+                            </div>
                         </div>
+
+                        {showGenOptions && (
+                            <div className="pt-4 border-t border-slate-700 animate-fade-in-down grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div className="lg:col-span-1">
+                                    <label className="block text-sm font-bold text-gray-300 mb-2">Apply to Classes ({targetClasses.length})</label>
+                                    <div className="bg-slate-800 rounded-lg p-2 max-h-40 overflow-y-auto custom-scrollbar border border-slate-600">
+                                        {GES_CLASSES.map(c => (
+                                            <label key={c} className="flex items-center gap-2 p-2 hover:bg-slate-700 rounded cursor-pointer text-sm">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={targetClasses.includes(c)} 
+                                                    onChange={() => toggleClassSelection(c)}
+                                                    className="rounded bg-slate-900 border-slate-500 text-blue-500 focus:ring-blue-500"
+                                                />
+                                                <span className={targetClasses.includes(c) ? 'text-white' : 'text-gray-400'}>{c}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                    <div className="flex justify-between mt-2 text-xs">
+                                        <button onClick={() => setTargetClasses(GES_CLASSES)} className="text-blue-400 hover:text-blue-300">Select All</button>
+                                        <button onClick={() => setTargetClasses([classId])} className="text-slate-500 hover:text-slate-300">Reset</button>
+                                    </div>
+                                </div>
+                                <div className="lg:col-span-2">
+                                    <label className="block text-sm font-bold text-gray-300 mb-2">Custom Instructions / Prompt</label>
+                                    <textarea 
+                                        value={customInstructions} 
+                                        onChange={e => setCustomInstructions(e.target.value)}
+                                        placeholder="E.g., 'Ensure Physical Education is on Friday morning' or 'Make Maths immediately after breaks'."
+                                        className="w-full h-40 p-3 bg-slate-800 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </Card>
             )}
