@@ -23,6 +23,22 @@ interface ParentViewProps {
   setIsSidebarExpanded: (isExpanded: boolean) => void;
 }
 
+const QUOTES = [
+    "Children are the living messages we send to a time we will not see.",
+    "Education is the most powerful weapon which you can use to change the world.",
+    "The beautiful thing about learning is that no one can take it away from you.",
+    "Your children need your presence more than your presents.",
+    "Encourage your child to have a love for learning.",
+    "Behind every young child who believes in himself is a parent who believed first."
+];
+
+const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good Morning';
+    if (hour < 18) return 'Good Afternoon';
+    return 'Good Evening';
+};
+
 const gradeToNumeric = (grade?: string): number | null => {
     if (!grade) return null;
     const numericGrade = parseFloat(grade);
@@ -63,6 +79,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIs
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [relevantTeachers, setRelevantTeachers] = useState<UserProfile[]>([]);
+  const [quote] = useState(QUOTES[Math.floor(Math.random() * QUOTES.length)]);
 
   const selectedChildProfile = useMemo(() => childrenProfiles.find(c => c.uid === selectedChildId), [childrenProfiles, selectedChildId]);
 
@@ -241,7 +258,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIs
         }
 
         setAiSystemInstruction(`${baseInstruction}\n\nCURRENT CONTEXT:\n${context}`);
-        setAiSuggestedPrompts(aiSuggestedPrompts);
+        setAiSuggestedPrompts(prompts);
 
     }, [activeTab, selectedChildProfile, assignments, submissions, notifications]);
 
@@ -279,257 +296,248 @@ export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIs
             .where('status', '==', 'approved')
             .onSnapshot(snapshot => {
                 const allTeachers = snapshot.docs.map(doc => doc.data() as UserProfile);
-                const teachersForParent = allTeachers.filter(teacher => {
-                    const teachesOneOfTheChildren = childClassIds.some(classId =>
-                        teacher.classTeacherOf === classId ||
-                        teacher.classesTaught?.includes(classId)
-                    );
-                    return teachesOneOfTheChildren;
-                });
-                setRelevantTeachers(teachersForParent);
+                // Filter teachers who teach any of the child's classes
+                const relevant = allTeachers.filter(t => 
+                    t.classesTaught?.some(c => childClassIds.includes(c)) || 
+                    (t.classTeacherOf && childClassIds.includes(t.classTeacherOf))
+                );
+                setRelevantTeachers(relevant);
             });
+            
         return () => unsubscribe();
     }, [childrenProfiles]);
 
-    const dashboardStats = useMemo(() => {
-        if (!selectedChildProfile) return { averageGrade: 'N/A', onTimeRate: 'N/A', pendingCount: 0, timelinessChartData: [], gradeHistoryChartData: [] };
+  const dashboardData = useMemo(() => {
+      const gradedSubs = (Object.values(submissions) as Submission[]).filter(s => s.status === 'Graded' && s.grade);
+      const numericGrades = gradedSubs.map(s => gradeToNumeric(s.grade)).filter((g): g is number => g !== null);
+      const averageGrade = numericGrades.length > 0 ? (numericGrades.reduce((a, b) => a + b, 0) / numericGrades.length) : null;
+      
+      const pendingCount = assignments.filter(a => !submissions[a.id]).length;
+      
+      // Attendance Stats
+      const totalAttendance = attendanceRecords.length;
+      const presentCount = attendanceRecords.filter(r => r.records[selectedChildId!] === 'Present').length;
+      const attendancePercentage = totalAttendance > 0 ? (presentCount / totalAttendance) * 100 : 100;
 
-        const gradedSubmissions = Object.values(submissions).filter((s: Submission) => s.status === 'Graded' && s.grade);
-        const numericGrades = gradedSubmissions.map((s: Submission) => gradeToNumeric(s.grade)).filter((g): g is number => g !== null);
-        const averageGrade = numericGrades.length > 0 ? (numericGrades.reduce((a, b) => a + b, 0) / numericGrades.length).toFixed(1) : 'N/A';
+      return { averageGrade, pendingCount, attendancePercentage };
+  }, [submissions, assignments, attendanceRecords, selectedChildId]);
 
-        let onTime = 0, late = 0;
-        const submissionMap = new Map(Object.values(submissions).map((s: Submission) => [s.assignmentId, s]));
-        const relevantAssignments = assignments.filter(a => a.dueDate);
-        relevantAssignments.forEach(a => {
-            const sub = submissionMap.get(a.id);
-            if (sub && a.dueDate && sub.submittedAt && typeof sub.submittedAt.toDate === 'function') {
-                const dueDate = new Date(a.dueDate + 'T23:59:59');
-                const submittedAt = sub.submittedAt.toDate();
-                if (submittedAt <= dueDate) {
-                    onTime++;
-                } else {
-                    late++;
-                }
-            }
-        });
-        const submittedCount = onTime + late;
-        const missingCount = relevantAssignments.length - submittedCount;
+  if (!user || !userProfile) return <div className="flex justify-center items-center h-screen"><Spinner /></div>;
 
-        const onTimeRate = submittedCount > 0 ? Math.round((onTime / submittedCount) * 100) : 'N/A';
-        
-        const timelinessChartData = [
-            { label: 'On Time', value: onTime, color: '#10b981' },
-            { label: 'Late', value: late, color: '#f97316' },
-            { label: 'Missing', value: missingCount, color: '#ef4444' },
-        ];
-        
-        const assignmentMap = new Map(assignments.map(a => [a.id, a]));
-        const gradeHistoryChartData = gradedSubmissions
-            .map((sub: Submission) => ({ sub, assign: assignmentMap.get(sub.assignmentId) }))
-            .filter((item): item is { sub: Submission; assign: Assignment } => !!item.assign)
-            .sort((a, b) => a.assign.createdAt.toMillis() - b.assign.createdAt.toMillis())
-            .map(item => ({
-                label: item.assign.title,
-                value: gradeToNumeric(item.sub.grade)!,
-            }));
+  const navItems = [
+      { key: 'overview', label: 'Overview', icon: '🏠' },
+      { key: 'timetable', label: 'Timetable', icon: '📅' },
+      { key: 'progress', label: 'Progress Report', icon: '📈' },
+      { key: 'attendance', label: 'Attendance Log', icon: '📋' },
+      { key: 'notifications', label: 'Notifications', icon: '🔔' },
+      { key: 'messages', label: <span className="flex justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: '💬' },
+  ];
 
-        return {
-            averageGrade,
-            onTimeRate,
-            pendingCount: assignments.filter(a => !submissions[a.id]).length,
-            timelinessChartData,
-            gradeHistoryChartData,
-        };
-    }, [selectedChildProfile, assignments, submissions]);
+  const renderContent = () => {
+      if (loading) return <div className="flex justify-center items-center h-full"><Spinner /></div>;
+      
+      if (childrenProfiles.length === 0) {
+          return <div className="p-8 text-center text-gray-400">No student profiles linked to your account. Please contact the administrator.</div>;
+      }
 
-    const renderDashboard = () => (
-        <div className="space-y-8">
-             {/* Overview Banner */}
-             <div className="relative p-8 rounded-3xl bg-gradient-to-r from-blue-900 to-slate-900 border border-slate-800 overflow-hidden shadow-2xl">
-                <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5"></div>
-                <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div>
-                        <h2 className="text-3xl font-bold text-white mb-1">{selectedChildProfile?.name}</h2>
-                        <p className="text-blue-300 font-medium">{selectedChildProfile?.class}</p>
-                    </div>
-                    <div className="bg-white/10 backdrop-blur-md border border-white/10 px-4 py-2 rounded-xl">
-                        <span className="text-xs text-slate-400 uppercase tracking-wider font-bold block">Academic Standing</span>
-                        <span className="text-lg font-bold text-green-400">Good Progress</span>
-                    </div>
-                </div>
-             </div>
+      switch (activeTab) {
+          case 'overview':
+              return (
+                  <div className="space-y-8 animate-fade-in-up pb-10">
+                      {/* Header with Child Selector */}
+                      <div className="flex flex-col md:flex-row justify-between items-end gap-6">
+                          <div>
+                              <div className="flex items-center gap-2 text-slate-400 text-sm font-medium mb-1">
+                                  <span>{getGreeting()}</span>
+                                  <span>•</span>
+                                  <span>Term {firebase.firestore.Timestamp.now().toDate().getFullYear()}</span>
+                              </div>
+                              <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">
+                                  Parent Dashboard
+                              </h1>
+                              <p className="text-slate-400 mt-2 text-lg italic max-w-2xl">"{quote}"</p>
+                          </div>
+                          
+                          {childrenProfiles.length > 1 && (
+                              <div className="bg-slate-800 p-1 rounded-lg flex items-center gap-2">
+                                  {childrenProfiles.map(child => (
+                                      <button
+                                          key={child.uid}
+                                          onClick={() => setSelectedChildId(child.uid)}
+                                          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${selectedChildId === child.uid ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                                      >
+                                          {child.name.split(' ')[0]}
+                                      </button>
+                                  ))}
+                              </div>
+                          )}
+                      </div>
 
-             {/* Stats Grid */}
-             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 hover:border-blue-500/30 transition-all">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Average Grade</p>
-                    <p className="text-4xl font-bold text-blue-400">{dashboardStats.averageGrade}{dashboardStats.averageGrade !== 'N/A' && '%'}</p>
-                </div>
-                <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 hover:border-green-500/30 transition-all">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">On-Time Submission</p>
-                    <p className="text-4xl font-bold text-green-400">{dashboardStats.onTimeRate}{dashboardStats.onTimeRate !== 'N/A' && '%'}</p>
-                </div>
-                <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 hover:border-yellow-500/30 transition-all">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Pending Tasks</p>
-                    <p className="text-4xl font-bold text-yellow-400">{dashboardStats.pendingCount}</p>
-                </div>
-            </div>
+                      {/* Stats Grid */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          <Card className="flex flex-col items-center justify-center py-8">
+                              <div className="w-16 h-16 rounded-full bg-blue-500/10 flex items-center justify-center text-2xl mb-3">
+                                  📊
+                              </div>
+                              <p className="text-4xl font-bold text-white">{dashboardData.averageGrade ? `${dashboardData.averageGrade.toFixed(0)}%` : '-'}</p>
+                              <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mt-1">Average Grade</p>
+                          </Card>
+                          
+                          <Card className="flex flex-col items-center justify-center py-8">
+                              <div className="w-16 h-16 rounded-full bg-yellow-500/10 flex items-center justify-center text-2xl mb-3">
+                                  📝
+                              </div>
+                              <p className="text-4xl font-bold text-yellow-400">{dashboardData.pendingCount}</p>
+                              <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mt-1">Assignments Due</p>
+                          </Card>
 
-            {publishedFlyers.length > 0 && (
-                <div className="bg-slate-900/30 border border-slate-800 rounded-2xl p-6">
-                    <h3 className="text-lg font-bold mb-4 text-white flex items-center gap-2">
-                        <span className="text-blue-500">📢</span> School Notices
-                    </h3>
-                    <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
-                        {publishedFlyers.map(flyer => (
-                            <button 
-                                key={flyer.id} 
-                                onClick={() => setSelectedFlyer(flyer)}
-                                className="flex-shrink-0 w-80 group relative rounded-xl overflow-hidden border border-slate-700 hover:border-blue-500 transition-all shadow-lg bg-slate-800 flex flex-col h-60 text-left"
-                            >
-                                <div className="p-6 flex-grow overflow-hidden relative">
-                                    <h4 className="font-bold text-lg text-white mb-2 line-clamp-2 group-hover:text-blue-400 transition-colors">{flyer.title}</h4>
-                                    <p className="text-slate-400 text-sm line-clamp-5 leading-relaxed">{flyer.content}</p>
-                                    <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-slate-800 to-transparent"></div>
-                                </div>
-                                <div className="px-6 py-3 bg-slate-900/50 border-t border-slate-700 flex justify-between items-center text-xs text-slate-500 font-mono">
-                                    <span>{flyer.createdAt?.toDate().toLocaleDateString()}</span>
-                                    <span className="text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">Read More &rarr;</span>
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-        </div>
-    );
+                          <Card className="flex flex-col items-center justify-center py-8">
+                              <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center text-2xl mb-3">
+                                  📅
+                              </div>
+                              <p className="text-4xl font-bold text-green-400">{dashboardData.attendancePercentage.toFixed(0)}%</p>
+                              <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mt-1">Attendance</p>
+                          </Card>
+                      </div>
 
-    const navItems = [
-        { key: 'overview', label: 'Overview', icon: <span className="text-xl">🏠</span> },
-        { key: 'progress', label: 'Progress', icon: <span className="text-xl">📈</span> },
-        { key: 'timetable', label: 'Timetable', icon: <span className="text-xl">🗓️</span> },
-        { key: 'attendance', label: 'Attendance', icon: <span className="text-xl">📅</span> },
-        { key: 'messages', label: <span className="flex justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full px-1.5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: <span className="text-xl">💬</span> },
-        { key: 'notifications', label: 'Notifications', icon: <span className="text-xl">🔔</span> },
-        { key: 'report_cards', label: 'Report Cards', icon: <span className="text-xl">🎓</span> },
-    ];
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                          {/* Recent Activity Feed */}
+                          <div className="lg:col-span-2">
+                              <Card className="h-full">
+                                  <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                                      <span className="text-blue-400">⚡</span> Recent Activity for {selectedChildProfile?.name.split(' ')[0]}
+                                  </h3>
+                                  <div className="space-y-4">
+                                      {(Object.values(submissions) as Submission[])
+                                          .sort((a, b) => b.submittedAt.toMillis() - a.submittedAt.toMillis())
+                                          .slice(0, 5)
+                                          .map(sub => {
+                                              const assignment = assignments.find(a => a.id === sub.assignmentId);
+                                              return (
+                                                  <div key={sub.id} className="flex items-start gap-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700 hover:border-slate-600 transition-colors">
+                                                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${sub.status === 'Graded' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                                                          {sub.status === 'Graded' ? '✓' : '⇪'}
+                                                      </div>
+                                                      <div className="flex-grow">
+                                                          <p className="font-bold text-white">{assignment?.title || 'Assignment'}</p>
+                                                          <p className="text-xs text-slate-400 mt-1">{new Date(sub.submittedAt.toDate()).toLocaleDateString()} • {assignment?.subject}</p>
+                                                          {sub.grade && (
+                                                              <div className="mt-2 text-sm">
+                                                                  <span className="text-slate-300">Grade: </span>
+                                                                  <span className="font-bold text-green-400">{sub.grade}</span>
+                                                              </div>
+                                                          )}
+                                                      </div>
+                                                  </div>
+                                              );
+                                          })}
+                                      {Object.keys(submissions).length === 0 && <p className="text-slate-500 text-center py-8">No recent activity recorded.</p>}
+                                  </div>
+                              </Card>
+                          </div>
 
-    if (loading) return <div className="flex justify-center items-center h-screen"><Spinner /></div>;
+                          {/* Notices / School Board */}
+                          <div className="lg:col-span-1">
+                              <Card className="h-full bg-gradient-to-b from-slate-800 to-slate-900 border-none">
+                                  <h3 className="text-xl font-bold mb-6 text-white flex items-center gap-2">
+                                      <span className="text-purple-400">📢</span> School Board
+                                  </h3>
+                                  <div className="space-y-4 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
+                                      {publishedFlyers.map(flyer => (
+                                          <div key={flyer.id} onClick={() => setSelectedFlyer(flyer)} className="p-4 bg-slate-700/30 rounded-xl border border-slate-600 hover:bg-slate-700 transition-colors cursor-pointer group">
+                                              <p className="text-xs text-slate-400 mb-1">{flyer.createdAt?.toDate().toLocaleDateString()}</p>
+                                              <h4 className="font-bold text-white group-hover:text-purple-300 transition-colors">{flyer.title}</h4>
+                                              <p className="text-xs text-slate-400 mt-2 line-clamp-2">{flyer.content}</p>
+                                          </div>
+                                      ))}
+                                      {publishedFlyers.length === 0 && <p className="text-slate-500 text-center">No notices posted.</p>}
+                                  </div>
+                              </Card>
+                          </div>
+                      </div>
+                  </div>
+              );
+          case 'notifications':
+              return (
+                  <div className="space-y-4">
+                      <h2 className="text-3xl font-bold mb-6">Notifications</h2>
+                      {notifications.map(notif => (
+                          <Card key={notif.id} className="border-l-4 border-blue-500">
+                              <p className="text-gray-300">{notif.message}</p>
+                              <p className="text-xs text-gray-500 mt-2">{notif.createdAt?.toDate().toLocaleString()}</p>
+                          </Card>
+                      ))}
+                      {notifications.length === 0 && <p className="text-gray-500 text-center py-10">No notifications yet.</p>}
+                  </div>
+              );
+          case 'timetable':
+              return (
+                  <div className="space-y-6">
+                      <h2 className="text-3xl font-bold">Class Timetable - {selectedChildProfile?.class}</h2>
+                      {loadingTimetable ? <div className="flex justify-center p-10"><Spinner /></div> : 
+                          timetable ? <NotebookTimetable classId={selectedChildProfile?.class || ''} timetableData={timetable.timetableData} /> : <p className="text-center text-gray-500 py-10">No timetable available for this class.</p>
+                      }
+                  </div>
+              );
+          case 'progress':
+              return selectedChildProfile ? <StudentProfile userProfile={selectedChildProfile} assignments={assignments} submissions={Object.values(submissions)} /> : null;
+          case 'attendance':
+              return (
+                  <div className="space-y-6">
+                      <h2 className="text-3xl font-bold">Attendance History</h2>
+                      <Card>
+                          <div className="space-y-2">
+                              {attendanceRecords.map(rec => (
+                                  <div key={rec.id} className="flex justify-between p-4 bg-slate-800/50 rounded-lg border-l-4 border-slate-700 hover:bg-slate-800 transition-colors">
+                                      <span className="font-mono text-slate-300">{new Date(rec.date).toLocaleDateString(undefined, {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}</span>
+                                      <span className={`font-bold px-3 py-1 rounded text-xs uppercase tracking-wider ${rec.records[selectedChildId!] === 'Present' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>{rec.records[selectedChildId!]}</span>
+                                  </div>
+                              ))}
+                              {attendanceRecords.length === 0 && <p className="text-gray-500 italic text-center py-8">No attendance records found.</p>}
+                          </div>
+                      </Card>
+                  </div>
+              );
+          case 'messages':
+              return <MessagingView userProfile={userProfile} contacts={relevantTeachers} />;
+          default:
+              return <div>Select a tab</div>;
+      }
+  };
 
-    if (userProfile.status === 'pending') {
-        return (
-            <div className="min-h-screen flex items-center justify-center p-4 bg-slate-900 text-white">
-                <Card className="max-w-md text-center">
-                    <h2 className="text-2xl font-bold mb-2">Account Pending Approval</h2>
-                    <p className="text-gray-400 mb-4">Your parent account is currently under review by the school administration. Please check back later.</p>
-                    <Button onClick={() => window.location.reload()}>Check Status</Button>
-                </Card>
-            </div>
-        );
-    }
-
-    return (
-        <div className="flex flex-1 overflow-hidden bg-slate-950 text-slate-200 font-sans selection:bg-blue-500/30">
-            <Sidebar 
-                isExpanded={isSidebarExpanded}
-                navItems={navItems}
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-                onClose={() => setIsSidebarExpanded(false)}
-                title="Parent Portal"
-            />
-            
-            <main className="flex-1 p-4 sm:p-6 overflow-y-auto relative custom-scrollbar">
-                {/* Child Selector */}
-                {childrenProfiles.length > 1 && (
-                    <div className="mb-6 flex justify-end">
-                        <select 
-                            value={selectedChildId || ''} 
-                            onChange={(e) => setSelectedChildId(e.target.value)}
-                            className="bg-slate-800 border border-slate-700 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5"
-                        >
-                            {childrenProfiles.map(child => (
-                                <option key={child.uid} value={child.uid}>{child.name} ({child.class})</option>
-                            ))}
-                        </select>
-                    </div>
-                )}
-
-                {activeTab === 'overview' && renderDashboard()}
-                
-                {activeTab === 'progress' && selectedChildProfile && (
-                    <ProgressDashboard student={selectedChildProfile} isModal={false} />
-                )}
-
-                {activeTab === 'timetable' && (
-                    loadingTimetable ? <div className="flex justify-center p-8"><Spinner /></div> :
-                    timetable ? <NotebookTimetable classId={selectedChildProfile?.class || ''} timetableData={timetable.timetableData} /> :
-                    <div className="text-center p-8 text-gray-500 bg-slate-900/50 rounded-xl border border-slate-800">No timetable available for this class.</div>
-                )}
-
-                {activeTab === 'attendance' && (
-                    <Card>
-                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><span className="text-blue-400">📅</span> Attendance Log</h3>
-                        <div className="space-y-2">
-                            {attendanceRecords.length > 0 ? attendanceRecords.map(rec => (
-                                <div key={rec.id} className="flex justify-between p-4 bg-slate-800/50 rounded-lg border-l-4 border-slate-700 hover:bg-slate-800 transition-colors">
-                                    <span className="font-mono text-slate-300">{new Date(rec.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                                    <span className={`font-bold px-3 py-1 rounded text-xs uppercase tracking-wider ${rec.records[selectedChildId || ''] === 'Present' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>{rec.records[selectedChildId || '']}</span>
-                                </div>
-                            )) : <p className="text-gray-500 italic text-center py-4">No attendance records found.</p>}
-                        </div>
-                    </Card>
-                )}
-
-                {activeTab === 'messages' && (
-                    <MessagingView userProfile={userProfile} contacts={relevantTeachers} />
-                )}
-
-                {activeTab === 'notifications' && (
-                    <div className="space-y-4">
-                        <h2 className="text-2xl font-bold mb-4">Notifications</h2>
-                        {notifications.length > 0 ? notifications.map(n => (
-                            <div key={n.id} className={`p-4 rounded-xl border ${n.readBy.includes(user.uid) ? 'bg-slate-900 border-slate-800' : 'bg-blue-900/20 border-blue-500/30'}`}>
-                                <p className="text-slate-200">{n.message}</p>
-                                <p className="text-xs text-slate-500 mt-2 text-right">{n.createdAt?.toDate().toLocaleString()}</p>
-                            </div>
-                        )) : <p className="text-center text-gray-500">No notifications.</p>}
-                    </div>
-                )}
-
-                {activeTab === 'report_cards' && (
-                    <div className="space-y-4">
-                        <h2 className="text-2xl font-bold mb-4">Report Cards</h2>
-                        <Card>
-                            <p className="text-gray-400 text-center py-8">End of term reports will appear here when published by the school.</p>
-                        </Card>
-                    </div>
-                )}
-            </main>
-
-            <AIAssistant systemInstruction={aiSystemInstruction} suggestedPrompts={aiSuggestedPrompts} />
-            
-            {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
-
-            {selectedFlyer && (
-                <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex justify-center items-center p-4 z-50" onClick={() => setSelectedFlyer(null)}>
-                    <div className="max-w-2xl w-full max-h-[90vh] overflow-auto relative bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-between items-center p-6 border-b border-slate-700 bg-slate-800/50">
-                                <h2 className="text-2xl font-bold text-white">{selectedFlyer.title}</h2>
-                                <button onClick={() => setSelectedFlyer(null)} className="bg-slate-700/50 text-slate-300 p-2 rounded-full hover:bg-slate-600 hover:text-white transition-colors">&times;</button>
-                        </div>
-                        
-                        <div className="p-8 overflow-y-auto bg-slate-900 custom-scrollbar">
-                            <p className="text-lg text-slate-200 whitespace-pre-wrap leading-loose">{selectedFlyer.content}</p>
-                        </div>
-                        
-                        <div className="p-4 bg-slate-800 border-t border-slate-700 text-xs text-slate-500 font-mono text-right">
-                            POSTED BY: {selectedFlyer.publisherName.toUpperCase()} // {selectedFlyer.createdAt?.toDate().toLocaleDateString()}
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
+  return (
+    <div className="flex flex-1 overflow-hidden bg-slate-950 text-slate-200 font-sans selection:bg-blue-500/30">
+      <Sidebar 
+        isExpanded={isSidebarExpanded}
+        navItems={navItems}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onClose={() => setIsSidebarExpanded(false)}
+        title="Parent Portal"
+      />
+      <main className="flex-1 p-4 sm:p-6 overflow-y-auto relative custom-scrollbar">
+        {renderContent()}
+      </main>
+      <AIAssistant systemInstruction={aiSystemInstruction} suggestedPrompts={aiSuggestedPrompts} />
+      
+      {selectedFlyer && (
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex justify-center items-center p-4 z-50" onClick={() => setSelectedFlyer(null)}>
+              <div className="max-w-2xl w-full max-h-[90vh] overflow-auto relative bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="flex justify-between items-center p-6 border-b border-slate-700 bg-slate-800/50">
+                        <h2 className="text-2xl font-bold text-white">{selectedFlyer.title}</h2>
+                        <button onClick={() => setSelectedFlyer(null)} className="bg-slate-700/50 text-slate-300 p-2 rounded-full hover:bg-slate-600 hover:text-white transition-colors">&times;</button>
+                  </div>
+                  <div className="p-8 overflow-y-auto bg-slate-900 custom-scrollbar">
+                      <p className="text-lg text-slate-200 whitespace-pre-wrap leading-loose">{selectedFlyer.content}</p>
+                  </div>
+                  <div className="p-4 bg-slate-800 border-t border-slate-700 text-xs text-slate-500 font-mono text-right">
+                      POSTED BY: {selectedFlyer.publisherName.toUpperCase()} // {selectedFlyer.createdAt?.toDate().toLocaleDateString()}
+                  </div>
+              </div>
+          </div>
+      )}
+      
+      {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
+    </div>
+  );
 };

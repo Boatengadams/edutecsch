@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { db, firebase } from '../services/firebase';
-import { Timetable, TimetableData, TimetablePeriod, GES_STANDARD_CURRICULUM, GES_CLASSES } from '../types';
+import { Timetable, TimetablePeriod, GES_STANDARD_CURRICULUM, GES_CLASSES } from '../types';
 import Button from './common/Button';
 import Card from './common/Card';
 import Spinner from './common/Spinner';
@@ -16,6 +16,22 @@ interface TimetableManagerProps {
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
+// Helper to add minutes to time string "HH:MM"
+const addMinutes = (time: string, mins: number): string => {
+    const [h, m] = time.split(':').map(Number);
+    const date = new Date();
+    date.setHours(h, m, 0, 0);
+    date.setMinutes(date.getMinutes() + mins);
+    return date.toTimeString().slice(0, 5);
+};
+
+// Helper to compare times "HH:MM"
+const isTimeBefore = (time1: string, time2: string): boolean => {
+    const [h1, m1] = time1.split(':').map(Number);
+    const [h2, m2] = time2.split(':').map(Number);
+    return h1 < h2 || (h1 === h2 && m1 < m2);
+};
+
 const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly = false }) => {
     const { showToast } = useToast();
     const [timetable, setTimetable] = useState<Timetable | null>(null);
@@ -26,6 +42,7 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
     
     // Generator Settings
     const [startTime, setStartTime] = useState("08:00");
+    const [closingTime, setClosingTime] = useState("15:00");
     const [periodDuration, setPeriodDuration] = useState(45); // minutes
     const [breakTime, setBreakTime] = useState("10:15");
     const [breakDuration, setBreakDuration] = useState(30);
@@ -64,6 +81,68 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
         fetchTimetable();
     }, [classId]);
 
+    const generateDaySkeleton = useCallback(() => {
+        const slots: { startTime: string; endTime: string; type: 'Lesson' | 'Break' | 'Worship'; fixedName?: string }[] = [];
+        let current = startTime;
+
+        // 1. Morning Worship/Assembly (Fixed 15 mins start)
+        const worshipEnd = addMinutes(current, 15);
+        slots.push({ startTime: current, endTime: worshipEnd, type: 'Worship', fixedName: 'Worship / Assembly' });
+        current = worshipEnd;
+
+        // Loop until closing
+        let limit = 0;
+        while (isTimeBefore(current, closingTime) && limit < 20) {
+            limit++;
+            
+            // Explicit Break Insertion if current time matches scheduled break start
+            if (current === breakTime) {
+                const end = addMinutes(current, breakDuration);
+                slots.push({ startTime: current, endTime: end, type: 'Break', fixedName: 'Snack Break' });
+                current = end;
+                continue;
+            }
+            if (current === lunchTime) {
+                const end = addMinutes(current, lunchDuration);
+                slots.push({ startTime: current, endTime: end, type: 'Break', fixedName: 'Lunch Break' });
+                current = end;
+                continue;
+            }
+
+            // Determine slot end
+            let potentialEnd = addMinutes(current, periodDuration);
+            
+            // Adjust for Closing Time
+            if (isTimeBefore(closingTime, potentialEnd)) {
+                potentialEnd = closingTime;
+            }
+
+            // Adjust for Break Time (Snack)
+            // If the period spans across the break start time, clamp it to the break start
+            if (isTimeBefore(current, breakTime) && isTimeBefore(breakTime, potentialEnd)) {
+                potentialEnd = breakTime;
+            }
+            
+            // Adjust for Lunch Time
+            if (isTimeBefore(current, lunchTime) && isTimeBefore(lunchTime, potentialEnd)) {
+                potentialEnd = lunchTime;
+            }
+
+            // Add Lesson Slot
+            if (current !== potentialEnd) {
+                 slots.push({ startTime: current, endTime: potentialEnd, type: 'Lesson' });
+                 current = potentialEnd;
+            } else {
+                // If we are stuck (e.g., current == breakTime but didn't match 'if' above due to string mismatch?), force advance to next break end?
+                // This shouldn't happen with sanitized inputs, but let's be safe.
+                // If current matches a break start but wasn't caught (e.g. 10:15 vs 10:15), it should be caught.
+                // If current is < breakTime but clamped to breakTime, next iter current == breakTime.
+                break; // Break loop if no progress to prevent infinite loop
+            }
+        }
+        return slots;
+    }, [startTime, closingTime, periodDuration, breakTime, breakDuration, lunchTime, lunchDuration]);
+
     const handleGenerateAI = async () => {
         if (targetClasses.length === 0) {
             showToast("Please select at least one class.", "error");
@@ -74,6 +153,10 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             
+            // Generate the mathematically correct time grid first
+            const dayStructure = generateDaySkeleton();
+            const structureDescription = JSON.stringify(dayStructure, null, 2);
+
             let successCount = 0;
 
             // Iterate through selected classes
@@ -81,30 +164,31 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
                 const subjects = GES_STANDARD_CURRICULUM[targetClassId] || GES_STANDARD_CURRICULUM['Basic 1']; // Fallback
                 
                 const prompt = `
-                    Generate a school timetable for a class in Ghana (Level: ${targetClassId}).
-                    
+                    You are a professional school timetable scheduler. Your goal is to create a balanced, pedagogically sound weekly timetable for a class in Ghana (Level: ${targetClassId}).
+
                     **Constraints:**
-                    - Days: Monday to Friday.
-                    - Start Time: ${startTime}.
-                    - Period Duration: ${periodDuration} minutes.
-                    - First Break: At ${breakTime} for ${breakDuration} minutes. Label subject as "Snack Break".
-                    - Second Break: At ${lunchTime} for ${lunchDuration} minutes. Label subject as "Lunch Break".
-                    - Closing Time: Approximately 3:00 PM.
-                    - Subjects to distribute: ${subjects.join(', ')}.
-                    - Core subjects (Math, English, Science) should appear more frequently.
-                    - Include a daily "Worship" or "Assembly" period at the very start.
-                    
-                    **Additional User Instructions:**
+                    1. **Time Grid:** Use the EXACT time slots provided below. Do not alter start/end times or insert new slots.
+                    2. **Subjects:** Distribute subjects from this list: [${subjects.join(', ')}].
+                    3. **Pedagogy:**
+                       - **Core Subjects** (Math, English, Science) must be in the morning (before first break) or immediately after.
+                       - **Activity Subjects** (Creative Arts, PE, Career Tech) are best in the afternoon.
+                       - **Balance:** Avoid scheduling the same subject back-to-back unless it's a practical session.
+                       - **Variety:** Ensure subjects are spread across the week.
+                       - **Mandatory:** "Religious & Moral Education" and "Our World Our People" must appear at least once.
+                       - **Friday:** Often used for Worship/Assembly or sports in afternoon.
+
+                    **Pre-calculated Daily Grid (Apply to Mon-Fri):**
+                    ${structureDescription}
+
+                    **Specific User Instructions:**
                     ${customInstructions}
+
+                    **Output:**
+                    Return ONLY a valid JSON object.
+                    Keys: "Monday", "Tuesday", "Wednesday", "Thursday", "Friday".
+                    Value: Array of objects with "subject", "startTime", "endTime", "teacher" (leave teacher as empty string).
                     
-                    **Output Format:**
-                    Return ONLY a valid JSON object matching this structure:
-                    {
-                        "Monday": [ { "subject": "Math", "startTime": "08:00", "endTime": "08:45" }, ... ],
-                        "Tuesday": ...
-                    }
-                    
-                    Ensure time slots are continuous.
+                    Ensure the "type": "Break" or "Worship" slots from the grid are preserved exactly with their names.
                 `;
 
                 const response = await ai.models.generateContent({
@@ -198,30 +282,38 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
             {!readOnly && (
                 <Card className="border-blue-500/30 bg-blue-900/10">
                     <div className="space-y-4">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                            <div className="flex flex-wrap gap-4 items-center">
+                        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4 items-end w-full xl:w-auto">
                                 <div>
-                                    <label className="block text-xs text-gray-400 mb-1">Start Time</label>
-                                    <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="bg-slate-800 border border-slate-600 rounded p-1 text-sm" />
+                                    <label className="block text-xs text-gray-400 mb-1 font-bold">Start Time</label>
+                                    <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm text-white focus:border-blue-500 outline-none" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs text-gray-400 mb-1">Period (mins)</label>
-                                    <input type="number" value={periodDuration} onChange={e => setPeriodDuration(Number(e.target.value))} className="bg-slate-800 border border-slate-600 rounded p-1 text-sm w-16" />
+                                    <label className="block text-xs text-gray-400 mb-1 font-bold">Period (min)</label>
+                                    <input type="number" value={periodDuration} onChange={e => setPeriodDuration(Number(e.target.value))} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm text-white focus:border-blue-500 outline-none" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs text-gray-400 mb-1">Snack Break</label>
-                                    <input type="time" value={breakTime} onChange={e => setBreakTime(e.target.value)} className="bg-slate-800 border border-slate-600 rounded p-1 text-sm" />
+                                    <label className="block text-xs text-gray-400 mb-1 font-bold">Snack Break</label>
+                                    <input type="time" value={breakTime} onChange={e => setBreakTime(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm text-white focus:border-blue-500 outline-none" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1 font-bold">Lunch Break</label>
+                                    <input type="time" value={lunchTime} onChange={e => setLunchTime(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm text-white focus:border-blue-500 outline-none" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1 font-bold">Close Time</label>
+                                    <input type="time" value={closingTime} onChange={e => setClosingTime(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm text-white focus:border-blue-500 outline-none" />
                                 </div>
                             </div>
                             
-                            <div className="flex gap-2">
+                            <div className="flex flex-wrap gap-2 w-full xl:w-auto justify-end">
                                 <button 
                                     onClick={() => setShowGenOptions(!showGenOptions)}
-                                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${showGenOptions ? 'bg-slate-700 text-white' : 'text-blue-400 hover:bg-slate-800'}`}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${showGenOptions ? 'bg-slate-700 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'}`}
                                 >
-                                    {showGenOptions ? 'Hide Options' : 'Advanced Options'}
+                                    {showGenOptions ? 'Hide Options' : 'Options'}
                                 </button>
-                                <Button onClick={handleGenerateAI} disabled={isGenerating} className="shadow-lg shadow-blue-500/20">
+                                <Button onClick={handleGenerateAI} disabled={isGenerating} className="shadow-lg shadow-blue-500/20 bg-gradient-to-r from-blue-600 to-indigo-600">
                                     {isGenerating ? <span className="flex items-center gap-2"><Spinner /> Generating ({targetClasses.length})...</span> : '✨ Generate with AI'}
                                 </Button>
                                 {timetable && !editMode && !showGenOptions && (
@@ -262,8 +354,8 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
                                     <textarea 
                                         value={customInstructions} 
                                         onChange={e => setCustomInstructions(e.target.value)}
-                                        placeholder="E.g., 'Ensure Physical Education is on Friday morning' or 'Make Maths immediately after breaks'."
-                                        className="w-full h-40 p-3 bg-slate-800 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                                        placeholder="E.g., 'Ensure Physical Education is on Friday morning' or 'Make Maths immediately after breaks'. 'Worship' and 'Breaks' are added automatically based on the times above."
+                                        className="w-full h-40 p-3 bg-slate-800 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none placeholder-slate-500 text-slate-200"
                                     />
                                 </div>
                             </div>
@@ -274,45 +366,55 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
 
             {timetable ? (
                 editMode ? (
-                    <Card>
-                        <h3 className="text-lg font-bold mb-4 text-yellow-400">Editing Mode</h3>
-                        <div className="overflow-x-auto">
-                            <div className="flex gap-4 min-w-max pb-4">
+                    <Card className="overflow-hidden">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold text-yellow-400">Editing Mode</h3>
+                            <Button size="sm" variant="ghost" onClick={() => setEditMode(false)} className="text-slate-400">Cancel</Button>
+                        </div>
+                        <div className="overflow-x-auto pb-4 custom-scrollbar">
+                            <div className="flex gap-4 min-w-max">
                                 {DAYS.map(day => (
-                                    <div key={day} className="w-64 space-y-2">
-                                        <h4 className="font-bold text-center bg-slate-700 py-1 rounded">{day}</h4>
-                                        {timetable.timetableData[day]?.map((period, idx) => (
-                                            <div key={idx} className="bg-slate-800 p-2 rounded border border-slate-600 text-sm space-y-1">
-                                                <div className="flex gap-1">
+                                    <div key={day} className="w-72 space-y-3 bg-slate-800/30 p-3 rounded-xl border border-slate-700/50">
+                                        <h4 className="font-bold text-center bg-slate-700 py-2 rounded-lg text-blue-300 uppercase tracking-wider text-sm">{day}</h4>
+                                        <div className="space-y-2">
+                                            {timetable.timetableData[day]?.map((period, idx) => (
+                                                <div key={idx} className="bg-slate-800 p-3 rounded-lg border border-slate-600/50 text-sm space-y-2 shadow-sm focus-within:ring-2 ring-blue-500/50 transition-all">
+                                                    <div className="flex gap-2 items-center">
+                                                        <div className="relative flex-grow">
+                                                            <input 
+                                                                type="time" 
+                                                                value={period.startTime} 
+                                                                onChange={e => updatePeriod(day, idx, 'startTime', e.target.value)}
+                                                                className="bg-slate-900 w-full rounded px-2 py-1 text-xs text-gray-300 border border-slate-700 focus:border-blue-500 outline-none text-center"
+                                                            />
+                                                        </div>
+                                                        <span className="text-gray-500 text-xs font-bold">to</span>
+                                                        <div className="relative flex-grow">
+                                                            <input 
+                                                                type="time" 
+                                                                value={period.endTime} 
+                                                                onChange={e => updatePeriod(day, idx, 'endTime', e.target.value)}
+                                                                className="bg-slate-900 w-full rounded px-2 py-1 text-xs text-gray-300 border border-slate-700 focus:border-blue-500 outline-none text-center"
+                                                            />
+                                                        </div>
+                                                    </div>
                                                     <input 
-                                                        type="time" 
-                                                        value={period.startTime} 
-                                                        onChange={e => updatePeriod(day, idx, 'startTime', e.target.value)}
-                                                        className="bg-slate-900 w-full rounded px-1 text-xs text-gray-400"
+                                                        type="text" 
+                                                        value={period.subject} 
+                                                        onChange={e => updatePeriod(day, idx, 'subject', e.target.value)}
+                                                        className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1.5 font-semibold text-white placeholder-slate-500 focus:border-blue-500 outline-none"
+                                                        placeholder="Subject"
                                                     />
-                                                    <span className="text-gray-500">-</span>
                                                     <input 
-                                                        type="time" 
-                                                        value={period.endTime} 
-                                                        onChange={e => updatePeriod(day, idx, 'endTime', e.target.value)}
-                                                        className="bg-slate-900 w-full rounded px-1 text-xs text-gray-400"
+                                                        type="text" 
+                                                        placeholder="Teacher (Optional)"
+                                                        value={period.teacher || ''} 
+                                                        onChange={e => updatePeriod(day, idx, 'teacher', e.target.value)}
+                                                        className="w-full bg-transparent border-b border-slate-700 rounded-none px-1 py-1 text-xs text-gray-400 focus:border-blue-500 outline-none focus:text-white"
                                                     />
                                                 </div>
-                                                <input 
-                                                    type="text" 
-                                                    value={period.subject} 
-                                                    onChange={e => updatePeriod(day, idx, 'subject', e.target.value)}
-                                                    className="w-full bg-slate-700 border border-slate-500 rounded px-2 py-1 font-semibold text-white"
-                                                />
-                                                <input 
-                                                    type="text" 
-                                                    placeholder="Teacher (Optional)"
-                                                    value={period.teacher || ''} 
-                                                    onChange={e => updatePeriod(day, idx, 'teacher', e.target.value)}
-                                                    className="w-full bg-slate-900 border-none rounded px-2 py-1 text-xs text-gray-300"
-                                                />
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -322,9 +424,12 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
                     <NotebookTimetable classId={classId} timetableData={timetable.timetableData} />
                 )
             ) : (
-                <div className="text-center py-16 border-2 border-dashed border-slate-700 rounded-xl">
-                    <p className="text-gray-500 text-lg">No timetable found for <strong>{classId}</strong>.</p>
-                    {!readOnly && <p className="text-sm text-gray-600 mt-2">Use the controls above to generate one.</p>}
+                <div className="text-center py-20 border-2 border-dashed border-slate-700 rounded-xl bg-slate-800/20">
+                    <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <span className="text-4xl opacity-50">🗓️</span>
+                    </div>
+                    <p className="text-gray-400 text-lg">No timetable found for <strong className="text-white">{classId}</strong>.</p>
+                    {!readOnly && <p className="text-sm text-gray-500 mt-2">Use the controls above to generate one instantly with AI.</p>}
                 </div>
             )}
         </div>

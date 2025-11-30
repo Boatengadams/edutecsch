@@ -7,6 +7,7 @@ import SirEduAvatar from './common/SirEduAvatar';
 import Button from './common/Button';
 import Card from './common/Card';
 import { useLiveLessonAudio } from '../hooks/useLiveLessonAudio';
+import { useToast } from './common/Toast';
 
 interface StudentLiveClassroomProps {
   lessonId: string;
@@ -15,6 +16,7 @@ interface StudentLiveClassroomProps {
 }
 
 const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, userProfile, onClose }) => {
+  const { showToast } = useToast();
   const [lesson, setLesson] = useState<LiveLesson | null>(null);
   const [hasRespondedToAction, setHasRespondedToAction] = useState(false);
   const [confusionMode, setConfusionMode] = useState(false);
@@ -143,6 +145,21 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
       await db.collection('liveLessons').doc(lessonId).collection('responses').add(responseData);
       setHasRespondedToAction(true);
       setConfusionMode(false);
+
+      // Award Points if it was a Quiz Question (Poll linked to slide question)
+      // Check if the slide has a question and if the answer matches
+      if (lesson.currentQuestion && lesson.currentQuestion.correctAnswer) {
+          if (answer === lesson.currentQuestion.correctAnswer) {
+              const currentXP = userProfile.xp || 0;
+              const newXP = currentXP + 20;
+              await db.collection('users').doc(userProfile.uid).update({ xp: newXP });
+              showToast("Correct! +20 XP", 'success');
+          }
+      } else {
+          // Participation Points
+          const currentXP = userProfile.xp || 0;
+          await db.collection('users').doc(userProfile.uid).update({ xp: currentXP + 5 });
+      }
   };
 
   const handleNoClick = () => {

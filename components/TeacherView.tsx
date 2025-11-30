@@ -1784,7 +1784,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
              {showCreateParentModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
                     <Card className="w-full max-w-md">
-                        <TeacherCreateParentForm allStudents={students} setToast={setToast} />
+                        <TeacherCreateParentForm allStudents={students} />
                         <Button variant="secondary" onClick={() => setShowCreateParentModal(false)} className="w-full mt-2">Cancel</Button>
                     </Card>
                 </div>

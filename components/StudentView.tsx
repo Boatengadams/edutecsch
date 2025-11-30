@@ -22,12 +22,30 @@ interface StudentViewProps {
   setIsSidebarExpanded: (isExpanded: boolean) => void;
 }
 
+const QUOTES = [
+    "The expert in anything was once a beginner.",
+    "Education is the passport to the future.",
+    "Strive for progress, not perfection.",
+    "Your attitude determines your direction.",
+    "Dream big and dare to fail.",
+    "Knowledge is power.",
+    "Learn as if you were to live forever."
+];
+
+const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good Morning';
+    if (hour < 18) return 'Good Afternoon';
+    return 'Good Evening';
+};
+
 export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
-  const { user, userProfile } = useAuthentication();
+  const { user, userProfile, schoolSettings } = useAuthentication();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [quote] = useState(QUOTES[Math.floor(Math.random() * QUOTES.length)]);
 
   // Data State
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -272,7 +290,19 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
           };
 
           await db.collection('submissions').add(submissionData);
-          showToast(status === 'Graded' ? `Assignment submitted and graded: ${grade}` : 'Assignment submitted successfully!', 'success');
+          
+          // AWARD POINTS
+          const pointsEarned = 50; // Standard reward for submission
+          const currentXP = userProfile.xp || 0;
+          const newXP = currentXP + pointsEarned;
+          const newLevel = Math.floor(newXP / 100) + 1; // Simple leveling
+          
+          await db.collection('users').doc(user.uid).update({
+              xp: newXP,
+              level: newLevel
+          });
+
+          showToast(status === 'Graded' ? `Assignment graded: ${grade}. +${pointsEarned} XP!` : `Assignment submitted! +${pointsEarned} XP!`, 'success');
           setViewingAssignment(null);
       } catch (err: any) {
           showToast(`Submission failed: ${err.message}`, 'error');
@@ -320,15 +350,15 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
   if (!user || !userProfile) return <div className="flex h-screen justify-center items-center"><Spinner /></div>;
 
   const navItems = [
-      { key: 'dashboard', label: 'Dashboard', icon: <span className="text-xl">📊</span> },
-      { key: 'assignments', label: 'Assignments', icon: <span className="text-xl">📝</span> },
-      { key: 'live_lesson', label: <span className="flex items-center">Live Class {liveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: <span className="text-xl">🔴</span> },
-      { key: 'group_work', label: 'Group Work', icon: <span className="text-xl">👥</span> },
-      { key: 'study_mode', label: 'Study Mode', icon: <span className="text-xl">🧠</span> },
-      { key: 'messages', label: <span className="flex justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full px-1.5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: <span className="text-xl">💬</span> },
-      { key: 'profile', label: 'Profile', icon: <span className="text-xl">👤</span> },
-      { key: 'timetable', label: 'Timetable', icon: <span className="text-xl">🗓️</span> },
-      { key: 'attendance', label: 'Attendance', icon: <span className="text-xl">📅</span> },
+      { key: 'dashboard', label: 'Dashboard', icon: '🚀' },
+      { key: 'assignments', label: 'Assignments', icon: '📚' },
+      { key: 'live_lesson', label: <span className="flex items-center">Live Class {liveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: '📡' },
+      { key: 'group_work', label: 'Group Work', icon: '🤝' },
+      { key: 'study_mode', label: 'Study Mode', icon: '🧠' },
+      { key: 'messages', label: <span className="flex justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: '💬' },
+      { key: 'profile', label: 'Profile', icon: '👤' },
+      { key: 'timetable', label: 'Timetable', icon: '🗓️' },
+      { key: 'attendance', label: 'Attendance', icon: '📅' },
   ];
 
   const renderContent = () => {
@@ -338,102 +368,154 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
           case 'dashboard':
               const pendingCount = assignments.filter(a => !submissions[a.id]).length;
               return (
-                  <div className="space-y-8">
-                      {/* Futuristic Hero Section */}
-                      <div className="relative bg-gradient-to-r from-blue-900/40 to-purple-900/40 rounded-3xl p-8 border border-blue-500/30 overflow-hidden shadow-2xl">
-                          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
-                          <div className="absolute -right-20 -top-20 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl animate-pulse"></div>
-                          
-                          <div className="relative z-10 flex flex-col md:flex-row justify-between items-end md:items-center">
-                              <div>
-                                  <p className="text-blue-300 font-mono text-xs tracking-widest mb-2">SYSTEM ONLINE // {new Date().toLocaleDateString().toUpperCase()}</p>
-                                  <h2 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 tracking-tight drop-shadow-lg">
-                                      WELCOME, {userProfile.name.split(' ')[0].toUpperCase()}
-                                  </h2>
-                                  <p className="text-slate-300 mt-2 max-w-md">Your learning modules are synchronized. Ready to engage?</p>
+                  <div className="space-y-8 animate-fade-in-up pb-10">
+                      {/* Welcome Header */}
+                      <div className="flex flex-col md:flex-row justify-between items-end gap-6">
+                          <div>
+                              <div className="flex items-center gap-2 text-slate-400 text-sm font-medium mb-1">
+                                  <span>{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+                                  <span>•</span>
+                                  <span>{schoolSettings?.currentTerm ? `Term ${schoolSettings.currentTerm}` : 'Academic Year'}</span>
                               </div>
-                              <div className="mt-4 md:mt-0">
-                                  <div className="flex items-center gap-2 bg-slate-900/60 backdrop-blur-md border border-slate-700 px-4 py-2 rounded-full">
-                                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                                      <span className="text-xs font-bold text-green-400 tracking-wider">STATUS: ACTIVE</span>
-                                  </div>
-                              </div>
+                              <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight">
+                                  {getGreeting()}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">{userProfile.name.split(' ')[0]}</span>
+                              </h1>
+                              <p className="text-slate-400 mt-2 text-lg italic max-w-2xl">"{quote}"</p>
+                          </div>
+                          <div className="flex items-center gap-4">
+                               <div className="text-right hidden md:block">
+                                  <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Current Level</p>
+                                  <p className="text-2xl font-black text-white">{userProfile.level || 1}</p>
+                               </div>
+                               <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-xl shadow-lg shadow-purple-500/20">
+                                  {userProfile.level || 1}
+                               </div>
                           </div>
                       </div>
 
-                      {/* HUD Metrics */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                          {/* Pending Missions */}
-                          <div className="relative group bg-slate-800/50 backdrop-blur-md border border-slate-700 rounded-2xl p-6 hover:border-yellow-500/50 transition-all duration-300 hover:shadow-[0_0_20px_rgba(234,179,8,0.15)] overflow-hidden">
-                              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-30 transition-opacity text-yellow-400 text-6xl font-black">!</div>
-                              <div className="relative z-10">
-                                  <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Pending Assignments</p>
-                                  <p className="text-4xl font-black text-white mb-1">{pendingCount}</p>
-                                  <p className="text-xs text-yellow-400 font-mono">{pendingCount > 0 ? 'ACTION REQUIRED' : 'ALL CLEAR'}</p>
-                              </div>
-                              <div className="absolute bottom-0 left-0 h-1 bg-yellow-500 transition-all duration-500 w-0 group-hover:w-full"></div>
+                      {/* Hero / Action Section */}
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                          {/* Main Focus Card */}
+                          <div className="lg:col-span-2 relative overflow-hidden rounded-3xl bg-slate-900 border border-slate-800 p-8 flex flex-col justify-between min-h-[280px] group cursor-pointer hover:border-slate-700 transition-all shadow-2xl">
+                              <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600/10 rounded-full blur-[100px] -mr-20 -mt-20 pointer-events-none"></div>
+                              
+                              {liveLesson ? (
+                                  <>
+                                      <div className="relative z-10">
+                                          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/10 text-red-400 text-xs font-bold uppercase tracking-wider border border-red-500/20 animate-pulse">
+                                              <span className="w-2 h-2 rounded-full bg-red-500"></span> Live Now
+                                          </span>
+                                          <h2 className="text-3xl font-bold text-white mt-4 mb-2">{liveLesson.topic}</h2>
+                                          <p className="text-slate-400">{liveLesson.subject}</p>
+                                      </div>
+                                      <div className="relative z-10 mt-8">
+                                          <Button onClick={() => setActiveTab('live_lesson')} className="px-8 py-4 text-lg font-bold shadow-lg shadow-red-500/20 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500">
+                                              Join Class 📡
+                                          </Button>
+                                      </div>
+                                  </>
+                              ) : (
+                                  <>
+                                      <div className="relative z-10">
+                                          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-xs font-bold uppercase tracking-wider border border-blue-500/20">
+                                              <span className="w-2 h-2 rounded-full bg-blue-500"></span> Study Time
+                                          </span>
+                                          <h2 className="text-3xl font-bold text-white mt-4 mb-2">Ready to learn something new?</h2>
+                                          <p className="text-slate-400 max-w-md">Launch Study Mode to explore topics with your AI tutor.</p>
+                                      </div>
+                                      <div className="relative z-10 mt-8">
+                                          <Button onClick={() => setActiveTab('study_mode')} className="px-8 py-4 text-lg font-bold shadow-lg shadow-blue-500/20">
+                                              Launch Study Mode 🚀
+                                          </Button>
+                                      </div>
+                                  </>
+                              )}
                           </div>
 
-                          {/* Live Signal */}
-                          <div className="relative group bg-slate-800/50 backdrop-blur-md border border-slate-700 rounded-2xl p-6 hover:border-blue-500/50 transition-all duration-300 hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] overflow-hidden cursor-pointer" onClick={() => setActiveTab('live_lesson')}>
-                              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-30 transition-opacity text-blue-400 text-6xl font-black">●</div>
-                              <div className="relative z-10">
-                                  <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Live Class</p>
-                                  {liveLesson ? (
-                                      <>
-                                          <p className="text-2xl font-bold text-white mb-1 truncate">{liveLesson.topic}</p>
-                                          <div className="flex items-center gap-2">
-                                              <span className="w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
-                                              <p className="text-xs text-red-400 font-mono">SESSION ACTIVE</p>
-                                          </div>
-                                      </>
-                                  ) : (
-                                      <>
-                                          <p className="text-2xl font-bold text-slate-500 mb-1">Offline</p>
-                                          <p className="text-xs text-slate-600 font-mono">WAITING FOR SIGNAL...</p>
-                                      </>
-                                  )}
-                              </div>
-                              <div className={`absolute bottom-0 left-0 h-1 ${liveLesson ? 'bg-red-500' : 'bg-blue-500'} transition-all duration-500 w-0 group-hover:w-full`}></div>
-                          </div>
-
-                          {/* XP Level */}
-                          <div className="relative group bg-slate-800/50 backdrop-blur-md border border-slate-700 rounded-2xl p-6 hover:border-purple-500/50 transition-all duration-300 hover:shadow-[0_0_20px_rgba(168,85,247,0.15)] overflow-hidden">
-                              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-30 transition-opacity text-purple-400 text-6xl font-black">XP</div>
-                              <div className="relative z-10">
-                                  <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Experience Level</p>
-                                  <p className="text-4xl font-black text-white mb-1">{userProfile.xp || 0}</p>
-                                  <div className="w-full bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden">
-                                      <div className="bg-purple-500 h-full w-[45%] rounded-full"></div>
-                                  </div>
-                              </div>
-                              <div className="absolute bottom-0 left-0 h-1 bg-purple-500 transition-all duration-500 w-0 group-hover:w-full"></div>
-                          </div>
-                      </div>
-
-                      {/* Digital Feed (Notice Board) - Updated for Text Cards */}
-                      {publishedFlyers.length > 0 && (
+                          {/* Status Column */}
                           <div className="space-y-4">
-                              <div className="flex items-center justify-between">
-                                  <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                                      <span className="text-blue-500">📢</span> SCHOOL NOTICES
-                                  </h3>
+                              {/* Assignments Stat */}
+                              <div onClick={() => setActiveTab('assignments')} className="p-6 rounded-2xl bg-slate-800/50 border border-slate-700/50 hover:bg-slate-800 transition-colors cursor-pointer flex flex-col justify-between h-[130px]">
+                                  <div className="flex justify-between items-start">
+                                      <div className="p-2 bg-yellow-500/10 rounded-lg text-yellow-400 text-xl">📝</div>
+                                      {pendingCount > 0 && <span className="text-xs font-bold bg-yellow-500 text-black px-2 py-1 rounded-md">{pendingCount} Due</span>}
+                                  </div>
+                                  <div>
+                                      <p className="text-2xl font-bold text-white">{pendingCount}</p>
+                                      <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Pending Tasks</p>
+                                  </div>
                               </div>
+
+                              {/* XP/Progress Stat */}
+                              <div className="p-6 rounded-2xl bg-slate-800/50 border border-slate-700/50 hover:bg-slate-800 transition-colors flex flex-col justify-between h-[130px]">
+                                  <div className="flex justify-between items-start">
+                                      <div className="p-2 bg-green-500/10 rounded-lg text-green-400 text-xl">🏆</div>
+                                  </div>
+                                  <div>
+                                      <div className="flex justify-between items-end mb-1">
+                                          <p className="text-2xl font-bold text-white">{userProfile.xp || 0}</p>
+                                          <p className="text-xs text-slate-500 mb-1">/ {(userProfile.level || 1) * 100} XP</p>
+                                      </div>
+                                      <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                                          <div className="bg-green-500 h-full rounded-full" style={{ width: `${Math.min(100, ((userProfile.xp || 0) / ((userProfile.level || 1) * 100)) * 100)}%` }}></div>
+                                      </div>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* Quick Access Grid */}
+                      <div>
+                          <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                              <span className="text-blue-500">⚡</span> Quick Access
+                          </h3>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                              <button onClick={() => setActiveTab('assignments')} className="p-6 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-600 transition-all group text-left">
+                                  <span className="text-3xl mb-3 block group-hover:scale-110 transition-transform duration-300">📚</span>
+                                  <p className="font-bold text-slate-200">Assignments</p>
+                                  <p className="text-xs text-slate-500 mt-1">View & Submit</p>
+                              </button>
+                              <button onClick={() => setActiveTab('group_work')} className="p-6 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-600 transition-all group text-left">
+                                  <span className="text-3xl mb-3 block group-hover:scale-110 transition-transform duration-300">🤝</span>
+                                  <p className="font-bold text-slate-200">Group Work</p>
+                                  <p className="text-xs text-slate-500 mt-1">Collaborate</p>
+                              </button>
+                              <button onClick={() => setActiveTab('timetable')} className="p-6 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-600 transition-all group text-left">
+                                  <span className="text-3xl mb-3 block group-hover:scale-110 transition-transform duration-300">🗓️</span>
+                                  <p className="font-bold text-slate-200">Timetable</p>
+                                  <p className="text-xs text-slate-500 mt-1">Check Schedule</p>
+                              </button>
+                              <button onClick={() => setActiveTab('messages')} className="p-6 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-600 transition-all group text-left relative">
+                                  <span className="text-3xl mb-3 block group-hover:scale-110 transition-transform duration-300">💬</span>
+                                  <p className="font-bold text-slate-200">Messages</p>
+                                  <p className="text-xs text-slate-500 mt-1">Chat with Teachers</p>
+                                  {unreadMessages > 0 && <span className="absolute top-4 right-4 w-3 h-3 bg-red-500 rounded-full border border-slate-900"></span>}
+                              </button>
+                          </div>
+                      </div>
+
+                      {/* Notices Section (Horizontal Scroll) */}
+                      {publishedFlyers.length > 0 && (
+                          <div>
+                              <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                                  <span className="text-purple-500">📢</span> School Board
+                              </h3>
                               <div className="flex gap-4 overflow-x-auto pb-6 custom-scrollbar snap-x">
                                   {publishedFlyers.map(flyer => (
                                       <div 
-                                          key={flyer.id} 
-                                          className="flex-shrink-0 w-80 h-64 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden cursor-pointer hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/20 transition-all duration-300 snap-center flex flex-col group"
+                                          key={flyer.id}
                                           onClick={() => setSelectedFlyer(flyer)}
+                                          className="flex-shrink-0 w-80 snap-center bg-slate-800/50 backdrop-blur-md border border-slate-700 hover:border-purple-500/50 rounded-2xl p-5 cursor-pointer transition-all hover:shadow-xl hover:shadow-purple-500/10 flex flex-col justify-between h-48 group"
                                       >
-                                          <div className="p-6 flex-grow overflow-hidden relative">
-                                              <h4 className="font-bold text-lg text-white mb-3 line-clamp-2 group-hover:text-blue-400 transition-colors">{flyer.title}</h4>
-                                              <p className="text-slate-400 text-sm line-clamp-6 leading-relaxed">{flyer.content}</p>
-                                              <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-slate-800 to-transparent"></div>
-                                          </div>
-                                          <div className="px-6 py-3 bg-slate-900/50 border-t border-slate-700 flex justify-between items-center text-xs text-slate-500 font-mono">
-                                              <span>{flyer.createdAt?.toDate().toLocaleDateString()}</span>
-                                              <span className="text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">Read More &rarr;</span>
+                                          <div>
+                                              <div className="flex justify-between items-start mb-2">
+                                                  <span className="text-[10px] text-slate-500 font-mono bg-slate-900 px-2 py-1 rounded border border-slate-800">
+                                                      {flyer.createdAt?.toDate().toLocaleDateString()}
+                                                  </span>
+                                                  <span className="text-xs opacity-0 group-hover:opacity-100 transition-opacity text-purple-400">↗</span>
+                                              </div>
+                                              <h4 className="font-bold text-white line-clamp-2 mb-2 group-hover:text-purple-300 transition-colors">{flyer.title}</h4>
+                                              <p className="text-sm text-slate-400 line-clamp-3 leading-relaxed">{flyer.content}</p>
                                           </div>
                                       </div>
                                   ))}
@@ -508,7 +590,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                           })}
                           {assignments.length === 0 && (
                               <div className="col-span-full flex flex-col items-center justify-center py-20 text-slate-600">
-                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-16 h-16 mb-4 opacity-20"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                                  <span className="text-4xl mb-4 grayscale">🎉</span>
                                   <p className="text-lg font-medium">All assignments completed.</p>
                                   <p className="text-sm">Stand by for further instructions.</p>
                               </div>
@@ -567,7 +649,11 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                   </div>
               );
           case 'study_mode':
-              return <StudentStudyMode userProfile={userProfile} onExit={() => setActiveTab('dashboard')} assignments={assignments} submissions={submissions} learningMaterials={[]} />;
+              return <StudentStudyMode 
+                  userProfile={userProfile} 
+                  onExit={() => setActiveTab('dashboard')} 
+                  timetable={timetable} 
+              />;
           case 'messages':
               return <MessagingView userProfile={userProfile} contacts={teachers} />;
           case 'profile':
@@ -639,7 +725,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                                           <div key={i} className="p-6 bg-slate-900 rounded-xl border border-slate-700">
                                               <p className="font-medium mb-4 text-white text-lg"><span className="text-slate-500 mr-2">{i + 1}.</span> {q.question}</p>
                                               <div className="space-y-3">
-                                                  {q.options.map(opt => (
+                                                  {q.options?.map(opt => (
                                                       <label key={opt} className="flex items-center space-x-3 cursor-pointer group">
                                                           <div className="relative flex items-center">
                                                               <input type="radio" name={`q-${i}`} value={opt} checked={objectiveAnswers[i] === opt} onChange={() => setObjectiveAnswers(prev => ({ ...prev, [i]: opt }))} className="peer sr-only" />

@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { UserProfile, Assignment, Submission } from '../types';
 import Card from './common/Card';
 import LineChart from './common/charts/LineChart';
@@ -30,9 +30,17 @@ const gradeToNumeric = (grade?: string): number | null => {
 
 const StudentProfile: React.FC<{ userProfile: UserProfile; assignments: Assignment[]; submissions: Submission[] }> = ({ userProfile, assignments, submissions }) => {
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [animateProgress, setAnimateProgress] = useState(false);
+  
   const xpForNextLevel = (userProfile.level || 1) * 100;
   const currentXP = userProfile.xp || 0;
   const xpProgress = (currentXP / xpForNextLevel) * 100;
+
+  useEffect(() => {
+      // Trigger animation after mount
+      const timer = setTimeout(() => setAnimateProgress(true), 100);
+      return () => clearTimeout(timer);
+  }, []);
 
   const dashboardData = useMemo(() => {
     if (!userProfile) return { overallAverageGrade: null, completionRate: 0, onTimeRate: 'N/A', timelinessChartData: [], gradeHistoryChartData: [] };
@@ -105,8 +113,12 @@ const StudentProfile: React.FC<{ userProfile: UserProfile; assignments: Assignme
             <p className="text-gray-400">{userProfile.email}</p>
             <p className="text-gray-300 font-semibold mt-1">Class: {userProfile.class}</p>
           </div>
-           <div className="sm:ml-auto flex-shrink-0 mt-4 sm:mt-0">
-            <Button onClick={() => setShowChangePassword(true)} variant="secondary">Change Password</Button>
+           <div className="sm:ml-auto flex-shrink-0 mt-4 sm:mt-0 flex flex-col items-end gap-2">
+             <div className="bg-slate-900/50 px-4 py-2 rounded-lg border border-slate-700 text-right">
+                 <p className="text-xs text-gray-400 uppercase tracking-wider">Total Points</p>
+                 <p className="text-xl font-mono font-bold text-yellow-400">{userProfile.xp || 0} XP</p>
+             </div>
+            <Button onClick={() => setShowChangePassword(true)} variant="secondary" size="sm">Change Password</Button>
           </div>
         </div>
       </Card>
@@ -149,7 +161,7 @@ const StudentProfile: React.FC<{ userProfile: UserProfile; assignments: Assignme
           <h3 className="text-xl font-bold mb-4">Academic Level</h3>
           <div className="space-y-4">
             <div>
-              <p className="text-5xl font-bold text-blue-400">{userProfile.level || 1}</p>
+              <p className="text-5xl font-bold text-blue-400">Level {userProfile.level || 1}</p>
               <p className="text-sm text-gray-400">Current Level</p>
             </div>
             <div>
@@ -157,8 +169,11 @@ const StudentProfile: React.FC<{ userProfile: UserProfile; assignments: Assignme
                 <span>XP Progress</span>
                 <span>{currentXP} / {xpForNextLevel} XP</span>
               </div>
-              <div className="w-full bg-slate-700 rounded-full h-2.5">
-                <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${xpProgress}%` }}></div>
+              <div className="w-full bg-slate-700 rounded-full h-2.5 overflow-hidden">
+                <div 
+                    className="bg-gradient-to-r from-blue-500 to-purple-500 h-2.5 rounded-full transition-all duration-1000 ease-out" 
+                    style={{ width: animateProgress ? `${xpProgress}%` : '0%' }}
+                ></div>
               </div>
             </div>
           </div>
