@@ -1,12 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, firebase } from '../services/firebase';
-import { SchoolEvent, EVENT_TYPES, EVENT_AUDIENCE, SchoolEventType, SchoolEventAudience } from '../types';
+import { SchoolEvent, EVENT_TYPES, EVENT_AUDIENCE, SchoolEventType, SchoolEventAudience, PublishedFlyer } from '../types';
 import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
 import { useToast } from './common/Toast';
 import ConfirmationModal from './common/ConfirmationModal';
+import { GoogleGenAI } from '@google/genai';
 
 const AdminCalendar: React.FC = () => {
     const { showToast } = useToast();
@@ -22,13 +23,15 @@ const AdminCalendar: React.FC = () => {
     const [date, setDate] = useState('');
     const [type, setType] = useState<SchoolEventType>('Event');
     const [audience, setAudience] = useState<SchoolEventAudience>('All');
+    
+    // New Feature: Flyer Generation
+    const [generateFlyer, setGenerateFlyer] = useState(false);
 
     useEffect(() => {
         const unsubscribe = db.collection('calendarEvents')
             .orderBy('date', 'asc')
             .onSnapshot(snapshot => {
                 const fetchedEvents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SchoolEvent));
-                // Filter out past events (older than 30 days) to keep list clean, or keep all
                 setEvents(fetchedEvents);
                 setLoading(false);
             }, err => {
@@ -53,11 +56,55 @@ const AdminCalendar: React.FC = () => {
                 createdBy: 'admin',
                 createdByName: 'Administrator'
             };
+            
+            // 1. Add Event to Calendar
             await db.collection('calendarEvents').add(newEvent);
-            showToast('Event added successfully', 'success');
+            
+            // 2. Auto-Generate Flyer if requested
+            if (generateFlyer) {
+                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                const prompt = `Write a catchy, short, and professional notice board announcement for a school event.
+                Event: ${title}
+                Date: ${new Date(date).toLocaleDateString()}
+                Type: ${type}
+                Details: ${description || 'No extra details.'}
+                Audience: ${audience}
+                
+                Make it sound exciting but official. Max 50 words. Do not use markdown headers.`;
+                
+                const response = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: prompt
+                });
+                
+                const flyerContent = response.text.trim();
+                
+                // Determine target roles for flyer based on event audience
+                let targetRoles: any[] = [];
+                if (audience === 'Students') targetRoles = ['student'];
+                else if (audience === 'Parents') targetRoles = ['parent'];
+                else if (audience === 'Teachers') targetRoles = ['teacher'];
+                
+                const flyerData: Omit<PublishedFlyer, 'id'> = {
+                    title: `📢 ${title}`,
+                    content: flyerContent,
+                    targetAudience: audience === 'All' ? 'all' : 'role',
+                    targetRoles: targetRoles.length > 0 ? targetRoles : undefined,
+                    publisherId: 'admin-auto',
+                    publisherName: 'School Admin',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
+                };
+                
+                await db.collection('publishedFlyers').add(flyerData);
+                showToast('Event created and flyer posted to school board!', 'success');
+            } else {
+                showToast('Event added successfully', 'success');
+            }
+
             setTitle('');
             setDescription('');
             setDate('');
+            setGenerateFlyer(false);
         } catch (err: any) {
             showToast(`Error: ${err.message}`, 'error');
         } finally {
@@ -114,8 +161,24 @@ const AdminCalendar: React.FC = () => {
                                 <label className="block text-sm text-gray-400 mb-1">Description</label>
                                 <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className="w-full p-2 bg-slate-800 rounded border border-slate-700" />
                             </div>
+                            
+                            <div className="bg-purple-900/20 p-3 rounded-lg border border-purple-500/30">
+                                <label className="flex items-center gap-3 cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={generateFlyer} 
+                                        onChange={e => setGenerateFlyer(e.target.checked)}
+                                        className="w-5 h-5 rounded border-gray-600 bg-slate-700 text-purple-600 focus:ring-purple-500" 
+                                    />
+                                    <span className="text-sm font-medium text-purple-200">
+                                        ✨ Auto-Post Flyer to School Board
+                                    </span>
+                                </label>
+                                <p className="text-xs text-purple-300/70 mt-1 ml-8">AI will generate a catchy announcement and share it immediately.</p>
+                            </div>
+
                             <Button type="submit" disabled={isSaving} className="w-full">
-                                {isSaving ? 'Saving...' : 'Add Event'}
+                                {isSaving ? 'Creating...' : 'Add Event'}
                             </Button>
                         </form>
                     </Card>

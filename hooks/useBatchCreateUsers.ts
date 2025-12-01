@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 // FIX: Import firebase for FieldValue
 import { secondaryAuth, db, firebase } from '../services/firebase';
@@ -64,9 +65,20 @@ export const useBatchCreateUsers = () => {
             if (role === "student" && classId) {
                 profileData.class = classId;
             }
+            if (role === "parent" && user.linkedStudentId) {
+                profileData.childUids = [user.linkedStudentId];
+            }
 
             // FIX: Use v8 compat setDoc syntax
             await db.collection('users').doc(newUser.uid).set(profileData);
+            
+            // Handle Parent-Child Linking Reverse Side (Update Student)
+            if (role === "parent" && user.linkedStudentId) {
+                await db.collection('users').doc(user.linkedStudentId).update({
+                    parentUids: firebase.firestore.FieldValue.arrayUnion(newUser.uid)
+                });
+            }
+
             // FIX: Changed to v8 compat syntax.
             await secondaryAuth.signOut();
             creationResults.push({ name: user.name, email: user.email!, success: true, password });

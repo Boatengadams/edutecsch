@@ -63,7 +63,6 @@ const StudentReportCard: React.FC<{
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-center border-b-4 border-double border-gray-800 pb-4 mb-6 relative z-10 gap-4 sm:gap-0">
                 <div className="w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center border-2 border-gray-800 rounded-full bg-gray-100 shrink-0">
-                    {/* Placeholder Logo */}
                     <span className="text-2xl sm:text-3xl">🎓</span>
                 </div>
                 <div className="text-center flex-grow px-4">
@@ -219,6 +218,9 @@ const AdminTerminalReports: React.FC<{ schoolSettings: SchoolSettings | null, us
     const [loading, setLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
+    // Printing selection state
+    const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+
     // Fetch students
     useEffect(() => {
         const fetchStudents = async () => {
@@ -230,6 +232,8 @@ const AdminTerminalReports: React.FC<{ schoolSettings: SchoolSettings | null, us
                     .get();
                 const fetchedStudents = snapshot.docs.map(doc => doc.data() as UserProfile);
                 setStudents(fetchedStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+                // Default: Select all for printing when class loads
+                setSelectedStudentIds(fetchedStudents.map(s => s.uid));
             } catch (err) {
                 console.error("Error fetching students:", err);
             } finally {
@@ -268,7 +272,7 @@ const AdminTerminalReports: React.FC<{ schoolSettings: SchoolSettings | null, us
             }
         };
         fetchReport();
-    }, [selectedClass, selectedSubject, schoolSettings, viewMode]); // Re-fetch when switching views or selection
+    }, [selectedClass, selectedSubject, schoolSettings, viewMode]);
 
     // Calculate Class Rankings
     const classRanking = useMemo(() => {
@@ -384,12 +388,10 @@ const AdminTerminalReports: React.FC<{ schoolSettings: SchoolSettings | null, us
 
             setMarks(calculatedMarks);
             
-            // Update local fullReport state slightly to reflect changes without full refetch
             if (fullReport) {
                 const updatedSubjects = { ...fullReport.subjects, [selectedSubject]: { ...fullReport.subjects[selectedSubject], marks: calculatedMarks } };
                 setFullReport({ ...fullReport, subjects: updatedSubjects });
             } else {
-                // If fullReport was null (first time creating), we need to construct it minimally
                 setFullReport({
                     id: reportId,
                     academicYear: schoolSettings.academicYear,
@@ -415,12 +417,32 @@ const AdminTerminalReports: React.FC<{ schoolSettings: SchoolSettings | null, us
 
     // Handle Print
     const handlePrint = () => {
+        if (selectedStudentIds.length === 0) {
+            showToast("Please select at least one student to print.", "error");
+            return;
+        }
         window.print();
     };
 
+    const toggleStudentSelection = (uid: string) => {
+        setSelectedStudentIds(prev => 
+            prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
+        );
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedStudentIds.length === students.length) {
+            setSelectedStudentIds([]);
+        } else {
+            setSelectedStudentIds(students.map(s => s.uid));
+        }
+    };
+
+    const studentsToPrint = students.filter(s => selectedStudentIds.includes(s.uid));
+
     return (
         <div className="h-full flex flex-col">
-            {/* Inject Print Styles to override App layout constraints */}
+            {/* Inject Print Styles */}
             <style>{`
                 @media print {
                     @page { margin: 0; size: auto; }
@@ -429,11 +451,9 @@ const AdminTerminalReports: React.FC<{ schoolSettings: SchoolSettings | null, us
                         overflow: visible !important;
                         background: white !important;
                     }
-                    /* Hide everything by default */
                     body * {
                         visibility: hidden;
                     }
-                    /* Show only our print container and its children */
                     .print-only-container, .print-only-container * {
                         visibility: visible;
                     }
@@ -445,13 +465,11 @@ const AdminTerminalReports: React.FC<{ schoolSettings: SchoolSettings | null, us
                         margin: 0;
                         padding: 0;
                     }
-                    /* Ensure page breaks */
                     .report-card-page-break {
                         break-after: page;
                         page-break-after: always;
                         margin-bottom: 0;
                     }
-                    /* Hide headers/sidebars specifically if visibility trick misses them */
                     header, nav, .sidebar, .no-print {
                         display: none !important;
                     }
@@ -465,7 +483,7 @@ const AdminTerminalReports: React.FC<{ schoolSettings: SchoolSettings | null, us
                          {viewMode === 'entry' ? 'Master Report Sheet' : 'Student Report Cards'}
                      </h2>
                      <p className="text-xs text-slate-400 mt-1">
-                         {viewMode === 'entry' ? 'View and edit marks for any class.' : 'Preview and print final terminal reports.'}
+                         {viewMode === 'entry' ? 'View and edit marks for any class.' : 'Select specific students to download/print.'}
                      </p>
                  </div>
                  <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 w-full lg:w-auto">
@@ -480,7 +498,7 @@ const AdminTerminalReports: React.FC<{ schoolSettings: SchoolSettings | null, us
                             onClick={() => setViewMode('print')} 
                             className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded-md text-sm font-medium transition-all text-center ${viewMode === 'print' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
                         >
-                            Report Cards
+                            Print Mode
                         </button>
                     </div>
                     
@@ -501,8 +519,8 @@ const AdminTerminalReports: React.FC<{ schoolSettings: SchoolSettings | null, us
                             {isSaving ? 'Saving...' : 'Save Changes'}
                         </Button>
                     ) : (
-                        <Button onClick={handlePrint} variant="secondary" className="w-full sm:w-auto flex-grow justify-center">
-                            🖨️ Print Reports
+                        <Button onClick={handlePrint} variant="secondary" className="w-full sm:w-auto flex-grow justify-center bg-green-600 hover:bg-green-500 text-white border-none shadow-lg shadow-green-900/20">
+                            🖨️ Print Selected ({selectedStudentIds.length})
                         </Button>
                     )}
                  </div>
@@ -514,174 +532,130 @@ const AdminTerminalReports: React.FC<{ schoolSettings: SchoolSettings | null, us
             ) : (
                  <>
                     {viewMode === 'entry' ? (
-                        <>
-                            {/* Desktop Table View */}
-                            <div className="hidden md:block overflow-auto border border-gray-300 rounded-xl shadow-lg custom-scrollbar flex-grow relative bg-white h-[calc(100dvh-280px)] md:h-auto">
-                                <div className="min-w-[1000px]">
-                                    <table className="w-full text-sm border-collapse">
-                                        <thead className="bg-gray-100 sticky top-0 z-20 shadow-sm">
-                                            <tr>
-                                                <th rowSpan={2} className="p-3 text-left border-b border-r border-gray-300 font-bold text-black min-w-[180px] sticky left-0 bg-gray-100 z-30 shadow-lg">STUDENT NAME</th>
-                                                <th colSpan={4} className="p-2 border-b border-r border-gray-300 text-center bg-blue-50 text-blue-800 font-bold">CLASS ASSESSMENT (15 each)</th>
-                                                <th rowSpan={2} className="p-2 border-b border-r border-gray-300 text-center w-20 font-bold bg-gray-50 text-gray-800">CLASS (50%)</th>
-                                                <th rowSpan={2} className="p-2 border-b border-r border-gray-300 text-center w-24 font-bold bg-purple-50 text-purple-800">EXAM (100)</th>
-                                                <th rowSpan={2} className="p-2 border-b border-r border-gray-300 text-center w-20 font-bold bg-gray-50 text-gray-800">EXAM (50%)</th>
-                                                <th colSpan={3} className="p-2 border-b border-gray-300 text-center bg-green-50 text-green-800 font-bold">FINAL GRADING</th>
-                                            </tr>
-                                            <tr className="text-xs text-gray-600">
-                                                <th className="p-2 border-b border-r border-gray-300 font-medium text-center w-20">ASSIGNMENTS</th>
-                                                <th className="p-2 border-b border-r border-gray-300 font-medium text-center w-20">GROUP</th>
-                                                <th className="p-2 border-b border-r border-gray-300 font-medium text-center w-20">TEST</th>
-                                                <th className="p-2 border-b border-r border-gray-300 font-medium text-center w-20">PROJECT</th>
-                                                <th className="p-2 border-b border-r border-gray-300 font-bold text-black bg-white">TOTAL (100)</th>
-                                                <th className="p-2 border-b border-r border-gray-300 font-bold text-black bg-white">GRADE</th>
-                                                <th className="p-2 border-b border-gray-300 font-bold text-black bg-white">POS.</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-200 bg-white">
-                                            {students.map((student) => {
-                                                const mark = marks[student.uid] || {};
-                                                const totalClassScore = (mark.indivTest || 0) + (mark.groupWork || 0) + (mark.classTest || 0) + (mark.project || 0);
-                                                const scaledClassScore = (totalClassScore / 60) * 50;
-                                                const scaledExamScore = ((mark.endOfTermExams || 0) / 100) * 50;
-                                                const overallTotal = scaledClassScore + scaledExamScore;
-                                                const grade = getGrade(overallTotal);
+                        <div className="hidden md:block overflow-auto border border-gray-300 rounded-xl shadow-lg custom-scrollbar flex-grow relative bg-white h-[calc(100dvh-280px)] md:h-auto">
+                            {/* Standard Data Entry Table */}
+                            <div className="min-w-[1000px]">
+                                <table className="w-full text-sm border-collapse">
+                                    <thead className="bg-gray-100 sticky top-0 z-20 shadow-sm">
+                                        <tr>
+                                            <th rowSpan={2} className="p-3 text-left border-b border-r border-gray-300 font-bold text-black min-w-[180px] sticky left-0 bg-gray-100 z-30 shadow-lg">STUDENT NAME</th>
+                                            <th colSpan={4} className="p-2 border-b border-r border-gray-300 text-center bg-blue-50 text-blue-800 font-bold">CLASS ASSESSMENT (15 each)</th>
+                                            <th rowSpan={2} className="p-2 border-b border-r border-gray-300 text-center w-20 font-bold bg-gray-50 text-gray-800">CLASS (50%)</th>
+                                            <th rowSpan={2} className="p-2 border-b border-r border-gray-300 text-center w-24 font-bold bg-purple-50 text-purple-800">EXAM (100)</th>
+                                            <th rowSpan={2} className="p-2 border-b border-r border-gray-300 text-center w-20 font-bold bg-gray-50 text-gray-800">EXAM (50%)</th>
+                                            <th colSpan={3} className="p-2 border-b border-gray-300 text-center bg-green-50 text-green-800 font-bold">FINAL GRADING</th>
+                                        </tr>
+                                        <tr className="text-xs text-gray-600">
+                                            <th className="p-2 border-b border-r border-gray-300 font-medium text-center w-20">ASSIGNMENTS</th>
+                                            <th className="p-2 border-b border-r border-gray-300 font-medium text-center w-20">GROUP</th>
+                                            <th className="p-2 border-b border-r border-gray-300 font-medium text-center w-20">TEST</th>
+                                            <th className="p-2 border-b border-r border-gray-300 font-medium text-center w-20">PROJECT</th>
+                                            <th className="p-2 border-b border-r border-gray-300 font-bold text-black bg-white">TOTAL (100)</th>
+                                            <th className="p-2 border-b border-r border-gray-300 font-bold text-black bg-white">GRADE</th>
+                                            <th className="p-2 border-b border-gray-300 font-bold text-black bg-white">POS.</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200 bg-white">
+                                        {students.map((student) => {
+                                            const mark = marks[student.uid] || {};
+                                            const totalClassScore = (mark.indivTest || 0) + (mark.groupWork || 0) + (mark.classTest || 0) + (mark.project || 0);
+                                            const scaledClassScore = (totalClassScore / 60) * 50;
+                                            const scaledExamScore = ((mark.endOfTermExams || 0) / 100) * 50;
+                                            const overallTotal = scaledClassScore + scaledExamScore;
+                                            const grade = getGrade(overallTotal);
 
-                                                let gradeColor = 'text-gray-800';
-                                                if (grade === 'A' || grade === 'B+') gradeColor = 'text-green-600 font-bold';
-                                                else if (grade === 'F') gradeColor = 'text-red-600 font-bold';
-                                                else if (grade.startsWith('D')) gradeColor = 'text-yellow-600 font-bold';
+                                            let gradeColor = 'text-gray-800';
+                                            if (grade === 'A' || grade === 'B+') gradeColor = 'text-green-600 font-bold';
+                                            else if (grade === 'F') gradeColor = 'text-red-600 font-bold';
+                                            else if (grade.startsWith('D')) gradeColor = 'text-yellow-600 font-bold';
 
-                                                return (
-                                                    <tr key={student.uid} className="hover:bg-blue-50 transition-colors group">
-                                                        <td className="p-3 text-left border-r border-gray-300 font-bold text-black sticky left-0 bg-white group-hover:bg-blue-50 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] whitespace-nowrap uppercase text-sm">
-                                                            {student.name}
-                                                        </td>
-                                                        {['indivTest', 'groupWork', 'classTest', 'project'].map((field) => (
-                                                            <td key={field} className="p-1 border-r border-gray-300 bg-gray-50/50">
-                                                                <input 
-                                                                    type="number" step="0.1" min="0" max="15" 
-                                                                    value={mark[field as keyof TerminalReportMark] ?? ''} 
-                                                                    onChange={e => handleMarkChange(student.uid, field as keyof TerminalReportMark, e.target.value)} 
-                                                                    className="w-full h-10 bg-transparent text-center focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none rounded text-black font-mono border border-transparent hover:border-gray-300 text-base"
-                                                                    placeholder="-"
-                                                                />
-                                                            </td>
-                                                        ))}
-                                                        <td className="p-2 text-center font-bold border-r border-gray-300 text-gray-700 bg-gray-100 text-sm">{scaledClassScore.toFixed(1)}</td>
-                                                        <td className="p-1 border-r border-gray-300 bg-purple-50/50">
+                                            return (
+                                                <tr key={student.uid} className="hover:bg-blue-50 transition-colors group">
+                                                    <td className="p-3 text-left border-r border-gray-300 font-bold text-black sticky left-0 bg-white group-hover:bg-blue-50 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] whitespace-nowrap uppercase text-sm">
+                                                        {student.name}
+                                                    </td>
+                                                    {['indivTest', 'groupWork', 'classTest', 'project'].map((field) => (
+                                                        <td key={field} className="p-1 border-r border-gray-300 bg-gray-50/50">
                                                             <input 
-                                                                type="number" step="0.1" min="0" max="100" 
-                                                                value={mark.endOfTermExams ?? ''} 
-                                                                onChange={e => handleMarkChange(student.uid, 'endOfTermExams', e.target.value)} 
-                                                                className="w-full h-10 bg-transparent text-center focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none rounded text-black font-bold font-mono border border-transparent hover:border-gray-300 text-base"
+                                                                type="number" step="0.1" min="0" max="15" 
+                                                                value={mark[field as keyof TerminalReportMark] ?? ''} 
+                                                                onChange={e => handleMarkChange(student.uid, field as keyof TerminalReportMark, e.target.value)} 
+                                                                className="w-full h-10 bg-transparent text-center focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none rounded text-black font-mono border border-transparent hover:border-gray-300 text-base"
                                                                 placeholder="-"
                                                             />
                                                         </td>
-                                                        <td className="p-2 text-center font-medium border-r border-gray-300 text-gray-700 bg-gray-100 text-sm">{scaledExamScore.toFixed(1)}</td>
-                                                        <td className="p-2 text-center font-black border-r border-gray-300 text-black text-base bg-gray-50">{overallTotal.toFixed(1)}</td>
-                                                        <td className={`p-2 text-center text-base border-r border-gray-300 bg-gray-50 ${gradeColor}`}>{grade}</td>
-                                                        <td className="p-2 text-center font-bold text-black bg-gray-50 text-sm">{mark.position || '-'}</td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
+                                                    ))}
+                                                    <td className="p-2 text-center font-bold border-r border-gray-300 text-gray-700 bg-gray-100 text-sm">{scaledClassScore.toFixed(1)}</td>
+                                                    <td className="p-1 border-r border-gray-300 bg-purple-50/50">
+                                                        <input 
+                                                            type="number" step="0.1" min="0" max="100" 
+                                                            value={mark.endOfTermExams ?? ''} 
+                                                            onChange={e => handleMarkChange(student.uid, 'endOfTermExams', e.target.value)} 
+                                                            className="w-full h-10 bg-transparent text-center focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none rounded text-black font-bold font-mono border border-transparent hover:border-gray-300 text-base"
+                                                            placeholder="-"
+                                                        />
+                                                    </td>
+                                                    <td className="p-2 text-center font-medium border-r border-gray-300 text-gray-700 bg-gray-100 text-sm">{scaledExamScore.toFixed(1)}</td>
+                                                    <td className="p-2 text-center font-black border-r border-gray-300 text-black text-base bg-gray-50">{overallTotal.toFixed(1)}</td>
+                                                    <td className={`p-2 text-center text-base border-r border-gray-300 bg-gray-50 ${gradeColor}`}>{grade}</td>
+                                                    <td className="p-2 text-center font-bold text-black bg-gray-50 text-sm">{mark.position || '-'}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ) : (
+                        // PRINT SELECTION & PREVIEW MODE
+                        <div className="flex flex-col h-full">
+                            {/* Selection Bar */}
+                            <div className="bg-white border-b border-gray-200 p-4 flex items-center justify-between sticky top-0 z-20 print:hidden">
+                                <div className="flex items-center gap-3">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={selectedStudentIds.length === students.length && students.length > 0} 
+                                        onChange={toggleSelectAll}
+                                        className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span className="text-gray-700 font-semibold text-sm">
+                                        Select All ({selectedStudentIds.length}/{students.length})
+                                    </span>
+                                </div>
+                                <div className="text-xs text-gray-500 italic">
+                                    Scroll down to verify reports. Only checked students will print.
                                 </div>
                             </div>
 
-                            {/* Mobile Card View */}
-                            <div className="md:hidden flex-grow overflow-y-auto space-y-4 pb-20 px-1">
-                                {students.map(student => {
-                                    const mark = marks[student.uid] || {};
-                                    const totalClassScore = (mark.indivTest || 0) + (mark.groupWork || 0) + (mark.classTest || 0) + (mark.project || 0);
-                                    const scaledClassScore = (totalClassScore / 60) * 50;
-                                    const scaledExamScore = ((mark.endOfTermExams || 0) / 100) * 50;
-                                    const overallTotal = scaledClassScore + scaledExamScore;
-                                    const grade = getGrade(overallTotal);
-
-                                    return (
-                                        <div key={student.uid} className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
-                                            {/* Card Header */}
-                                            <div className="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center">
-                                                <div>
-                                                    <h3 className="font-bold text-gray-900">{student.name}</h3>
-                                                    <p className="text-xs text-gray-500">Position: {mark.position || '-'}</p>
-                                                </div>
-                                                <span className={`text-lg font-black ${grade === 'A' ? 'text-green-600' : grade === 'F' ? 'text-red-600' : 'text-gray-700'}`}>
-                                                    {grade}
-                                                </span>
+                            {/* Report Grid for Selection */}
+                            <div className="bg-gray-100 p-4 sm:p-8 rounded-xl overflow-y-auto h-[calc(100dvh-280px)] md:h-[calc(100vh-200px)] custom-scrollbar print:h-auto print:overflow-visible print:bg-white print:p-0">
+                                <div className="grid grid-cols-1 gap-8 print:block print:gap-0">
+                                    {students.map(student => (
+                                        <div key={student.uid} className={`relative group transition-all duration-300 ${!selectedStudentIds.includes(student.uid) ? 'opacity-50 grayscale print:hidden' : 'print:block print:opacity-100'}`}>
+                                            {/* Selection Overlay (Screen Only) */}
+                                            <div className="absolute top-4 right-4 z-20 print:hidden">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={selectedStudentIds.includes(student.uid)} 
+                                                    onChange={() => toggleStudentSelection(student.uid)}
+                                                    className="h-6 w-6 rounded border-gray-300 text-blue-600 focus:ring-blue-500 shadow-md cursor-pointer"
+                                                />
                                             </div>
-
-                                            <div className="p-4 space-y-4">
-                                                {/* Class Assessments Grid */}
-                                                <div>
-                                                    <p className="text-xs font-bold text-blue-800 uppercase mb-2">Class Assessment (Max 15 each)</p>
-                                                    <div className="grid grid-cols-4 gap-2">
-                                                        {['indivTest', 'groupWork', 'classTest', 'project'].map((field) => (
-                                                            <div key={field} className="flex flex-col">
-                                                                <label className="text-[10px] text-gray-500 uppercase mb-1 truncate text-center">
-                                                                    {field === 'indivTest' ? 'Assg' : field === 'groupWork' ? 'Grp' : field === 'classTest' ? 'Test' : 'Proj'}
-                                                                </label>
-                                                                <input 
-                                                                    type="number" inputMode="decimal" step="0.1" min="0" max="15"
-                                                                    value={mark[field as keyof TerminalReportMark] ?? ''} 
-                                                                    onChange={e => handleMarkChange(student.uid, field as keyof TerminalReportMark, e.target.value)}
-                                                                    className="w-full p-2 bg-blue-50 border border-blue-200 rounded text-center font-mono text-black focus:ring-2 focus:ring-blue-500 outline-none"
-                                                                    placeholder="-"
-                                                                />
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-
-                                                {/* Exam Score */}
-                                                <div>
-                                                    <p className="text-xs font-bold text-purple-800 uppercase mb-2">Exam Score (Max 100)</p>
-                                                    <input 
-                                                        type="number" inputMode="decimal" step="0.1" min="0" max="100"
-                                                        value={mark.endOfTermExams ?? ''} 
-                                                        onChange={e => handleMarkChange(student.uid, 'endOfTermExams', e.target.value)}
-                                                        className="w-full p-3 bg-purple-50 border border-purple-200 rounded text-center font-bold font-mono text-lg text-black focus:ring-2 focus:ring-purple-500 outline-none"
-                                                        placeholder="Enter Exam Score"
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            {/* Footer Summary */}
-                                            <div className="bg-gray-100 p-3 border-t border-gray-200 flex justify-between items-center text-xs">
-                                                <div className="text-center">
-                                                    <p className="text-gray-500">Class (50%)</p>
-                                                    <p className="font-bold text-gray-800">{scaledClassScore.toFixed(1)}</p>
-                                                </div>
-                                                <div className="text-center">
-                                                    <p className="text-gray-500">Exam (50%)</p>
-                                                    <p className="font-bold text-gray-800">{scaledExamScore.toFixed(1)}</p>
-                                                </div>
-                                                <div className="text-center bg-black text-white px-3 py-1 rounded">
-                                                    <p className="text-[10px] opacity-70">TOTAL</p>
-                                                    <p className="font-bold text-base">{overallTotal.toFixed(1)}</p>
-                                                </div>
+                                            
+                                            {/* Actual Report Component */}
+                                            <div className={`report-card-page-break w-full ${!selectedStudentIds.includes(student.uid) ? 'pointer-events-none' : ''}`}>
+                                                <StudentReportCard 
+                                                    student={student} 
+                                                    report={fullReport} 
+                                                    schoolSettings={schoolSettings} 
+                                                    ranking={classRanking[student.uid] || null}
+                                                    classSize={students.length}
+                                                />
                                             </div>
                                         </div>
-                                    );
-                                })}
-                            </div>
-                        </>
-                    ) : (
-                        <div className="bg-gray-100 p-4 sm:p-8 rounded-xl overflow-y-auto h-[calc(100dvh-280px)] md:h-[calc(100vh-200px)] custom-scrollbar print:h-auto print:overflow-visible print:bg-white print:p-0">
-                            <div className="print-only-container">
-                                {students.map(student => (
-                                    <div key={student.uid} className="report-card-page-break w-full">
-                                        <StudentReportCard 
-                                            student={student} 
-                                            report={fullReport} 
-                                            schoolSettings={schoolSettings} 
-                                            ranking={classRanking[student.uid] || null}
-                                            classSize={students.length}
-                                        />
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
+                                {students.length === 0 && <p className="text-center text-gray-500 p-8">No students found.</p>}
                             </div>
                         </div>
                     )}

@@ -585,6 +585,7 @@ export interface ParsedUser {
   email?: string;
   password?: string;
   classId?: string;
+  linkedStudentId?: string; // Optional field for parent-child linking during scan
 }
 
 export interface LiveTutoringSession {

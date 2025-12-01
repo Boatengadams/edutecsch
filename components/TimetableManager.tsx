@@ -157,10 +157,8 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
             const dayStructure = generateDaySkeleton();
             const structureDescription = JSON.stringify(dayStructure, null, 2);
 
-            let successCount = 0;
-
-            // Iterate through selected classes
-            for (const targetClassId of targetClasses) {
+            // Execute generations in parallel for speed
+            const generatePromises = targetClasses.map(async (targetClassId) => {
                 const subjects = GES_STANDARD_CURRICULUM[targetClassId] || GES_STANDARD_CURRICULUM['Basic 1']; // Fallback
                 
                 const prompt = `
@@ -191,53 +189,69 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
                     Ensure the "type": "Break" or "Worship" slots from the grid are preserved exactly with their names.
                 `;
 
-                const response = await ai.models.generateContent({
-                    model: 'gemini-3-pro-preview',
-                    contents: prompt,
-                    config: {
-                        responseMimeType: 'application/json',
-                        responseSchema: {
-                            type: Type.OBJECT,
-                            properties: {
-                                Monday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
-                                Tuesday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
-                                Wednesday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
-                                Thursday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
-                                Friday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                try {
+                    const response = await ai.models.generateContent({
+                        model: 'gemini-2.5-flash', // Using faster model
+                        contents: prompt,
+                        config: {
+                            responseMimeType: 'application/json',
+                            responseSchema: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    Monday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                                    Tuesday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                                    Wednesday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                                    Thursday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                                    Friday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                                }
                             }
                         }
-                    }
-                });
-
-                const generatedData = JSON.parse(response.text);
-                
-                const newTimetable = {
-                    id: targetClassId,
-                    classId: targetClassId,
-                    timetableData: generatedData,
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                };
-
-                // Save immediately to DB
-                await db.collection('timetables').doc(targetClassId).set(newTimetable);
-                
-                // If this is the currently viewed class, update local state
-                if (targetClassId === classId) {
-                    setTimetable({
-                         ...newTimetable,
-                         updatedAt: firebase.firestore.Timestamp.now()
                     });
-                    setEditMode(true);
+
+                    const generatedData = JSON.parse(response.text);
+                    
+                    const newTimetable = {
+                        id: targetClassId,
+                        classId: targetClassId,
+                        timetableData: generatedData,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+
+                    // Save immediately to DB
+                    await db.collection('timetables').doc(targetClassId).set(newTimetable);
+                    return { success: true, classId: targetClassId, data: newTimetable };
+
+                } catch (error) {
+                    console.error(`Generation failed for ${targetClassId}`, error);
+                    return { success: false, classId: targetClassId };
                 }
-                
-                successCount++;
+            });
+
+            const results = await Promise.all(generatePromises);
+            const successful = results.filter(r => r.success);
+
+            // Update local state if current class was generated
+            const currentClassResult = successful.find(r => r.classId === classId);
+            if (currentClassResult && currentClassResult.data) {
+                setTimetable({
+                    ...currentClassResult.data,
+                    updatedAt: firebase.firestore.Timestamp.now()
+                } as Timetable);
+                setEditMode(true);
             }
 
-            showToast(`Generated timetables for ${successCount} classes successfully!`, "success");
+            if (successful.length === targetClasses.length) {
+                showToast(`Generated timetables for ${successful.length} classes successfully!`, "success");
+            } else if (successful.length > 0) {
+                showToast(`Generated ${successful.length}/${targetClasses.length} timetables. Some failed.`, "error");
+            } else {
+                showToast("Failed to generate timetables. Please try again.", "error");
+            }
+            
             setShowGenOptions(false);
 
         } catch (err: any) {
-            console.error("AI Generation failed:", err);
+            console.error("AI Generation critical error:", err);
             showToast("Failed to generate timetable. Please try again.", "error");
         } finally {
             setIsGenerating(false);
@@ -314,7 +328,7 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
                                     {showGenOptions ? 'Hide Options' : 'Options'}
                                 </button>
                                 <Button onClick={handleGenerateAI} disabled={isGenerating} className="shadow-lg shadow-blue-500/20 bg-gradient-to-r from-blue-600 to-indigo-600">
-                                    {isGenerating ? <span className="flex items-center gap-2"><Spinner /> Generating ({targetClasses.length})...</span> : '✨ Generate with AI'}
+                                    {isGenerating ? <span className="flex items-center gap-2"><Spinner /> Generating...</span> : '✨ Generate with AI'}
                                 </Button>
                                 {timetable && !editMode && !showGenOptions && (
                                     <Button variant="secondary" onClick={() => setEditMode(true)}>Edit Manually</Button>

@@ -23,106 +23,50 @@ import AdminMaterials from './AdminMaterials';
 import SystemActivation from './SystemActivation';
 import ConfirmationModal from './common/ConfirmationModal';
 import SubscriptionCalculator from './SubscriptionCalculator';
-
-// --- SUB-COMPONENTS ---
-
-const OnlineUsersMonitor: React.FC = () => {
-    const onlineUsers = useAllOnlineUsers();
-    const [filter, setFilter] = useState<'all' | 'online' | 'offline'>('all');
-
-    const filteredUsers = onlineUsers.filter(u => {
-        if (filter === 'online') return u.state === 'online';
-        if (filter === 'offline') return u.state === 'offline';
-        return true;
-    });
-
-    return (
-        <Card>
-            <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold flex items-center gap-2">
-                    <span className="relative flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                    </span>
-                    Active User Monitor
-                </h3>
-                <div className="flex gap-2 text-sm">
-                    <button onClick={() => setFilter('all')} className={`px-3 py-1 rounded-full ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-gray-400'}`}>All</button>
-                    <button onClick={() => setFilter('online')} className={`px-3 py-1 rounded-full ${filter === 'online' ? 'bg-green-600 text-white' : 'bg-slate-700 text-gray-400'}`}>Online</button>
-                    <button onClick={() => setFilter('offline')} className={`px-3 py-1 rounded-full ${filter === 'offline' ? 'bg-gray-600 text-white' : 'bg-slate-700 text-gray-400'}`}>Offline</button>
-                </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-96 overflow-y-auto p-2">
-                {filteredUsers.map(user => (
-                    <div key={user.uid} className="flex items-center gap-3 p-3 bg-slate-800 rounded-lg border border-slate-700 shadow-sm">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white ${user.state === 'online' ? 'bg-green-600' : 'bg-gray-600'}`}>
-                            {(user.name || '?').charAt(0)}
-                        </div>
-                        <div className="flex-grow min-w-0">
-                            <p className="font-semibold truncate text-white">{user.name || 'Unknown'}</p>
-                            <p className="text-xs text-gray-400 capitalize">{user.role || 'User'} &bull; {user.class || 'N/A'}</p>
-                        </div>
-                        <div className="text-right">
-                            <span className={`inline-block w-3 h-3 rounded-full ${user.state === 'online' ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-gray-500'}`}></span>
-                            {user.state === 'offline' && (
-                                <p className="text-[10px] text-gray-500 mt-1">{new Date(user.last_changed).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
-                            )}
-                        </div>
-                    </div>
-                ))}
-                {filteredUsers.length === 0 && <p className="text-gray-500 col-span-full text-center py-8">No users found matching filter.</p>}
-            </div>
-        </Card>
-    );
-};
+import SnapToRegister from './SnapToRegister';
 
 const SessionLogsTable: React.FC = () => {
     const [logs, setLogs] = useState<UserActivityLog[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
 
     useEffect(() => {
         const unsubscribe = db.collection('userActivity')
             .orderBy('timestamp', 'desc')
-            .limit(50)
+            .limit(20)
             .onSnapshot(snapshot => {
-                setLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserActivityLog)));
+                const logsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserActivityLog));
+                setLogs(logsData);
                 setLoading(false);
-            }, err => {
-                console.error("Log fetch error:", err);
-                setError("Failed to load logs. Missing index?");
-                setLoading(false);
-            });
+            }, () => setLoading(false));
         return () => unsubscribe();
     }, []);
 
-    if (loading) return <Spinner />;
-    if (error) return <p className="text-red-400 text-sm text-center p-4">{error}</p>;
+    if (loading) return <div className="p-4 flex justify-center"><Spinner /></div>;
 
     return (
-        <Card>
-            <h3 className="text-xl font-bold mb-4">Session Logs</h3>
+        <Card className="h-full">
+            <h3 className="text-lg font-bold mb-4 text-white">Recent System Activity</h3>
             <div className="overflow-x-auto">
-                <table className="min-w-full text-sm text-left text-gray-400">
+                <table className="w-full text-sm text-left text-gray-400">
                     <thead className="text-xs text-gray-200 uppercase bg-slate-700">
                         <tr>
-                            <th className="px-4 py-3">Time</th>
-                            <th className="px-4 py-3">User</th>
-                            <th className="px-4 py-3">Role</th>
-                            <th className="px-4 py-3">Action</th>
+                            <th className="px-4 py-2">User</th>
+                            <th className="px-4 py-2">Role</th>
+                            <th className="px-4 py-2">Action</th>
+                            <th className="px-4 py-2">Time</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {logs.map((log) => (
-                            <tr key={log.id} className="bg-slate-800 border-b border-slate-700">
-                                <td className="px-4 py-3">{log.timestamp?.toDate().toLocaleString()}</td>
-                                <td className="px-4 py-3 font-medium text-white">{log.userName}</td>
-                                <td className="px-4 py-3 capitalize">{log.userRole}</td>
-                                <td className="px-4 py-3">
-                                    <span className={`px-2 py-1 rounded text-xs font-bold ${log.action === 'login' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                    <tbody className="divide-y divide-slate-700">
+                        {logs.map(log => (
+                            <tr key={log.id} className="bg-slate-800 border-b border-slate-700 hover:bg-slate-700">
+                                <td className="px-4 py-2 font-medium text-white">{log.userName}</td>
+                                <td className="px-4 py-2 capitalize">{log.userRole}</td>
+                                <td className="px-4 py-2">
+                                    <span className={`px-2 py-1 rounded text-xs font-bold ${log.action === 'login' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
                                         {log.action.toUpperCase()}
                                     </span>
                                 </td>
+                                <td className="px-4 py-2">{log.timestamp?.toDate().toLocaleTimeString()}</td>
                             </tr>
                         ))}
                     </tbody>
@@ -132,18 +76,81 @@ const SessionLogsTable: React.FC = () => {
     );
 };
 
+const OnlineUsersMonitor: React.FC = () => {
+    const onlineUsers = useAllOnlineUsers();
+
+    return (
+        <Card>
+            <h3 className="text-lg font-bold mb-4 text-white flex items-center gap-2">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                </span>
+                Online Users ({onlineUsers.filter(u => u.state === 'online').length})
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                {onlineUsers.filter(u => u.state === 'online').map(user => (
+                    <div key={user.uid} className="bg-slate-700 p-3 rounded-lg flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center font-bold text-white text-xs">
+                            {(user.name || '?').charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{user.name || 'Unknown'}</p>
+                            <p className="text-xs text-gray-400 truncate">{user.role} {user.class && `• ${user.class}`}</p>
+                        </div>
+                    </div>
+                ))}
+                {onlineUsers.filter(u => u.state === 'online').length === 0 && (
+                    <p className="text-gray-500 col-span-full text-center py-4">No users currently online.</p>
+                )}
+            </div>
+        </Card>
+    );
+};
+
 const AdminSettingsEditor: React.FC<{ settings: SchoolSettings | null }> = ({ settings }) => {
     const { showToast } = useToast();
-    const [localSettings, setLocalSettings] = useState<SchoolSettings>(settings || { schoolName: '', schoolMotto: '', academicYear: '' });
+    const [schoolName, setSchoolName] = useState(settings?.schoolName || '');
+    const [schoolMotto, setSchoolMotto] = useState(settings?.schoolMotto || '');
+    const [academicYear, setAcademicYear] = useState(settings?.academicYear || '');
+    const [currentTerm, setCurrentTerm] = useState(settings?.currentTerm || 1);
     const [isSaving, setIsSaving] = useState(false);
+    
+    // Sleep Mode State
+    const [sleepModeEnabled, setSleepModeEnabled] = useState(settings?.sleepModeConfig?.enabled || false);
+    const [sleepTime, setSleepTime] = useState(settings?.sleepModeConfig?.sleepTime || '21:00');
+    const [wakeTime, setWakeTime] = useState(settings?.sleepModeConfig?.wakeTime || '05:00');
 
-    const handleSave = async () => {
+    useEffect(() => {
+        if (settings) {
+            setSchoolName(settings.schoolName);
+            setSchoolMotto(settings.schoolMotto);
+            setAcademicYear(settings.academicYear);
+            setCurrentTerm(settings.currentTerm || 1);
+            setSleepModeEnabled(settings.sleepModeConfig?.enabled || false);
+            setSleepTime(settings.sleepModeConfig?.sleepTime || '21:00');
+            setWakeTime(settings.sleepModeConfig?.wakeTime || '05:00');
+        }
+    }, [settings]);
+
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault();
         setIsSaving(true);
         try {
-            await db.collection('schoolConfig').doc('settings').set(localSettings, { merge: true });
-            showToast('Settings updated successfully', 'success');
-        } catch (e) {
-            showToast('Failed to update settings', 'error');
+            await db.collection('schoolConfig').doc('settings').set({
+                schoolName,
+                schoolMotto,
+                academicYear,
+                currentTerm,
+                sleepModeConfig: {
+                    enabled: sleepModeEnabled,
+                    sleepTime,
+                    wakeTime
+                }
+            }, { merge: true });
+            showToast("Settings updated successfully.", "success");
+        } catch (error: any) {
+            showToast("Failed to update settings.", "error");
         } finally {
             setIsSaving(false);
         }
@@ -151,41 +158,66 @@ const AdminSettingsEditor: React.FC<{ settings: SchoolSettings | null }> = ({ se
 
     return (
         <Card>
-            <h3 className="text-xl font-bold mb-4">School Configuration</h3>
-            <div className="space-y-4">
+            <form onSubmit={handleSave} className="space-y-6">
                 <div>
-                    <label className="block text-sm font-medium text-gray-300">School Name</label>
-                    <input type="text" value={localSettings.schoolName} onChange={e => setLocalSettings({...localSettings, schoolName: e.target.value})} className="w-full p-2 bg-slate-700 rounded-md mt-1" />
+                    <h4 className="font-bold text-lg mb-4 border-b border-slate-700 pb-2">General Info</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-400 mb-1">School Name</label>
+                            <input type="text" value={schoolName} onChange={e => setSchoolName(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-400 mb-1">Motto</label>
+                            <input type="text" value={schoolMotto} onChange={e => setSchoolMotto(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600" />
+                        </div>
+                    </div>
                 </div>
+
                 <div>
-                    <label className="block text-sm font-medium text-gray-300">Motto</label>
-                    <input type="text" value={localSettings.schoolMotto} onChange={e => setLocalSettings({...localSettings, schoolMotto: e.target.value})} className="w-full p-2 bg-slate-700 rounded-md mt-1" />
+                    <h4 className="font-bold text-lg mb-4 border-b border-slate-700 pb-2">Academic Session</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-400 mb-1">Academic Year</label>
+                            <input type="text" value={academicYear} onChange={e => setAcademicYear(e.target.value)} placeholder="e.g. 2024/2025" className="w-full p-2 bg-slate-800 rounded border border-slate-600" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-400 mb-1">Current Term</label>
+                            <select value={currentTerm} onChange={e => setCurrentTerm(Number(e.target.value))} className="w-full p-2 bg-slate-800 rounded border border-slate-600">
+                                <option value={1}>Term 1</option>
+                                <option value={2}>Term 2</option>
+                                <option value={3}>Term 3</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
+                
                 <div>
-                    <label className="block text-sm font-medium text-gray-300">Academic Year</label>
-                    <input type="text" value={localSettings.academicYear} onChange={e => setLocalSettings({...localSettings, academicYear: e.target.value})} className="w-full p-2 bg-slate-700 rounded-md mt-1" />
-                </div>
-                <div className="p-4 bg-slate-900/50 rounded-lg border border-slate-700">
-                    <h4 className="font-bold text-sm mb-2">Sleep Mode</h4>
-                    <div className="flex items-center gap-4 mb-3">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" checked={localSettings.sleepModeConfig?.enabled || false} onChange={e => setLocalSettings({...localSettings, sleepModeConfig: { ...localSettings.sleepModeConfig!, enabled: e.target.checked }})} className="rounded bg-slate-800 border-slate-600" />
-                            <span>Enable Sleep Mode</span>
+                    <h4 className="font-bold text-lg mb-4 border-b border-slate-700 pb-2 flex items-center justify-between">
+                        <span>Sleep Mode (Student Curfew)</span>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" checked={sleepModeEnabled} onChange={e => setSleepModeEnabled(e.target.checked)} className="sr-only peer" />
+                            <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                         </label>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    </h4>
+                    <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-opacity ${sleepModeEnabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
                         <div>
-                            <label className="text-xs text-gray-400">Sleep Time</label>
-                            <input type="time" value={localSettings.sleepModeConfig?.sleepTime || "21:00"} onChange={e => setLocalSettings({...localSettings, sleepModeConfig: { ...localSettings.sleepModeConfig!, sleepTime: e.target.value }})} className="w-full p-2 bg-slate-800 rounded-md mt-1" />
+                            <label className="block text-sm font-medium text-gray-400 mb-1">Sleep Time (Lock)</label>
+                            <input type="time" value={sleepTime} onChange={e => setSleepTime(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600" />
                         </div>
                         <div>
-                            <label className="text-xs text-gray-400">Wake Time</label>
-                            <input type="time" value={localSettings.sleepModeConfig?.wakeTime || "05:00"} onChange={e => setLocalSettings({...localSettings, sleepModeConfig: { ...localSettings.sleepModeConfig!, wakeTime: e.target.value }})} className="w-full p-2 bg-slate-800 rounded-md mt-1" />
+                            <label className="block text-sm font-medium text-gray-400 mb-1">Wake Time (Unlock)</label>
+                            <input type="time" value={wakeTime} onChange={e => setWakeTime(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-600" />
                         </div>
                     </div>
+                    <p className="text-xs text-gray-500 mt-2">When enabled, students cannot access the portal between these hours.</p>
                 </div>
-                <Button onClick={handleSave} disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Configuration'}</Button>
-            </div>
+
+                <div className="pt-4">
+                    <Button type="submit" disabled={isSaving}>
+                        {isSaving ? 'Saving...' : 'Save Configuration'}
+                    </Button>
+                </div>
+            </form>
         </Card>
     );
 };
@@ -196,125 +228,104 @@ const FlyerDesigner: React.FC<{ userProfile: UserProfile }> = ({ userProfile }) 
     const [content, setContent] = useState('');
     const [targetAudience, setTargetAudience] = useState<'all' | 'role' | 'selected'>('all');
     const [targetRoles, setTargetRoles] = useState<UserRole[]>([]);
-    const [publishing, setPublishing] = useState(false);
+    const [isPublishing, setIsPublishing] = useState(false);
 
-    const handlePublish = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!title || !content) {
-            showToast("Title and content are required", "error");
+    const handleRoleToggle = (role: UserRole) => {
+        setTargetRoles(prev => prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]);
+    };
+
+    const handlePublish = async () => {
+        if (!title.trim() || !content.trim()) {
+            showToast("Please add a title and content.", "error");
             return;
         }
-        setPublishing(true);
+        if (targetAudience === 'role' && targetRoles.length === 0) {
+            showToast("Please select at least one role.", "error");
+            return;
+        }
+
+        setIsPublishing(true);
         try {
             const flyerData: Omit<PublishedFlyer, 'id'> = {
                 title,
                 content,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
-                publisherId: userProfile.uid,
-                publisherName: userProfile.name,
                 targetAudience,
                 targetRoles: targetAudience === 'role' ? targetRoles : undefined,
+                publisherId: userProfile.uid,
+                publisherName: userProfile.name,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
             };
 
             await db.collection('publishedFlyers').add(flyerData);
-
-            // --- Send Notifications ---
-            let recipientUids: string[] = [];
-
-            if (targetAudience === 'all') {
-                // Fetch all approved users
-                const usersSnap = await db.collection('users').where('status', '==', 'approved').get();
-                recipientUids = usersSnap.docs.map(doc => doc.id);
-            } else if (targetAudience === 'role' && targetRoles.length > 0) {
-                // Fetch users with specific roles
-                const usersSnap = await db.collection('users')
-                    .where('status', '==', 'approved')
-                    .where('role', 'in', targetRoles)
-                    .get();
-                recipientUids = usersSnap.docs.map(doc => doc.id);
-            }
-
-            // Filter out the publisher
-            recipientUids = recipientUids.filter(uid => uid !== userProfile.uid);
-
-            if (recipientUids.length > 0) {
-                const notificationMessage = `New Notice Posted: ${title}`;
-                const BATCH_SIZE = 500;
-                for (let i = 0; i < recipientUids.length; i += BATCH_SIZE) {
-                    const batch = db.batch();
-                    const chunk = recipientUids.slice(i, i + BATCH_SIZE);
-                    chunk.forEach(uid => {
-                        const ref = db.collection('notifications').doc();
-                        batch.set(ref, {
-                            userId: uid,
-                            senderId: userProfile.uid,
-                            senderName: userProfile.name,
-                            message: notificationMessage,
-                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                            readBy: []
-                        });
-                    });
-                    await batch.commit();
-                }
-            }
-            // --------------------------
-
-            showToast(`Notice published! Sent notifications to ${recipientUids.length} users.`, "success");
+            showToast("Flyer published successfully!", "success");
             setTitle('');
             setContent('');
+            setTargetRoles([]);
+            setTargetAudience('all');
         } catch (err: any) {
-            showToast(`Error: ${err.message}`, "error");
+            showToast(`Failed to publish: ${err.message}`, "error");
         } finally {
-            setPublishing(false);
+            setIsPublishing(false);
         }
     };
 
     return (
         <Card>
-            <h3 className="text-xl font-bold mb-4">Digital Notice Board</h3>
-            <form onSubmit={handlePublish} className="space-y-4">
-                <input type="text" placeholder="Notice Title" value={title} onChange={e => setTitle(e.target.value)} className="w-full p-3 bg-slate-700 rounded-md text-white border border-slate-600 focus:ring-2 focus:ring-blue-500 outline-none text-lg font-bold placeholder-slate-400" />
-                <textarea
-                    placeholder="Write your announcement here..."
-                    value={content}
-                    onChange={e => setContent(e.target.value)}
-                    rows={8}
-                    className="w-full p-4 bg-slate-700 rounded-md text-white border border-slate-600 focus:ring-2 focus:ring-blue-500 outline-none resize-y text-base placeholder-slate-400 leading-relaxed"
+            <h3 className="text-lg font-bold mb-4 text-white">Create Announcement Flyer</h3>
+            <div className="space-y-4">
+                <input 
+                    type="text" 
+                    placeholder="Headline / Title" 
+                    value={title} 
+                    onChange={e => setTitle(e.target.value)} 
+                    className="w-full p-3 bg-slate-800 rounded-lg border border-slate-600 focus:border-blue-500 outline-none text-lg font-bold"
                 />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label className="text-sm block mb-1 text-gray-400">Target Audience</label>
-                        <select value={targetAudience} onChange={e => setTargetAudience(e.target.value as any)} className="w-full p-2 bg-slate-700 rounded-md border border-slate-600 text-white focus:ring-2 focus:ring-blue-500 outline-none">
-                            <option value="all">Everyone</option>
-                            <option value="role">Specific Roles</option>
-                        </select>
+                
+                <textarea 
+                    placeholder="Write your announcement content here..." 
+                    rows={6} 
+                    value={content} 
+                    onChange={e => setContent(e.target.value)} 
+                    className="w-full p-3 bg-slate-800 rounded-lg border border-slate-600 focus:border-blue-500 outline-none resize-none"
+                />
+
+                <div className="space-y-2">
+                    <label className="block text-sm text-gray-400">Target Audience</label>
+                    <div className="flex gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="audience" value="all" checked={targetAudience === 'all'} onChange={() => setTargetAudience('all')} className="text-blue-500" />
+                            <span>Everyone</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="audience" value="role" checked={targetAudience === 'role'} onChange={() => setTargetAudience('role')} className="text-blue-500" />
+                            <span>Specific Roles</span>
+                        </label>
                     </div>
-                    {targetAudience === 'role' && (
-                        <div>
-                            <label className="text-sm block mb-1 text-gray-400">Select Roles</label>
-                            <div className="flex gap-4 p-2 bg-slate-700/50 rounded-md border border-slate-600">
-                                {['student', 'teacher', 'parent'].map(role => (
-                                    <label key={role} className="flex items-center gap-2 cursor-pointer">
-                                        <input type="checkbox" checked={targetRoles.includes(role as UserRole)} onChange={e => {
-                                            if (e.target.checked) setTargetRoles([...targetRoles, role as UserRole]);
-                                            else setTargetRoles(targetRoles.filter(r => r !== role));
-                                        }} className="rounded bg-slate-600 border-slate-500 text-blue-500 focus:ring-blue-500" />
-                                        <span className="capitalize text-gray-200">{role}</span>
-                                    </label>
-                                ))}
-                            </div>
-                        </div>
-                    )}
                 </div>
-                <Button type="submit" disabled={publishing} className="w-full shadow-lg shadow-blue-600/20 py-3">
-                    {publishing ? 'Publishing...' : 'Publish Notice'}
+
+                {targetAudience === 'role' && (
+                    <div className="flex flex-wrap gap-3 p-3 bg-slate-800 rounded-lg border border-slate-700">
+                        {['student', 'teacher', 'parent'].map(role => (
+                            <label key={role} className="flex items-center gap-2 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={targetRoles.includes(role as UserRole)} 
+                                    onChange={() => handleRoleToggle(role as UserRole)}
+                                    className="rounded bg-slate-700 border-slate-500 text-blue-500"
+                                />
+                                <span className="capitalize">{role}s</span>
+                            </label>
+                        ))}
+                    </div>
+                )}
+
+                <Button onClick={handlePublish} disabled={isPublishing} className="w-full shadow-lg shadow-purple-900/20">
+                    {isPublishing ? 'Publishing...' : '📢 Publish to Notice Board'}
                 </Button>
-            </form>
+            </div>
         </Card>
     );
 };
-
-// --- MAIN ADMIN VIEW ---
 
 interface AdminViewProps {
   isSidebarExpanded: boolean;
@@ -334,6 +345,10 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
     const [userRoleFilter, setUserRoleFilter] = useState<UserRole | 'all'>('all');
     const [userClassFilter, setUserClassFilter] = useState<string>('all');
     const [bulkRoleTarget, setBulkRoleTarget] = useState<UserRole>('student');
+    
+    // Snap to Register State
+    const [isSnapModalOpen, setIsSnapModalOpen] = useState(false);
+    const [snapRole, setSnapRole] = useState<UserRole>('student');
     
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     
@@ -371,6 +386,7 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
         });
     }, [allUsers, userSearchTerm, userRoleFilter, userClassFilter]);
 
+    // ... (bulk delete, role change, select all users logic)
     const handleBulkDeleteClick = () => {
         setIsDeleteModalOpen(true);
     };
@@ -398,6 +414,11 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
             setSelectedUserUids([]);
         }
     };
+    
+    const openSnapModal = (role: UserRole) => {
+        setSnapRole(role);
+        setIsSnapModalOpen(true);
+    };
 
     const navItems = [
         { key: 'dashboard', label: 'Command Center', icon: <span className="text-xl">🚀</span> },
@@ -418,6 +439,7 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
     const renderContent = () => {
         switch(activeTab) {
             case 'dashboard':
+                // ... (dashboard content)
                 return (
                     <div className="space-y-6">
                         {/* Header with Gradient */}
@@ -509,6 +531,25 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
                                 {/* Hidden modals for creation can be toggled here if needed */}
                             </div>
                         </div>
+
+                        {/* Bulk Registration Action Card */}
+                        <Card className="bg-gradient-to-br from-indigo-900/50 to-purple-900/50 border-indigo-500/30">
+                            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                                <div>
+                                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                        📸 Bulk Registration
+                                    </h3>
+                                    <p className="text-sm text-indigo-200 mt-1">
+                                        Instantly create accounts by scanning a class list.
+                                    </p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <Button onClick={() => openSnapModal('student')}>Scan Students</Button>
+                                    <Button variant="secondary" onClick={() => openSnapModal('teacher')}>Scan Teachers</Button>
+                                    <Button variant="secondary" onClick={() => openSnapModal('parent')}>Scan Parents</Button>
+                                </div>
+                            </div>
+                        </Card>
 
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                             <div className="lg:col-span-2 space-y-6">
@@ -730,6 +771,13 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
                 isLoading={deletingUsers}
                 confirmButtonText="Yes, Delete Users"
             />
+            {isSnapModalOpen && (
+                <SnapToRegister 
+                    onClose={() => setIsSnapModalOpen(false)} 
+                    roleToRegister={snapRole}
+                    availableStudents={snapRole === 'parent' ? allUsers.filter(u => u.role === 'student') : undefined}
+                />
+            )}
         </div>
     );
 };
