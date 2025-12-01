@@ -32,11 +32,21 @@ const isTimeBefore = (time1: string, time2: string): boolean => {
     return h1 < h2 || (h1 === h2 && m1 < m2);
 };
 
+// Helper for batching array processing
+const chunkArray = <T,>(array: T[], size: number): T[][] => {
+    const chunked: T[][] = [];
+    for (let i = 0; i < array.length; i += size) {
+        chunked.push(array.slice(i, i + size));
+    }
+    return chunked;
+};
+
 const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly = false }) => {
     const { showToast } = useToast();
     const [timetable, setTimetable] = useState<Timetable | null>(null);
     const [loading, setLoading] = useState(true);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [generationProgress, setGenerationProgress] = useState("");
     const [isSaving, setIsSaving] = useState(false);
     const [editMode, setEditMode] = useState(false);
     
@@ -55,7 +65,7 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
     const [targetClasses, setTargetClasses] = useState<string[]>([classId]);
 
     useEffect(() => {
-        // Reset target class when prop changes, unless menu is open
+        // Reset target class when prop changes, unless menu is open to prevent accidental loss of selection
         if (!showGenOptions) {
             setTargetClasses([classId]);
         }
@@ -82,13 +92,8 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
     }, [classId]);
 
     const generateDaySkeleton = useCallback(() => {
-        const slots: { startTime: string; endTime: string; type: 'Lesson' | 'Break' | 'Worship'; fixedName?: string }[] = [];
+        const slots: { startTime: string; endTime: string; type: 'Lesson' | 'Break'; fixedName?: string }[] = [];
         let current = startTime;
-
-        // 1. Morning Worship/Assembly (Fixed 15 mins start)
-        const worshipEnd = addMinutes(current, 15);
-        slots.push({ startTime: current, endTime: worshipEnd, type: 'Worship', fixedName: 'Worship / Assembly' });
-        current = worshipEnd;
 
         // Loop until closing
         let limit = 0;
@@ -133,10 +138,6 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
                  slots.push({ startTime: current, endTime: potentialEnd, type: 'Lesson' });
                  current = potentialEnd;
             } else {
-                // If we are stuck (e.g., current == breakTime but didn't match 'if' above due to string mismatch?), force advance to next break end?
-                // This shouldn't happen with sanitized inputs, but let's be safe.
-                // If current matches a break start but wasn't caught (e.g. 10:15 vs 10:15), it should be caught.
-                // If current is < breakTime but clamped to breakTime, next iter current == breakTime.
                 break; // Break loop if no progress to prevent infinite loop
             }
         }
@@ -150,6 +151,8 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
         }
 
         setIsGenerating(true);
+        setGenerationProgress(`Initializing...`);
+        
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             
@@ -157,104 +160,112 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
             const dayStructure = generateDaySkeleton();
             const structureDescription = JSON.stringify(dayStructure, null, 2);
 
-            // Execute generations in parallel for speed
-            const generatePromises = targetClasses.map(async (targetClassId) => {
-                const subjects = GES_STANDARD_CURRICULUM[targetClassId] || GES_STANDARD_CURRICULUM['Basic 1']; // Fallback
+            // Process classes in chunks to avoid hitting API rate limits
+            const chunks = chunkArray(targetClasses, 3);
+            let completed = 0;
+            let successCount = 0;
+
+            for (const chunk of chunks) {
+                setGenerationProgress(`Generating ${completed + 1}-${Math.min(completed + chunk.length, targetClasses.length)} of ${targetClasses.length}...`);
                 
-                const prompt = `
-                    You are a professional school timetable scheduler. Your goal is to create a balanced, pedagogically sound weekly timetable for a class in Ghana (Level: ${targetClassId}).
-
-                    **Constraints:**
-                    1. **Time Grid:** Use the EXACT time slots provided below. Do not alter start/end times or insert new slots.
-                    2. **Subjects:** Distribute subjects from this list: [${subjects.join(', ')}].
-                    3. **Pedagogy:**
-                       - **Core Subjects** (Math, English, Science) must be in the morning (before first break) or immediately after.
-                       - **Activity Subjects** (Creative Arts, PE, Career Tech) are best in the afternoon.
-                       - **Balance:** Avoid scheduling the same subject back-to-back unless it's a practical session.
-                       - **Variety:** Ensure subjects are spread across the week.
-                       - **Mandatory:** "Religious & Moral Education" and "Our World Our People" must appear at least once.
-                       - **Friday:** Often used for Worship/Assembly or sports in afternoon.
-
-                    **Pre-calculated Daily Grid (Apply to Mon-Fri):**
-                    ${structureDescription}
-
-                    **Specific User Instructions:**
-                    ${customInstructions}
-
-                    **Output:**
-                    Return ONLY a valid JSON object.
-                    Keys: "Monday", "Tuesday", "Wednesday", "Thursday", "Friday".
-                    Value: Array of objects with "subject", "startTime", "endTime", "teacher" (leave teacher as empty string).
+                const promises = chunk.map(async (targetClassId: string) => {
+                    const subjects = GES_STANDARD_CURRICULUM[targetClassId] || GES_STANDARD_CURRICULUM['Basic 1']; // Fallback
                     
-                    Ensure the "type": "Break" or "Worship" slots from the grid are preserved exactly with their names.
-                `;
+                    const prompt = `
+                        You are a professional school timetable scheduler. Your goal is to create a balanced, pedagogically sound weekly timetable for a class in Ghana (Level: ${targetClassId}).
 
-                try {
-                    const response = await ai.models.generateContent({
-                        model: 'gemini-2.5-flash', // Using faster model
-                        contents: prompt,
-                        config: {
-                            responseMimeType: 'application/json',
-                            responseSchema: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    Monday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
-                                    Tuesday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
-                                    Wednesday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
-                                    Thursday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
-                                    Friday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                        **Constraints:**
+                        1. **Time Grid:** Use the EXACT time slots provided below. Do not alter start/end times or insert new slots.
+                        2. **Subjects:** Distribute subjects from this list: [${subjects.join(', ')}].
+                        3. **Pedagogy:**
+                           - **Core Subjects** (Math, English, Science) must be in the morning (before first break) or immediately after.
+                           - **Activity Subjects** (Creative Arts, PE, Career Tech) are best in the afternoon.
+                           - **Balance:** Avoid scheduling the same subject back-to-back unless it's a practical session.
+                           - **Variety:** Ensure subjects are spread across the week.
+                           - **Mandatory:** "Religious & Moral Education" and "Our World Our People" must appear at least once.
+                           - **Friday:** Often used for Worship/Assembly or sports in afternoon.
+
+                        **Pre-calculated Daily Grid (Apply to Mon-Fri):**
+                        ${structureDescription}
+
+                        **Specific User Instructions:**
+                        ${customInstructions}
+
+                        **Output:**
+                        Return ONLY a valid JSON object.
+                        Keys: "Monday", "Tuesday", "Wednesday", "Thursday", "Friday".
+                        Value: Array of objects with "subject", "startTime", "endTime", "teacher" (leave teacher as empty string).
+                        
+                        Ensure the "type": "Break" slots from the grid are preserved exactly with their names (e.g. 'Snack Break', 'Lunch Break').
+                    `;
+
+                    try {
+                        const response = await ai.models.generateContent({
+                            model: 'gemini-2.5-flash', // Using faster model
+                            contents: prompt,
+                            config: {
+                                responseMimeType: 'application/json',
+                                responseSchema: {
+                                    type: Type.OBJECT,
+                                    properties: {
+                                        Monday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                                        Tuesday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                                        Wednesday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                                        Thursday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                                        Friday: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { subject: { type: Type.STRING }, startTime: { type: Type.STRING }, endTime: { type: Type.STRING }, teacher: { type: Type.STRING } } } },
+                                    }
                                 }
                             }
+                        });
+
+                        const generatedData = JSON.parse(response.text);
+                        
+                        const newTimetable = {
+                            id: targetClassId,
+                            classId: targetClassId,
+                            timetableData: generatedData,
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        };
+
+                        // Save immediately to DB
+                        await db.collection('timetables').doc(targetClassId).set(newTimetable);
+                        
+                        // Update local state if currently viewing this class
+                        if (targetClassId === classId) {
+                             setTimetable({
+                                ...newTimetable,
+                                updatedAt: firebase.firestore.Timestamp.now()
+                            } as Timetable);
+                            setEditMode(true);
                         }
-                    });
+                        
+                        return true;
 
-                    const generatedData = JSON.parse(response.text);
-                    
-                    const newTimetable = {
-                        id: targetClassId,
-                        classId: targetClassId,
-                        timetableData: generatedData,
-                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    };
+                    } catch (error) {
+                        console.error(`Generation failed for ${targetClassId}`, error);
+                        return false;
+                    }
+                });
 
-                    // Save immediately to DB
-                    await db.collection('timetables').doc(targetClassId).set(newTimetable);
-                    return { success: true, classId: targetClassId, data: newTimetable };
-
-                } catch (error) {
-                    console.error(`Generation failed for ${targetClassId}`, error);
-                    return { success: false, classId: targetClassId };
-                }
-            });
-
-            const results = await Promise.all(generatePromises);
-            const successful = results.filter(r => r.success);
-
-            // Update local state if current class was generated
-            const currentClassResult = successful.find(r => r.classId === classId);
-            if (currentClassResult && currentClassResult.data) {
-                setTimetable({
-                    ...currentClassResult.data,
-                    updatedAt: firebase.firestore.Timestamp.now()
-                } as Timetable);
-                setEditMode(true);
+                const chunkResults = await Promise.all(promises);
+                successCount += chunkResults.filter(Boolean).length;
+                completed += chunk.length;
             }
 
-            if (successful.length === targetClasses.length) {
-                showToast(`Generated timetables for ${successful.length} classes successfully!`, "success");
-            } else if (successful.length > 0) {
-                showToast(`Generated ${successful.length}/${targetClasses.length} timetables. Some failed.`, "error");
+            if (successCount === targetClasses.length) {
+                showToast(`Successfully generated timetables for all ${successCount} classes!`, "success");
             } else {
-                showToast("Failed to generate timetables. Please try again.", "error");
+                showToast(`Generated ${successCount}/${targetClasses.length} timetables. Check errors for details.`, "error");
             }
             
             setShowGenOptions(false);
 
         } catch (err: any) {
             console.error("AI Generation critical error:", err);
-            showToast("Failed to generate timetable. Please try again.", "error");
+            showToast("Failed to generate timetables. Please try again.", "error");
         } finally {
             setIsGenerating(false);
+            setGenerationProgress("");
         }
     };
 
@@ -288,6 +299,9 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
             prev.includes(cId) ? prev.filter(c => c !== cId) : [...prev, cId]
         );
     };
+    
+    const handleSelectAllClasses = () => setTargetClasses(GES_CLASSES);
+    const handleDeselectAllClasses = () => setTargetClasses([]);
 
     if (loading) return <div className="flex justify-center p-10"><Spinner /></div>;
 
@@ -327,8 +341,8 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
                                 >
                                     {showGenOptions ? 'Hide Options' : 'Options'}
                                 </button>
-                                <Button onClick={handleGenerateAI} disabled={isGenerating} className="shadow-lg shadow-blue-500/20 bg-gradient-to-r from-blue-600 to-indigo-600">
-                                    {isGenerating ? <span className="flex items-center gap-2"><Spinner /> Generating...</span> : '✨ Generate with AI'}
+                                <Button onClick={handleGenerateAI} disabled={isGenerating} className="shadow-lg shadow-blue-500/20 bg-gradient-to-r from-blue-600 to-indigo-600 w-full sm:w-auto">
+                                    {isGenerating ? <span className="flex items-center gap-2"><Spinner /> {generationProgress || 'Generating...'}</span> : `✨ Generate (${targetClasses.length} Classes)`}
                                 </Button>
                                 {timetable && !editMode && !showGenOptions && (
                                     <Button variant="secondary" onClick={() => setEditMode(true)}>Edit Manually</Button>
@@ -344,23 +358,25 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
                         {showGenOptions && (
                             <div className="pt-4 border-t border-slate-700 animate-fade-in-down grid grid-cols-1 lg:grid-cols-3 gap-6">
                                 <div className="lg:col-span-1">
-                                    <label className="block text-sm font-bold text-gray-300 mb-2">Apply to Classes ({targetClasses.length})</label>
-                                    <div className="bg-slate-800 rounded-lg p-2 max-h-40 overflow-y-auto custom-scrollbar border border-slate-600">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="block text-sm font-bold text-gray-300">Apply to Classes ({targetClasses.length})</label>
+                                        <div className="flex gap-2 text-xs">
+                                            <button onClick={handleSelectAllClasses} className="text-blue-400 hover:text-blue-300">Select All</button>
+                                            <button onClick={handleDeselectAllClasses} className="text-slate-500 hover:text-slate-300">None</button>
+                                        </div>
+                                    </div>
+                                    <div className="bg-slate-800 rounded-lg p-2 max-h-40 overflow-y-auto custom-scrollbar border border-slate-600 grid grid-cols-2 gap-1">
                                         {GES_CLASSES.map(c => (
-                                            <label key={c} className="flex items-center gap-2 p-2 hover:bg-slate-700 rounded cursor-pointer text-sm">
+                                            <label key={c} className={`flex items-center gap-2 p-1.5 hover:bg-slate-700 rounded cursor-pointer text-xs ${targetClasses.includes(c) ? 'bg-blue-900/20' : ''}`}>
                                                 <input 
                                                     type="checkbox" 
                                                     checked={targetClasses.includes(c)} 
                                                     onChange={() => toggleClassSelection(c)}
-                                                    className="rounded bg-slate-900 border-slate-500 text-blue-500 focus:ring-blue-500"
+                                                    className="rounded bg-slate-900 border-slate-500 text-blue-500 focus:ring-blue-500 h-3 w-3"
                                                 />
-                                                <span className={targetClasses.includes(c) ? 'text-white' : 'text-gray-400'}>{c}</span>
+                                                <span className={targetClasses.includes(c) ? 'text-white font-medium' : 'text-gray-400'}>{c}</span>
                                             </label>
                                         ))}
-                                    </div>
-                                    <div className="flex justify-between mt-2 text-xs">
-                                        <button onClick={() => setTargetClasses(GES_CLASSES)} className="text-blue-400 hover:text-blue-300">Select All</button>
-                                        <button onClick={() => setTargetClasses([classId])} className="text-slate-500 hover:text-slate-300">Reset</button>
                                     </div>
                                 </div>
                                 <div className="lg:col-span-2">
@@ -368,7 +384,7 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
                                     <textarea 
                                         value={customInstructions} 
                                         onChange={e => setCustomInstructions(e.target.value)}
-                                        placeholder="E.g., 'Ensure Physical Education is on Friday morning' or 'Make Maths immediately after breaks'. 'Worship' and 'Breaks' are added automatically based on the times above."
+                                        placeholder="E.g., 'Ensure Physical Education is on Friday morning' or 'Make Maths immediately after breaks'. 'Breaks' are added automatically based on the times above."
                                         className="w-full h-40 p-3 bg-slate-800 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none placeholder-slate-500 text-slate-200"
                                     />
                                 </div>
