@@ -6,6 +6,7 @@ import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
 import LineChart from './common/charts/LineChart';
+import HeatMap from './common/charts/HeatMap';
 
 interface AdminAttendanceDashboardProps {
     allUsers: UserProfile[];
@@ -14,91 +15,102 @@ interface AdminAttendanceDashboardProps {
 
 const AdminAttendanceDashboard: React.FC<AdminAttendanceDashboardProps> = ({ allUsers, attendanceRecords }) => {
     const [selectedClass, setSelectedClass] = useState('all');
+    const [dateRange, setDateRange] = useState<'7' | '30' | '90'>('30');
     const [loadingInsight, setLoadingInsight] = useState(false);
     const [aiInsight, setAiInsight] = useState('');
 
-    const students = useMemo(() => allUsers.filter(u => u.role === 'student'), [allUsers]);
-    
-    // Filter records for the last 30 days
+    // --- Data Processing ---
+
+    // 1. Filter Records by Date
     const filteredRecords = useMemo(() => {
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        return attendanceRecords.filter(rec => new Date(rec.date) >= thirtyDaysAgo);
-    }, [attendanceRecords]);
-    
-    // Process data for charts and stats
-    const processedData = useMemo(() => {
+        const now = new Date();
+        const pastDate = new Date();
+        pastDate.setDate(now.getDate() - parseInt(dateRange));
+        
+        return attendanceRecords
+            .filter(rec => new Date(rec.date) >= pastDate)
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    }, [attendanceRecords, dateRange]);
+
+    // 2. Aggregate Data based on View (All School vs Specific Class)
+    const stats = useMemo(() => {
         const recordsToProcess = selectedClass === 'all' 
             ? filteredRecords 
             : filteredRecords.filter(rec => rec.classId === selectedClass);
+
+        // Daily Stats for Charts
+        const dailyStats: Record<string, { present: number; total: number }> = {};
         
-        const dailyStats: { [date: string]: { present: number; total: number } } = {};
+        // Student Stats Accumulator
+        const studentStats: Record<string, { present: number; absent: number; late: number; total: number; name: string; class: string }> = {};
 
-        for (const record of recordsToProcess) {
-            if (!dailyStats[record.date]) {
-                dailyStats[record.date] = { present: 0, total: 0 };
-            }
-            const presentCount = Object.values(record.records || {}).filter(status => status === 'Present').length;
-            dailyStats[record.date].present += presentCount;
-            dailyStats[record.date].total += (record.studentUids || []).length;
-        }
+        // Initialize student stats for the relevant scope to ensure 0s are counted
+        const scopeStudents = allUsers.filter(u => u.role === 'student' && (selectedClass === 'all' || u.class === selectedClass));
+        scopeStudents.forEach(s => {
+            studentStats[s.uid] = { present: 0, absent: 0, late: 0, total: 0, name: s.name, class: s.class || 'N/A' };
+        });
 
-        const chartData = Object.entries(dailyStats).map(([date, stats]) => ({
-            label: new Date(date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-            value: stats.total > 0 ? (stats.present / stats.total) * 100 : 0,
-        })).sort((a,b) => new Date(a.label + ', ' + new Date().getFullYear()).getTime() - new Date(b.label + ', ' + new Date().getFullYear()).getTime());
-
-        const averageAttendance = chartData.length > 0 ? chartData.reduce((sum, day) => sum + day.value, 0) / chartData.length : 0;
-        
-        let trend = 'Stable';
-        if (chartData.length > 10) {
-            const firstHalfAvg = chartData.slice(0, Math.floor(chartData.length / 2)).reduce((sum, day) => sum + day.value, 0) / Math.floor(chartData.length / 2);
-            const secondHalfAvg = chartData.slice(Math.floor(chartData.length / 2)).reduce((sum, day) => sum + day.value, 0) / Math.ceil(chartData.length / 2);
-            if (secondHalfAvg > firstHalfAvg + 1) trend = 'Improving';
-            if (secondHalfAvg < firstHalfAvg - 1) trend = 'Declining';
-        }
-
-        return { chartData, averageAttendance, trend };
-    }, [selectedClass, filteredRecords, students]);
-
-    const schoolWideStats = useMemo(() => {
-        const classAverages: { classId: string, average: number, absences: number, lates: number }[] = [];
-        for (const classId of GES_CLASSES) {
-            const classRecords = filteredRecords.filter(r => r.classId === classId);
-            if (classRecords.length === 0) continue;
-
-            let totalAbsences = 0;
-            let totalLates = 0;
+        recordsToProcess.forEach(record => {
+            if (!dailyStats[record.date]) dailyStats[record.date] = { present: 0, total: 0 };
             
-            const uniqueDays = new Set(classRecords.map(rec => rec.date));
+            // Iterate through actual records in the doc
+            if (record.records) {
+                Object.entries(record.records).forEach(([uid, status]) => {
+                    // Update Daily
+                    if (status === 'Present' || status === 'Late') dailyStats[record.date].present++;
+                    dailyStats[record.date].total++;
 
-            classRecords.forEach(rec => {
-                totalAbsences += Object.values(rec.records || {}).filter(s => s === 'Absent').length;
-                totalLates += Object.values(rec.records || {}).filter(s => s === 'Late').length;
-            });
-            
-            let dailyPercentages: number[] = [];
-            uniqueDays.forEach(date => {
-                const dayRecords = classRecords.filter(r => r.date === date);
-                let dayPresent = 0;
-                let dayTotal = 0;
-                dayRecords.forEach(rec => {
-                    dayPresent += Object.values(rec.records || {}).filter(s => s === 'Present').length;
-                    dayTotal += (rec.studentUids || []).length;
+                    // Update Student Specific
+                    if (studentStats[uid]) {
+                        studentStats[uid].total++;
+                        if (status === 'Present') studentStats[uid].present++;
+                        else if (status === 'Absent') studentStats[uid].absent++;
+                        else if (status === 'Late') studentStats[uid].late++;
+                    }
                 });
-                if(dayTotal > 0) dailyPercentages.push((dayPresent/dayTotal) * 100);
-            });
+            }
+        });
 
-            const average = dailyPercentages.length > 0 ? dailyPercentages.reduce((a,b) => a+b, 0) / dailyPercentages.length : 0;
-            classAverages.push({ classId, average, absences: totalAbsences, lates: totalLates });
-        }
-        
-        classAverages.sort((a,b) => b.average - a.average);
-        const bestClass = classAverages[0];
-        const worstClass = classAverages[classAverages.length - 1];
-        
-        return { classAverages, bestClass, worstClass };
-    }, [filteredRecords]);
+        // Chart Data
+        const chartData = Object.entries(dailyStats).map(([date, data]) => ({
+            label: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            date: date,
+            value: data.total > 0 ? (data.present / data.total) * 100 : 0
+        })).sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        // KPIs
+        const totalPresent = Object.values(studentStats).reduce((acc, s) => acc + s.present + s.late, 0);
+        const totalPossible = Object.values(studentStats).reduce((acc, s) => acc + s.total, 0);
+        const averageAttendance = totalPossible > 0 ? (totalPresent / totalPossible) * 100 : 0;
+
+        const atRiskCount = Object.values(studentStats).filter(s => s.total > 0 && ((s.present + s.late) / s.total) < 0.85).length;
+        const perfectCount = Object.values(studentStats).filter(s => s.total > 0 && s.absent === 0).length;
+
+        // Class Breakdown (for "All" view)
+        const classBreakdown = GES_CLASSES.map(cls => {
+            const classStudents = Object.values(studentStats).filter(s => s.class === cls);
+            const clsPresent = classStudents.reduce((acc, s) => acc + s.present + s.late, 0);
+            const clsTotal = classStudents.reduce((acc, s) => acc + s.total, 0);
+            return {
+                id: cls,
+                avg: clsTotal > 0 ? (clsPresent / clsTotal) * 100 : 0,
+                absences: classStudents.reduce((acc, s) => acc + s.absent, 0),
+                lates: classStudents.reduce((acc, s) => acc + s.late, 0)
+            };
+        }).sort((a,b) => b.avg - a.avg); // Best performing first
+
+        // Student Breakdown (for "Class" view)
+        const studentBreakdown = Object.values(studentStats)
+            .filter(s => s.total > 0) // Only show active students with records in this period
+            .map(s => ({
+                ...s,
+                rate: (s.present + s.late) / s.total * 100
+            }))
+            .sort((a, b) => a.rate - b.rate); // Risk students first
+
+        return { chartData, averageAttendance, atRiskCount, perfectCount, classBreakdown, studentBreakdown };
+    }, [selectedClass, filteredRecords, allUsers]);
+
 
     const handleGenerateInsight = async () => {
         setLoadingInsight(true);
@@ -106,95 +118,237 @@ const AdminAttendanceDashboard: React.FC<AdminAttendanceDashboardProps> = ({ all
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const prompt = `
-                You are a professional school data analyst providing insights to a school administrator. Based on the following attendance data for the last 30 days, provide a concise report.
-
-                **Data Summary:**
-                - Overall School Attendance Rate: ${processedData.averageAttendance.toFixed(1)}%
-                - School-wide Trend: ${processedData.trend}
-                - Class with Highest Attendance: ${schoolWideStats.bestClass?.classId || 'N/A'} at ${schoolWideStats.bestClass?.average.toFixed(1) || 'N/A'}%
-                - Class with Lowest Attendance: ${schoolWideStats.worstClass?.classId || 'N/A'} at ${schoolWideStats.worstClass?.average.toFixed(1) || 'N/A'}%
-                - Notable Daily Trend: Analysis of daily data suggests attendance may be lowest on Mondays and Fridays.
-
-                **Your Task:**
-                1.  **Executive Summary:** Write a 2-3 sentence professional summary of the school's attendance.
-                2.  **Key Observations:** In bullet points, highlight the most important positive and negative trends. Identify any specific classes or days that require attention.
-                3.  **Recommendations for Event Planning:** Based on the data, provide actionable guidance for scheduling future school events to maximize student participation. For example, suggest the best and worst days of the week for events.
+                Analyze this school attendance data for a professional report.
+                Context: Last ${dateRange} days. Scope: ${selectedClass === 'all' ? 'Entire School' : selectedClass}.
                 
-                Format your response using Markdown.
+                **Key Metrics:**
+                - Average Attendance: ${stats.averageAttendance.toFixed(1)}%
+                - Students At Risk (<85%): ${stats.atRiskCount}
+                - Perfect Attendance: ${stats.perfectCount}
+                
+                **Task:**
+                1. Provide an executive summary of the attendance health.
+                2. Identify if the 'At Risk' number is concerning (based on typical school standards).
+                3. Suggest 2 specific administrative actions to improve attendance based on these numbers.
+                
+                Keep it concise and professional. Use Markdown.
             `;
             const response = await ai.models.generateContent({ model: 'gemini-3-pro-preview', contents: prompt });
             setAiInsight(response.text);
         } catch (err) {
-            setAiInsight("An error occurred while generating insights. Please try again.");
+            setAiInsight("Unable to generate insight at this time.");
         } finally {
             setLoadingInsight(false);
         }
     };
 
+    const handleExportCSV = () => {
+        let csvContent = "data:text/csv;charset=utf-8,";
+        
+        if (selectedClass === 'all') {
+            csvContent += "Class,Average Attendance (%),Total Absences,Total Lates\n";
+            stats.classBreakdown.forEach(row => {
+                csvContent += `${row.id},${row.avg.toFixed(2)},${row.absences},${row.lates}\n`;
+            });
+        } else {
+            csvContent += "Student Name,Attendance Rate (%),Present,Absent,Late,Total Days\n";
+            stats.studentBreakdown.forEach(row => {
+                csvContent += `${row.name},${row.rate.toFixed(2)},${row.present},${row.absent},${row.late},${row.total}\n`;
+            });
+        }
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `attendance_report_${selectedClass}_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     return (
         <div className="space-y-6">
-            <h2 className="text-3xl font-bold">Attendance Dashboard</h2>
-            <div className="flex gap-4 items-center">
-                 <label htmlFor="class-filter" className="text-sm font-medium">View Data For:</label>
-                 <select id="class-filter" value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600">
-                    <option value="all">All School</option>
-                    {GES_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                 </select>
+            {/* Header Controls */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-800">
+                <div>
+                    <h2 className="text-2xl font-bold text-white">Attendance Intelligence</h2>
+                    <p className="text-xs text-slate-400">Monitor trends and identify at-risk students.</p>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
+                        {['7', '30', '90'].map(d => (
+                            <button 
+                                key={d}
+                                onClick={() => setDateRange(d as any)}
+                                className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${dateRange === d ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                            >
+                                {d} Days
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="h-8 w-px bg-slate-700 hidden md:block"></div>
+
+                    <select 
+                        value={selectedClass} 
+                        onChange={e => setSelectedClass(e.target.value)} 
+                        className="p-2 bg-slate-800 rounded-lg border border-slate-700 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    >
+                        <option value="all">All Classes</option>
+                        {GES_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+
+                    <Button variant="secondary" size="sm" onClick={handleExportCSV}>
+                        Export CSV
+                    </Button>
+                </div>
             </div>
             
-            <Card>
-                <h3 className="text-xl font-semibold mb-4">Attendance Trend (Last 30 Days) - {selectedClass === 'all' ? 'All School' : selectedClass}</h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                    <div className="p-4 bg-slate-900/50 rounded-lg text-center"><p className="text-sm text-gray-400">Average Attendance</p><p className="text-2xl font-bold">{processedData.averageAttendance.toFixed(1)}%</p></div>
-                    <div className="p-4 bg-slate-900/50 rounded-lg text-center"><p className="text-sm text-gray-400">30-Day Trend</p><p className="text-2xl font-bold">{processedData.trend}</p></div>
-                    <div className="p-4 bg-slate-900/50 rounded-lg text-center"><p className="text-sm text-gray-400">Top Class</p><p className="text-2xl font-bold">{schoolWideStats.bestClass?.classId || 'N/A'}</p></div>
-                    <div className="p-4 bg-slate-900/50 rounded-lg text-center"><p className="text-sm text-gray-400">Lowest Class</p><p className="text-2xl font-bold">{schoolWideStats.worstClass?.classId || 'N/A'}</p></div>
-                </div>
-                <div className="h-72">
-                    <LineChart data={processedData.chartData} />
-                </div>
-            </Card>
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="flex items-center justify-between !bg-slate-800/80">
+                    <div>
+                        <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Avg. Attendance</p>
+                        <p className={`text-3xl font-black mt-1 ${stats.averageAttendance >= 90 ? 'text-green-400' : stats.averageAttendance >= 80 ? 'text-yellow-400' : 'text-red-400'}`}>
+                            {stats.averageAttendance.toFixed(1)}%
+                        </p>
+                    </div>
+                    <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center text-2xl">📊</div>
+                </Card>
+                <Card className="flex items-center justify-between !bg-slate-800/80">
+                    <div>
+                        <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">At Risk Students</p>
+                        <p className="text-3xl font-black mt-1 text-red-400">{stats.atRiskCount}</p>
+                        <p className="text-[10px] text-red-300/50">Below 85% attendance</p>
+                    </div>
+                    <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center text-2xl">⚠️</div>
+                </Card>
+                <Card className="flex items-center justify-between !bg-slate-800/80">
+                    <div>
+                        <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Perfect Record</p>
+                        <p className="text-3xl font-black mt-1 text-green-400">{stats.perfectCount}</p>
+                    </div>
+                    <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center text-2xl">🏆</div>
+                </Card>
+            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                 <Card>
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-xl font-semibold">AI Analysis & Guidance</h3>
-                        <Button onClick={handleGenerateInsight} disabled={loadingInsight}>
-                            {loadingInsight ? <Spinner /> : 'Generate Analysis'}
+            {/* Visualizations Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 h-80">
+                    <Card className="h-full flex flex-col">
+                        <h3 className="text-sm font-bold text-slate-300 mb-4 uppercase">Attendance Trend</h3>
+                        <div className="flex-grow">
+                            <LineChart data={stats.chartData} />
+                        </div>
+                    </Card>
+                </div>
+                <div className="lg:col-span-1 h-80">
+                    <HeatMap data={stats.chartData} title="Intensity Map" />
+                </div>
+            </div>
+
+            {/* Detailed Breakdown / AI Insight */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                 {/* Left: Table Data */}
+                 <div className="lg:col-span-2">
+                    <Card className="h-full flex flex-col">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold text-white">
+                                {selectedClass === 'all' ? 'Class Performance Ranking' : `Student Roster: ${selectedClass}`}
+                            </h3>
+                        </div>
+                        <div className="flex-grow overflow-y-auto max-h-[400px] custom-scrollbar pr-2">
+                            {selectedClass === 'all' ? (
+                                <table className="w-full text-sm text-left">
+                                    <thead className="text-xs text-slate-400 uppercase bg-slate-800 sticky top-0">
+                                        <tr>
+                                            <th className="p-3 rounded-tl-lg">Class</th>
+                                            <th className="p-3 w-1/3">Attendance Rate</th>
+                                            <th className="p-3 text-right">Absences</th>
+                                            <th className="p-3 text-right rounded-tr-lg">Lates</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-700/50">
+                                        {stats.classBreakdown.map(cls => (
+                                            <tr key={cls.id} className="hover:bg-slate-800/30 transition-colors">
+                                                <td className="p-3 font-medium text-white">{cls.id}</td>
+                                                <td className="p-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs font-mono w-10">{cls.avg.toFixed(0)}%</span>
+                                                        <div className="flex-grow bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                                                            <div className={`h-full rounded-full ${cls.avg >= 90 ? 'bg-green-500' : cls.avg >= 80 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${cls.avg}%` }}></div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="p-3 text-right text-slate-400">{cls.absences}</td>
+                                                <td className="p-3 text-right text-slate-400">{cls.lates}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <table className="w-full text-sm text-left">
+                                    <thead className="text-xs text-slate-400 uppercase bg-slate-800 sticky top-0">
+                                        <tr>
+                                            <th className="p-3 rounded-tl-lg">Student</th>
+                                            <th className="p-3">Status</th>
+                                            <th className="p-3 text-right">Present</th>
+                                            <th className="p-3 text-right">Absent</th>
+                                            <th className="p-3 text-right rounded-tr-lg">Late</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-700/50">
+                                        {stats.studentBreakdown.map(student => (
+                                            <tr key={student.name} className="hover:bg-slate-800/30 transition-colors">
+                                                <td className="p-3 font-medium text-white">{student.name}</td>
+                                                <td className="p-3">
+                                                    {student.rate < 85 ? (
+                                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-900/30 text-red-400 border border-red-500/20">
+                                                            At Risk ({student.rate.toFixed(0)}%)
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-900/30 text-green-400 border border-green-500/20">
+                                                            Good ({student.rate.toFixed(0)}%)
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="p-3 text-right text-green-300">{student.present}</td>
+                                                <td className="p-3 text-right text-red-300 font-bold">{student.absent}</td>
+                                                <td className="p-3 text-right text-yellow-300">{student.late}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </Card>
+                 </div>
+
+                 {/* Right: AI & Summary */}
+                 <div className="lg:col-span-1">
+                    <Card className="h-full bg-gradient-to-b from-slate-800 to-slate-900 border-none flex flex-col">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">AI Admin Assistant</h3>
+                            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">🤖</div>
+                        </div>
+                        
+                        <div className="flex-grow bg-slate-900/50 rounded-xl p-4 mb-4 overflow-y-auto border border-slate-700/50">
+                            {aiInsight ? (
+                                <div className="prose-styles prose-invert text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: aiInsight.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/(\r\n|\n|\r)/gm,"<br/>") }}></div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full text-slate-500 text-center gap-2">
+                                    <span className="text-3xl opacity-50">💡</span>
+                                    <p className="text-xs">Generate professional insights and recommendations based on the current data.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <Button onClick={handleGenerateInsight} disabled={loadingInsight} className="w-full shadow-lg shadow-purple-900/20">
+                            {loadingInsight ? <Spinner /> : 'Generate Report Analysis'}
                         </Button>
-                    </div>
-                    {aiInsight ? (
-                        <div className="prose-styles prose-invert max-h-96 overflow-y-auto" dangerouslySetInnerHTML={{ __html: aiInsight.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/(\r\n|\n|\r)/gm,"<br/>") }}></div>
-                    ) : (
-                        <p className="text-gray-400 text-center py-8">Click "Generate Analysis" to get AI-powered insights and recommendations for event planning based on attendance trends.</p>
-                    )}
-                 </Card>
-                 <Card>
-                    <h3 className="text-xl font-semibold mb-4">Class Breakdown (Last 30 Days)</h3>
-                    <div className="max-h-96 overflow-y-auto">
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="text-left bg-slate-700">
-                                    <th className="p-2">Class</th>
-                                    <th className="p-2 text-center">Avg. Attendance</th>
-                                    <th className="p-2 text-center">Total Absences</th>
-                                    <th className="p-2 text-center">Total Lates</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {schoolWideStats.classAverages.map(c => (
-                                    <tr key={c.classId} className="border-b border-slate-700">
-                                        <td className="p-2 font-semibold">{c.classId}</td>
-                                        <td className="p-2 text-center">{c.average.toFixed(1)}%</td>
-                                        <td className="p-2 text-center">{c.absences}</td>
-                                        <td className="p-2 text-center">{c.lates}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                 </Card>
+                    </Card>
+                 </div>
             </div>
         </div>
     );

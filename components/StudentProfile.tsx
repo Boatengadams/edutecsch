@@ -27,10 +27,18 @@ const gradeToNumeric = (grade?: string): number | null => {
     return null;
 };
 
+interface StudentProfileProps {
+    userProfile: UserProfile;
+    assignments: Assignment[];
+    submissions: Submission[];
+    viewer?: 'student' | 'parent' | 'teacher';
+}
 
-const StudentProfile: React.FC<{ userProfile: UserProfile; assignments: Assignment[]; submissions: Submission[] }> = ({ userProfile, assignments, submissions }) => {
+const StudentProfile: React.FC<StudentProfileProps> = ({ userProfile, assignments, submissions, viewer = 'student' }) => {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [animateProgress, setAnimateProgress] = useState(false);
+  
+  const isStudent = viewer === 'student';
   
   const xpForNextLevel = (userProfile.level || 1) * 100;
   const currentXP = userProfile.xp || 0;
@@ -108,33 +116,43 @@ const StudentProfile: React.FC<{ userProfile: UserProfile; assignments: Assignme
           <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-4xl font-bold text-white shadow-lg">
             {(userProfile.name || '?').charAt(0)}
           </div>
-          <div className="flex-grow">
+          <div className="flex-grow text-center sm:text-left">
             <h2 className="text-3xl font-bold glow-text">{userProfile.name}</h2>
             <p className="text-gray-400">{userProfile.email}</p>
             <p className="text-gray-300 font-semibold mt-1">Class: {userProfile.class}</p>
           </div>
-           <div className="sm:ml-auto flex-shrink-0 mt-4 sm:mt-0 flex flex-col items-end gap-2">
-             <div className="bg-slate-900/50 px-4 py-2 rounded-lg border border-slate-700 text-right">
-                 <p className="text-xs text-gray-400 uppercase tracking-wider">Total Points</p>
-                 <p className="text-xl font-mono font-bold text-yellow-400">{userProfile.xp || 0} XP</p>
-             </div>
-            <Button onClick={() => setShowChangePassword(true)} variant="secondary" size="sm">Change Password</Button>
-          </div>
+           
+           {isStudent ? (
+               <div className="sm:ml-auto flex-shrink-0 mt-4 sm:mt-0 flex flex-col items-end gap-2 w-full sm:w-auto">
+                 <div className="bg-slate-900/50 px-4 py-2 rounded-lg border border-slate-700 text-right w-full sm:w-auto">
+                     <p className="text-xs text-gray-400 uppercase tracking-wider">Total Points</p>
+                     <p className="text-xl font-mono font-bold text-yellow-400">{userProfile.xp || 0} XP</p>
+                 </div>
+                <Button onClick={() => setShowChangePassword(true)} variant="secondary" size="sm" className="w-full sm:w-auto">Change Password</Button>
+              </div>
+           ) : (
+               <div className="sm:ml-auto flex-shrink-0 mt-4 sm:mt-0 w-full sm:w-auto">
+                    <div className="bg-slate-900/50 px-4 py-2 rounded-lg border border-slate-700 text-center sm:text-right w-full sm:w-auto">
+                        <p className="text-xs text-gray-400 uppercase tracking-wider">Academic Score</p>
+                        <p className="text-3xl font-mono font-bold text-blue-400">{dashboardData.overallAverageGrade ? `${dashboardData.overallAverageGrade.toFixed(1)}%` : 'N/A'}</p>
+                    </div>
+               </div>
+           )}
         </div>
       </Card>
       
       <Card>
-        <h3 className="text-xl font-bold mb-4">Academic Progress Summary</h3>
+        <h3 className="text-xl font-bold mb-4">{isStudent ? "My Progress" : `${userProfile.name.split(' ')[0]}'s Progress Summary`}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-            <div className="text-center p-4 bg-slate-900/50 rounded-lg">
+            <div className="text-center p-4 bg-slate-900/50 rounded-lg border border-slate-800">
                 <p className="text-sm text-gray-400">Overall Average</p>
                 <p className="text-3xl font-bold text-blue-400">{dashboardData.overallAverageGrade ? `${dashboardData.overallAverageGrade.toFixed(1)}%` : 'N/A'}</p>
             </div>
-            <div className="text-center p-4 bg-slate-900/50 rounded-lg">
+            <div className="text-center p-4 bg-slate-900/50 rounded-lg border border-slate-800">
                 <p className="text-sm text-gray-400">Completion Rate</p>
                 <p className="text-3xl font-bold text-green-400">{dashboardData.completionRate.toFixed(0)}%</p>
             </div>
-            <div className="text-center p-4 bg-slate-900/50 rounded-lg">
+            <div className="text-center p-4 bg-slate-900/50 rounded-lg border border-slate-800">
                 <p className="text-sm text-gray-400">On-Time Submission</p>
                 <p className="text-3xl font-bold text-green-400">{dashboardData.onTimeRate}{dashboardData.onTimeRate !== 'N/A' && '%'}</p>
             </div>
@@ -192,13 +210,15 @@ const StudentProfile: React.FC<{ userProfile: UserProfile; assignments: Assignme
               ))}
             </div>
           ) : (
-            <p className="text-gray-500">No badges earned yet. Keep learning!</p>
+            <p className="text-gray-500">
+                {isStudent ? "No badges earned yet. Keep learning!" : "No badges earned yet."}
+            </p>
           )}
         </Card>
       </div>
 
       <Card>
-        <h3 className="text-xl font-bold mb-4">My Portfolio</h3>
+        <h3 className="text-xl font-bold mb-4">{isStudent ? "My Portfolio" : "Student Portfolio"}</h3>
         {userProfile.portfolioItems && userProfile.portfolioItems.length > 0 ? (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {userProfile.portfolioItems.map(item => (
@@ -217,10 +237,14 @@ const StudentProfile: React.FC<{ userProfile: UserProfile; assignments: Assignme
             ))}
           </div>
         ) : (
-          <p className="text-gray-500">Your portfolio is empty. Submit assignments to add items!</p>
+          <p className="text-gray-500 text-center py-8 bg-slate-900/30 rounded-lg border border-dashed border-slate-700">
+            {isStudent 
+                ? "Your portfolio is empty. Submit assignments to add items!" 
+                : "No portfolio items have been uploaded yet."}
+          </p>
         )}
       </Card>
-      {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
+      {isStudent && showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
     </div>
   );
 };
