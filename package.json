@@ -15,7 +15,8 @@
     "@google/genai": "^1.2.5",
     "html2canvas": "^1.4.1",
     "firebase-functions": "^6.6.0",
-    "firebase-admin": "^13.5.0"
+    "firebase-admin": "^13.5.0",
+    "react-draggable": "^4.5.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

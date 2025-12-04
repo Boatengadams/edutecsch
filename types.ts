@@ -7,6 +7,43 @@ import 'firebase/compat/firestore';
 export type UserRole = 'student' | 'teacher' | 'parent' | 'admin';
 export type AdminType = 'super' | 'co-admin';
 
+// --- SCIENCE LAB TYPES ---
+export type LabType = 'Physics' | 'Chemistry' | 'Biology';
+export type LabLevel = 'Primary' | 'SHS' | 'University';
+
+export interface LabEquipment {
+  id: string;
+  name: string;
+  type: 'tool' | 'chemical' | 'specimen' | 'glassware' | 'device';
+  icon: string; // Emoji or SVG path
+  description: string;
+  properties?: {
+    voltage?: number;
+    resistance?: number;
+    ph?: number;
+    volume?: number;
+    temperature?: number;
+    state?: 'solid' | 'liquid' | 'gas';
+    magnification?: number;
+    color?: string;
+  };
+}
+
+export interface ExperimentState {
+  benchItems: {
+    instanceId: string;
+    equipmentId: string;
+    x: number;
+    y: number;
+    properties: any; // Dynamic properties based on simulation
+  }[];
+  activeReaction?: string; // Description of current chemical reaction
+  microscopeSlide?: string; // Current slide being viewed
+  microscopeZoom: number;
+  safetyGearEquipped: boolean;
+  logs: string[]; // Lab report logs
+}
+
 // --- ACTIVITY LOGGING ---
 export interface UserActivityLog {
   id: string;
@@ -147,9 +184,8 @@ export interface LiveLessonStep {
   question: {
     id: string;
     text: string;
-    options?: string[]; // Optional for theory
+    options: string[];
     correctAnswer: string;
-    type?: 'Objective' | 'Theory'; // Add type
   } | null;
 }
 
@@ -343,6 +379,7 @@ export interface TeachingMaterial {
   id: string;
   title: string;
   targetClasses: string[];
+  subject?: string;
   uploaderId: string;
   uploaderName: string;
   originalFileName: string;
@@ -418,7 +455,12 @@ export interface Slide {
   imageUrl: string;
   imageStyle?: 'contain' | 'cover';
   audioUrl?: string;
+  // New fields for rich content
+  teacherScript?: string;
+  summaryScript?: string;
+  imagePrompt?: string;
 }
+
 export interface Presentation {
   slides: Slide[];
 }

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuthentication } from '../hooks/useAuth';
 import { db, firebase, storage } from '../services/firebase';
-import type { UserProfile, Assignment, Submission, Notification, SchoolEvent, Timetable, AttendanceRecord, Group, GroupMessage, PublishedFlyer, LiveLesson, UserRole } from '../types';
+import { UserProfile, Assignment, Submission, Notification, SchoolEvent, Timetable, AttendanceRecord, Group, GroupMessage, PublishedFlyer, LiveLesson, UserRole, TeachingMaterial, GES_SUBJECTS } from '../types';
 import Card from './common/Card';
 import Spinner from './common/Spinner';
 import Button from './common/Button';
@@ -16,6 +16,7 @@ import StudentProfile from './StudentProfile';
 import StudentLiveClassroom from './StudentLiveClassroom';
 import StudentStudyMode from './StudentStudyMode';
 import ChatInput from './common/ChatInput';
+import ScienceLab from './ScienceLab/ScienceLab';
 
 interface StudentViewProps {
   isSidebarExpanded: boolean;
@@ -59,6 +60,10 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
   const [publishedFlyers, setPublishedFlyers] = useState<PublishedFlyer[]>([]);
   const [selectedFlyer, setSelectedFlyer] = useState<PublishedFlyer | null>(null);
   
+  // New State for Teaching Materials
+  const [teachingMaterials, setTeachingMaterials] = useState<TeachingMaterial[]>([]);
+  const [materialSubjectFilter, setMaterialSubjectFilter] = useState('All');
+
   // Assignment View State
   const [viewingAssignment, setViewingAssignment] = useState<Assignment | null>(null);
   const [textSubmission, setTextSubmission] = useState('');
@@ -184,6 +189,18 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
             setTeachers(snap.docs.map(d => d.data() as UserProfile));
         }));
     }
+    
+    // 10. Teaching Materials (Fetch where target contains class OR 'All')
+    // Since firestore can't do OR on array-contains easily, we fetch with one array-contains-any query
+    if (userProfile.class) {
+        const materialsQuery = db.collection('teachingMaterials')
+            .where('targetClasses', 'array-contains-any', [userProfile.class, 'All'])
+            .orderBy('createdAt', 'desc');
+            
+        unsubscribers.push(materialsQuery.onSnapshot(snap => {
+            setTeachingMaterials(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeachingMaterial)));
+        }));
+    }
 
     setLoading(false);
     return () => unsubscribers.forEach(unsub => unsub());
@@ -207,6 +224,14 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
           case 'group_work':
               context = studentGroup ? `The student is working on a group project: "${studentGroup.assignmentTitle}".` : "The student is not currently in a group.";
               prompts.push('How can we divide tasks for our group project?');
+              break;
+          case 'resources':
+              context = "The student is browsing teaching materials and resources uploaded by teachers.";
+              prompts.push('What are the key takeaways from the Science notes?');
+              break;
+          case 'science_lab':
+              context = "The student is in the virtual Science Lab.";
+              prompts.push('How do I use the microscope?');
               break;
           default:
               context = "The student is on their dashboard.";
@@ -346,6 +371,34 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
           setIsSendingGroupMessage(false);
       }
   };
+  
+  const filteredMaterials = useMemo(() => {
+      if (materialSubjectFilter === 'All') return teachingMaterials;
+      return teachingMaterials.filter(m => m.subject === materialSubjectFilter);
+  }, [teachingMaterials, materialSubjectFilter]);
+  
+  // Automatic download handler
+    const handleDownloadMaterial = async (url: string, filename: string) => {
+        try {
+            showToast("Downloading...", 'success');
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Network response was not ok');
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+        } catch (error) {
+            console.error("Download failed:", error);
+            showToast("Download failed. Opening in new tab.", 'error');
+            window.open(url, '_blank');
+        }
+    };
 
   if (!user || !userProfile) return <div className="flex h-screen justify-center items-center"><Spinner /></div>;
 
@@ -353,8 +406,10 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
       { key: 'dashboard', label: 'Dashboard', icon: '🚀' },
       { key: 'assignments', label: 'Assignments', icon: '📚' },
       { key: 'live_lesson', label: <span className="flex items-center">Live Class {liveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: '📡' },
+      { key: 'science_lab', label: 'Virtual Lab', icon: '🧪' },
       { key: 'group_work', label: 'Group Work', icon: '🤝' },
       { key: 'study_mode', label: 'Study Mode', icon: '🧠' },
+      { key: 'resources', label: 'Study Materials', icon: '📂' },
       { key: 'messages', label: <span className="flex justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: '💬' },
       { key: 'profile', label: 'Profile', icon: '👤' },
       { key: 'timetable', label: 'Timetable', icon: '🗓️' },
@@ -470,10 +525,11 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                               <span className="text-blue-500">⚡</span> Quick Access
                           </h3>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                              <button onClick={() => setActiveTab('assignments')} className="p-6 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-600 transition-all group text-left">
-                                  <span className="text-3xl mb-3 block group-hover:scale-110 transition-transform duration-300">📚</span>
-                                  <p className="font-bold text-slate-200">Assignments</p>
-                                  <p className="text-xs text-slate-500 mt-1">View & Submit</p>
+                              <button onClick={() => setActiveTab('science_lab')} className="p-6 rounded-2xl bg-slate-900 border border-slate-800 hover:border-blue-500/50 transition-all group text-left relative overflow-hidden">
+                                  <div className="absolute inset-0 bg-blue-500/5 group-hover:bg-blue-500/10 transition-colors"></div>
+                                  <span className="text-3xl mb-3 block group-hover:scale-110 transition-transform duration-300">🧪</span>
+                                  <p className="font-bold text-slate-200">Science Lab</p>
+                                  <p className="text-xs text-slate-500 mt-1">Virtual Experiments</p>
                               </button>
                               <button onClick={() => setActiveTab('group_work')} className="p-6 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-600 transition-all group text-left">
                                   <span className="text-3xl mb-3 block group-hover:scale-110 transition-transform duration-300">🤝</span>
@@ -610,6 +666,8 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                       <p className="text-slate-500 font-mono">NO ACTIVE TRANSMISSION DETECTED.</p>
                   </div>
               );
+          case 'science_lab':
+              return <ScienceLab userProfile={userProfile} />;
           case 'group_work':
               return studentGroup ? (
                   <div className="h-full flex flex-col bg-slate-900/50 rounded-2xl border border-slate-700 overflow-hidden">
@@ -654,6 +712,75 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                   onExit={() => setActiveTab('dashboard')} 
                   timetable={timetable} 
               />;
+          case 'resources':
+               return (
+                   <div className="space-y-6">
+                        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                           <h2 className="text-3xl font-bold text-white flex items-center gap-3">
+                              <span className="bg-indigo-600 text-white text-lg p-2 rounded-lg shadow-lg">📂</span>
+                              Study Materials
+                           </h2>
+                           <div className="flex items-center gap-2 bg-slate-800 p-1 rounded-lg">
+                               <span className="text-xs text-slate-400 pl-2 font-bold">Filter Subject:</span>
+                               <select 
+                                   value={materialSubjectFilter} 
+                                   onChange={e => setMaterialSubjectFilter(e.target.value)} 
+                                   className="bg-transparent text-sm text-white font-bold outline-none cursor-pointer hover:text-blue-400 p-1 pr-4"
+                               >
+                                   <option value="All">All Subjects</option>
+                                   {GES_SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+                               </select>
+                           </div>
+                       </div>
+                       
+                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                           {filteredMaterials.map(material => (
+                               <Card key={material.id} className="flex flex-col !p-4 hover:border-indigo-500/50 transition-colors group" onClick={() => handleDownloadMaterial(material.aiFormattedContent, material.originalFileName)}>
+                                   <div className="flex items-start justify-between mb-3">
+                                       <div className="w-10 h-10 rounded-lg bg-indigo-900/30 flex items-center justify-center text-xl">
+                                            {material.originalFileName.endsWith('.pdf') ? '📕' : 
+                                             material.originalFileName.match(/\.(doc|docx)$/) ? '📝' : 
+                                             material.originalFileName.match(/\.(jpg|png|jpeg)$/) ? '🖼️' : '📄'}
+                                       </div>
+                                       <span className="text-[10px] bg-slate-700 px-2 py-1 rounded text-slate-300">
+                                           {new Date(material.createdAt?.toDate()).toLocaleDateString()}
+                                       </span>
+                                   </div>
+                                   
+                                   <h4 className="font-bold text-white truncate mb-1" title={material.title}>{material.title}</h4>
+                                   
+                                   <div className="flex items-center gap-2 mb-4">
+                                       <span className="text-xs text-slate-400 truncate max-w-[120px]">{material.originalFileName}</span>
+                                       {material.subject && (
+                                            <span className="text-[10px] bg-indigo-900/40 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-500/20">
+                                                {material.subject}
+                                            </span>
+                                       )}
+                                   </div>
+                                   
+                                   <div className="mt-auto pt-3 border-t border-slate-700/50">
+                                       <p className="text-[10px] text-slate-500 mb-2">Uploaded by: {material.uploaderName}</p>
+                                       <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDownloadMaterial(material.aiFormattedContent, material.originalFileName);
+                                            }}
+                                            className="block w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-center rounded-lg text-xs font-bold text-white transition-colors shadow-lg shadow-indigo-900/20"
+                                       >
+                                           Download / View
+                                       </button>
+                                   </div>
+                               </Card>
+                           ))}
+                           {filteredMaterials.length === 0 && (
+                               <div className="col-span-full text-center py-20 text-slate-600">
+                                   <span className="text-4xl mb-4 opacity-50 block">📭</span>
+                                   <p>No study materials found for this subject.</p>
+                               </div>
+                           )}
+                       </div>
+                   </div>
+               );
           case 'messages':
               return <MessagingView userProfile={userProfile} contacts={teachers} />;
           case 'profile':

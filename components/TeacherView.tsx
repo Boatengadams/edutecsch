@@ -3,8 +3,8 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useAuthentication } from '../hooks/useAuth';
 import { db, storage, functions, firebase } from '../services/firebase';
 // FIX: GES_STANDARD_CURRICULUM is a value, so it's imported separately from the types.
-import { GES_STANDARD_CURRICULUM } from '../types';
-import type { Assignment, Submission, UserProfile, TeachingMaterial, GeneratedContent, SubjectsByClass, GES_CLASSES, Timetable, Quiz, Presentation, LiveTutoringSession, AttendanceRecord, AttendanceStatus, Notification, GES_SUBJECTS, TerminalReport, TerminalReportMark, ReportSummary, SchoolSettings, VideoContent, SchoolEvent, TimetableData, TimetablePeriod, LiveLesson, LiveLessonStep, Group, GroupMember, GroupMessage, Conversation, Slide, UserRole } from '../types';
+import { GES_STANDARD_CURRICULUM, GES_SUBJECTS } from '../types';
+import type { Assignment, Submission, UserProfile, TeachingMaterial, GeneratedContent, SubjectsByClass, GES_CLASSES, Timetable, Quiz, Presentation, LiveTutoringSession, AttendanceRecord, AttendanceStatus, Notification, TerminalReport, TerminalReportMark, ReportSummary, SchoolSettings, VideoContent, SchoolEvent, TimetableData, TimetablePeriod, LiveLesson, LiveLessonStep, Group, GroupMember, GroupMessage, Conversation, Slide, UserRole } from '../types';
 import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
@@ -34,6 +34,7 @@ import TimetableManager from './TimetableManager';
 import TeacherStudentCard from './TeacherStudentCard';
 import TeacherMyVoice from './TeacherMyVoice';
 import TeacherAITools from './TeacherAITools';
+import StudentReportCard from './common/StudentReportCard';
 
 const getGrade = (score: number) => {
     if (score >= 80) return 'A';
@@ -496,6 +497,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
     const [submissions, setSubmissions] = useState<Submission[]>([]);
     const [students, setStudents] = useState<UserProfile[]>([]);
     const [myLibraryContent, setMyLibraryContent] = useState<GeneratedContent[]>([]);
+    const [teachingMaterials, setTeachingMaterials] = useState<TeachingMaterial[]>([]);
     const [activeLiveLesson, setActiveLiveLesson] = useState<LiveLesson | null>(null);
     const [unreadMessages, setUnreadMessages] = useState(0);
     const [allParents, setAllParents] = useState<UserProfile[]>([]);
@@ -513,9 +515,17 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
     const [showPresentationGenerator, setShowPresentationGenerator] = useState(false);
     const [editingPresentation, setEditingPresentation] = useState<GeneratedContent | null>(null);
     const [contentToDelete, setContentToDelete] = useState<GeneratedContent | null>(null);
+    const [materialToDelete, setMaterialToDelete] = useState<TeachingMaterial | null>(null);
     const [isDeletingContent, setIsDeletingContent] = useState(false);
     const [gradeInput, setGradeInput] = useState('');
     const [feedbackInput, setFeedbackInput] = useState('');
+    
+    // Library UI State
+    const [libraryTab, setLibraryTab] = useState<'ai' | 'files'>('files');
+    const [resourceUploadQueue, setResourceUploadQueue] = useState<{ file: File; progress: number; status: 'pending' | 'uploading' | 'completed' | 'error' }[]>([]);
+    const [uploadTargetClass, setUploadTargetClass] = useState<string>('All');
+    const [uploadSubject, setUploadSubject] = useState<string>('');
+    const resourceFileInputRef = useRef<HTMLInputElement>(null);
 
     // My Students state
     const [studentSearchTerm, setStudentSearchTerm] = useState('');
@@ -538,6 +548,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
     const [reportSubject, setReportSubject] = useState('');
     const [marks, setMarks] = useState<Record<string, Partial<TerminalReportMark>>>({});
     const [isSavingMarks, setIsSavingMarks] = useState(false);
+    const [previewStudentReport, setPreviewStudentReport] = useState<UserProfile | null>(null);
 
 
     // Filter states
@@ -594,6 +605,11 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
             setReportSubject('');
         }
     }, [subjectsForReport, reportSubject]);
+    
+    useEffect(() => {
+        const defaultSub = teacherSubjects.length > 0 ? teacherSubjects[0] : GES_SUBJECTS[0];
+        setUploadSubject(defaultSub);
+    }, [teacherSubjects]);
 
     useEffect(() => {
         if (teacherClasses.length > 0 && !timetableClass) {
@@ -671,6 +687,18 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
         unsubscribers.push(db.collection('generatedContent').where('collaboratorUids', 'array-contains', user.uid)
             .orderBy('createdAt', 'desc')
             .onSnapshot(snap => setMyLibraryContent(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as GeneratedContent)))));
+            
+        // Fetch teaching materials
+        unsubscribers.push(db.collection('teachingMaterials').orderBy('createdAt', 'desc')
+            .onSnapshot(snap => {
+                const all = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeachingMaterial));
+                const relevant = all.filter(m => 
+                    m.uploaderId === user.uid || 
+                    m.targetClasses.includes('All') || 
+                    m.targetClasses.some(c => teacherClasses.includes(c))
+                );
+                setTeachingMaterials(relevant);
+            }));
 
         // Fetch active live lesson
         unsubscribers.push(db.collection('liveLessons').where('teacherId', '==', user.uid).where('status', '==', 'active')
@@ -939,18 +967,120 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
 
     
     const handleDeleteContent = async () => {
-        if (!contentToDelete) return;
-        setIsDeletingContent(true);
-        try {
-            const deleteResource = functions.httpsCallable('deleteResource');
-            await deleteResource({ resourceType: 'generatedContent', resourceId: contentToDelete.id });
-            setToast({ message: 'Content deleted successfully.', type: 'success' });
-        } catch(err: any) {
-            setToast({ message: `Failed to delete content: ${err.message}`, type: 'error'});
-        } finally {
-            setIsDeletingContent(false);
-            setContentToDelete(null);
+        if (contentToDelete) {
+            setIsDeletingContent(true);
+            try {
+                const deleteResource = functions.httpsCallable('deleteResource');
+                await deleteResource({ resourceType: 'generatedContent', resourceId: contentToDelete.id });
+                setToast({ message: 'Content deleted successfully.', type: 'success' });
+            } catch(err: any) {
+                setToast({ message: `Failed to delete content: ${err.message}`, type: 'error'});
+            } finally {
+                setIsDeletingContent(false);
+                setContentToDelete(null);
+            }
+        } else if (materialToDelete) {
+            setIsDeletingContent(true);
+            try {
+                const deleteResource = functions.httpsCallable('deleteResource');
+                await deleteResource({ resourceType: 'teachingMaterial', resourceId: materialToDelete.id });
+                setToast({ message: 'Material deleted successfully.', type: 'success' });
+            } catch(err: any) {
+                setToast({ message: `Failed to delete material: ${err.message}`, type: 'error'});
+            } finally {
+                setIsDeletingContent(false);
+                setMaterialToDelete(null);
+            }
         }
+    };
+
+    // Download Handler for Teachers
+    const handleDownloadMaterial = async (url: string, filename: string) => {
+        try {
+            setToast({ message: "Downloading...", type: 'success' });
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Network response was not ok');
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+        } catch (error) {
+            console.error("Download failed:", error);
+            setToast({ message: "Download failed. Opening in new tab.", type: 'error' });
+            window.open(url, '_blank');
+        }
+    };
+
+    // --- RESOURCE UPLOAD HANDLERS ---
+    const handleResourceUpload = (files: FileList | null) => {
+        if (!files) return;
+        const newQueue = Array.from(files).map(file => ({
+            file,
+            progress: 0,
+            status: 'pending' as const
+        }));
+        setResourceUploadQueue(prev => [...prev, ...newQueue]);
+        processResourceQueue(newQueue);
+    };
+
+    const processResourceQueue = async (items: typeof resourceUploadQueue) => {
+        if (!user || !userProfile) return;
+
+        items.forEach(async (item) => {
+            setResourceUploadQueue(prev => prev.map(q => q.file === item.file ? { ...q, status: 'uploading' } : q));
+
+            try {
+                const docRef = db.collection('teachingMaterials').doc();
+                const storagePath = `teachingMaterials/${docRef.id}/${item.file.name}`;
+                const storageRef = storage.ref(storagePath);
+                
+                const uploadTask = storageRef.put(item.file);
+
+                uploadTask.on('state_changed', 
+                    (snapshot) => {
+                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                        setResourceUploadQueue(prev => prev.map(q => q.file === item.file ? { ...q, progress } : q));
+                    },
+                    (error) => {
+                        console.error("Upload error:", error);
+                        setResourceUploadQueue(prev => prev.map(q => q.file === item.file ? { ...q, status: 'error' } : q));
+                        setToast({ message: `Failed to upload ${item.file.name}`, type: 'error' });
+                    },
+                    async () => {
+                        const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                        
+                        const materialData: TeachingMaterial = {
+                            id: docRef.id,
+                            title: item.file.name.split('.')[0],
+                            targetClasses: [uploadTargetClass], // Use selected class
+                            subject: uploadSubject, // Use selected subject
+                            uploaderId: user.uid,
+                            uploaderName: userProfile.name,
+                            originalFileName: item.file.name,
+                            aiFormattedContent: downloadURL,
+                            createdAt: firebase.firestore.Timestamp.now()
+                        };
+
+                        await docRef.set(materialData);
+                        
+                        setResourceUploadQueue(prev => prev.map(q => q.file === item.file ? { ...q, status: 'completed', progress: 100 } : q));
+                        setTimeout(() => {
+                            setResourceUploadQueue(prev => prev.filter(q => q.file !== item.file));
+                        }, 2000);
+                        
+                        setToast({ message: `${item.file.name} uploaded successfully!`, type: 'success' });
+                    }
+                );
+            } catch (err) {
+                console.error(err);
+            }
+        });
     };
 
     // --- ATTENDANCE HANDLERS ---
@@ -1161,6 +1291,11 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
             setIsSavingMarks(false);
         }
     };
+    
+    const openReportPreview = (student: UserProfile) => {
+        // Ensure local edits are used for preview if available
+        setPreviewStudentReport(student);
+    };
 
     const handleDeleteGroup = async () => {
         if (!groupToDelete) return;
@@ -1282,7 +1417,10 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                     <div className="space-y-6">
                          <div className="flex justify-between items-center">
                              <h2 className="text-3xl font-bold">My Students</h2>
-                             <Button onClick={() => setShowCreateParentModal(true)}>Create Parent Account</Button>
+                             <div className="flex gap-2">
+                                <Button onClick={() => openSnapModal('student')} variant="secondary">Scan List</Button>
+                                <Button onClick={() => setShowCreateParentModal(true)}>Create Parent Account</Button>
+                             </div>
                          </div>
                          {Object.keys(studentsByClass).map((classId) => {
                             const classStudents = studentsByClass[classId];
@@ -1424,29 +1562,205 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
                             <h2 className="text-3xl font-bold">My Library</h2>
-                            <Button onClick={() => { setEditingPresentation(null); setShowPresentationGenerator(true); }}>+ Create New</Button>
+                            <div className="flex gap-2">
+                                <Button onClick={() => setShowVideoGenerator(true)} variant="secondary">Create Video</Button>
+                                <div className="flex bg-slate-800 p-1 rounded-lg">
+                                    <button 
+                                        onClick={() => setLibraryTab('files')}
+                                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${libraryTab === 'files' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                                    >
+                                        Documents
+                                    </button>
+                                    <button 
+                                        onClick={() => setLibraryTab('ai')}
+                                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${libraryTab === 'ai' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                                    >
+                                        AI Lessons
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {myLibraryContent.map(content => (
-                                <Card key={content.id} className="flex flex-col group hover:border-indigo-500/50 transition-all">
-                                    <div className="flex-grow">
-                                        <h3 className="text-xl font-bold truncate mb-1">{content.topic}</h3>
-                                        <p className="text-xs text-indigo-300 uppercase font-bold tracking-wider mb-3">{content.subject}</p>
-                                        <div className="flex flex-wrap gap-2 mb-4">
-                                            {content.classes.map(c => <span key={c} className="text-[10px] bg-slate-700 px-2 py-1 rounded text-slate-300">{c}</span>)}
+
+                        {libraryTab === 'ai' && (
+                            <div className="space-y-6 animate-fade-in-up">
+                                <div className="flex justify-end gap-2">
+                                    <Button onClick={() => { setEditingPresentation(null); setShowPresentationGenerator(true); }}>+ Create Lesson</Button>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {myLibraryContent.map(content => (
+                                        <Card 
+                                            key={content.id} 
+                                            className="flex flex-col group hover:border-purple-500/50 transition-all border-purple-900/30 cursor-pointer select-none relative overflow-hidden"
+                                            onDoubleClick={() => { setEditingPresentation(content); setShowPresentationGenerator(true); }}
+                                        >
+                                            {/* Hover Effect Background */}
+                                            <div className="absolute inset-0 bg-purple-600/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+
+                                            <div className="flex-grow relative z-10">
+                                                <div className="flex justify-between items-start mb-1">
+                                                     <h3 className="text-xl font-bold truncate pr-2">{content.topic}</h3>
+                                                     <span className="text-[10px] text-slate-300 bg-slate-800/80 backdrop-blur px-2 py-1 rounded border border-slate-700 hidden group-hover:inline-block animate-fade-in-short whitespace-nowrap shadow-sm">Double-click to view</span>
+                                                </div>
+                                                <p className="text-xs text-purple-300 uppercase font-bold tracking-wider mb-3">{content.subject}</p>
+                                                <div className="flex flex-wrap gap-2 mb-4">
+                                                    {content.classes.map(c => <span key={c} className="text-[10px] bg-slate-800 px-2 py-1 rounded text-slate-300 border border-slate-700">{c}</span>)}
+                                                </div>
+                                                <p className="text-xs text-gray-500 font-mono">Created: {content.createdAt?.toDate().toLocaleDateString()}</p>
+                                            </div>
+                                            
+                                            <div className="mt-4 pt-4 border-t border-slate-700/50 grid grid-cols-2 gap-2 relative z-10" onDoubleClick={e => e.stopPropagation()}>
+                                                <Button size="sm" onClick={() => handleStartLiveLesson(content)} className="col-span-2 bg-purple-600 hover:bg-purple-500 shadow-lg shadow-purple-900/20">🚀 Launch Live</Button>
+                                                <Button size="sm" variant="secondary" onClick={() => { setEditingPresentation(content); setShowPresentationGenerator(true); }}>Edit</Button>
+                                                <Button size="sm" variant="danger" onClick={() => setContentToDelete(content)}>Delete</Button>
+                                            </div>
+                                        </Card>
+                                    ))}
+                                    {myLibraryContent.length === 0 && (
+                                        <div className="col-span-full text-center py-16 border-2 border-dashed border-slate-800 rounded-2xl">
+                                            <span className="text-4xl opacity-30 grayscale mb-2 block">✨</span>
+                                            <p className="text-gray-500">Your AI lesson library is empty.</p>
+                                            <p className="text-xs text-gray-600 mt-1">Click "+ Create Lesson" to generate one instantly.</p>
                                         </div>
-                                        <p className="text-xs text-gray-500">Created: {content.createdAt?.toDate().toLocaleDateString()}</p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {libraryTab === 'files' && (
+                            <div className="space-y-6 animate-fade-in-up">
+                                {/* Upload Zone */}
+                                <div 
+                                    className="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center bg-slate-900/50 hover:bg-slate-800/50 transition-colors cursor-pointer group relative overflow-hidden"
+                                    onClick={() => resourceFileInputRef.current?.click()}
+                                >
+                                    <div className="absolute inset-0 bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+                                    <input 
+                                        type="file" 
+                                        multiple 
+                                        className="hidden" 
+                                        ref={resourceFileInputRef}
+                                        onChange={(e) => handleResourceUpload(e.target.files)}
+                                    />
+                                    <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center text-3xl mx-auto mb-4 text-blue-400 group-hover:scale-110 transition-transform border border-blue-500/20">
+                                        ☁️
                                     </div>
-                                    <div className="mt-4 pt-4 border-t border-slate-700/50 grid grid-cols-2 gap-2">
-                                        <Button size="sm" onClick={() => handleStartLiveLesson(content)} className="col-span-2">🚀 Launch Live</Button>
-                                        <Button size="sm" variant="secondary" onClick={() => { setEditingPresentation(content); setShowPresentationGenerator(true); }}>Edit</Button>
-                                        <Button size="sm" variant="danger" onClick={() => setContentToDelete(content)}>Delete</Button>
-                                        <Button size="sm" variant="secondary" onClick={() => setShowVideoGenerator(true)}>Create a Video</Button>
+                                    <h3 className="text-lg font-bold text-white mb-2">Upload Study Material</h3>
+                                    <p className="text-sm text-slate-400">Click to upload PDFs, Docs, or Images.</p>
+                                    
+                                    <div className="mt-6 inline-flex flex-col sm:flex-row items-center gap-3" onClick={e => e.stopPropagation()}>
+                                        <div className="flex items-center gap-2 bg-slate-800 p-1.5 rounded-lg border border-slate-700">
+                                            <span className="text-xs text-slate-400 pl-2 font-bold">Target:</span>
+                                            <select 
+                                                value={uploadTargetClass}
+                                                onChange={e => setUploadTargetClass(e.target.value)}
+                                                className="bg-transparent text-sm text-white font-bold outline-none cursor-pointer hover:text-blue-400 p-1"
+                                            >
+                                                <option value="All">All My Classes</option>
+                                                {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="flex items-center gap-2 bg-slate-800 p-1.5 rounded-lg border border-slate-700">
+                                            <span className="text-xs text-slate-400 pl-2 font-bold">Subject:</span>
+                                            <select 
+                                                value={uploadSubject}
+                                                onChange={e => setUploadSubject(e.target.value)}
+                                                className="bg-transparent text-sm text-white font-bold outline-none cursor-pointer hover:text-blue-400 p-1 max-w-[150px]"
+                                            >
+                                                {teacherSubjects.length > 0 ? (
+                                                    teacherSubjects.map(s => <option key={s} value={s}>{s}</option>)
+                                                ) : (
+                                                    GES_SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+                                            </select>
+                                        </div>
                                     </div>
-                                </Card>
-                            ))}
-                            {myLibraryContent.length === 0 && <p className="col-span-full text-center text-gray-500 py-10">Your library is empty. Create your first lesson resource!</p>}
-                        </div>
+                                </div>
+
+                                {/* Upload Progress */}
+                                {resourceUploadQueue.length > 0 && (
+                                    <div className="space-y-2">
+                                        {resourceUploadQueue.map((item, idx) => (
+                                            <div key={idx} className="bg-slate-800 p-3 rounded-lg flex items-center gap-4 border border-slate-700 shadow-sm">
+                                                <span className="text-sm text-white truncate flex-grow">{item.file.name}</span>
+                                                <div className="w-32 bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                                                    <div 
+                                                        className={`h-full transition-all duration-300 ${item.status === 'error' ? 'bg-red-500' : item.status === 'completed' ? 'bg-green-500' : 'bg-blue-500'}`} 
+                                                        style={{ width: `${item.progress}%` }}
+                                                    ></div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Files Grid */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {teachingMaterials.map(material => (
+                                        <Card 
+                                            key={material.id} 
+                                            className="flex flex-col !p-5 hover:border-blue-500/50 transition-all cursor-pointer group shadow-sm hover:shadow-md hover:bg-slate-800/80"
+                                            onDoubleClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDownloadMaterial(material.aiFormattedContent, material.originalFileName);
+                                            }}
+                                        >
+                                            <div className="flex items-start justify-between mb-3">
+                                                <div className="w-12 h-12 rounded-xl bg-blue-900/20 flex items-center justify-center text-2xl shadow-inner border border-blue-500/10">
+                                                    {material.originalFileName.endsWith('.pdf') ? '📕' : 
+                                                     material.originalFileName.match(/\.(doc|docx)$/) ? '📝' : 
+                                                     material.originalFileName.match(/\.(jpg|png|jpeg)$/) ? '🖼️' : '📄'}
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                     <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-800 hidden group-hover:inline-block animate-fade-in-short shadow-sm">Double-click</span>
+                                                     {material.uploaderId === user.uid && (
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); setMaterialToDelete(material); }} 
+                                                            className="text-slate-500 hover:text-red-400 transition-colors p-1 hover:bg-red-900/20 rounded"
+                                                            title="Delete File"
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" /></svg>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            
+                                            <h4 className="font-bold text-white truncate mb-1 text-sm" title={material.title}>{material.title}</h4>
+                                            
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <span className="text-xs text-slate-500 truncate max-w-[140px] block" title={material.originalFileName}>{material.originalFileName}</span>
+                                                {material.subject && (
+                                                    <span className="text-[9px] bg-indigo-500/10 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-500/20 whitespace-nowrap">
+                                                        {material.subject}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            
+                                            <div className="mt-auto pt-3 border-t border-slate-700/30">
+                                                <div className="flex flex-wrap gap-1 mb-3">
+                                                    {material.targetClasses.map(c => (
+                                                        <span key={c} className="text-[9px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded border border-slate-600">{c}</span>
+                                                    ))}
+                                                </div>
+                                                <button 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDownloadMaterial(material.aiFormattedContent, material.originalFileName);
+                                                    }}
+                                                    className="block w-full py-2 bg-slate-700 hover:bg-blue-600 text-center rounded-lg text-xs font-bold text-white transition-colors shadow-sm"
+                                                >
+                                                    Download
+                                                </button>
+                                            </div>
+                                        </Card>
+                                    ))}
+                                    {teachingMaterials.length === 0 && (
+                                        <div className="col-span-full text-center py-16 border-2 border-dashed border-slate-800 rounded-2xl">
+                                            <span className="text-4xl opacity-30 grayscale mb-2 block">📁</span>
+                                            <p className="text-gray-500">No files uploaded yet.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 );
             case 'attendance':
@@ -1484,85 +1798,12 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                          </div>
                      </Card>
                 );
-            case 'terminal_reports':
-                const studentsForReport = students.filter(s => s.class === reportClass);
-                return (
-                    <Card>
-                        <div className="flex justify-between items-center mb-6">
-                             <h2 className="text-3xl font-bold">Terminal Reports</h2>
-                             <div className="flex items-center gap-4">
-                                <select value={reportClass} onChange={e => setReportClass(e.target.value)} className="p-2 bg-slate-700 rounded-md">
-                                    {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
-                                <select value={reportSubject} onChange={e => setReportSubject(e.target.value)} disabled={subjectsForReport.length === 0} className="p-2 bg-slate-700 rounded-md">
-                                    {subjectsForReport.length > 0 ? subjectsForReport.map(s => <option key={s} value={s}>{s}</option>) : <option>No subjects for class</option>}
-                                </select>
-                             </div>
-                        </div>
-                        <div className="flex gap-2 mb-4">
-                            <Button onClick={calculateTotalsAndSave} disabled={isSavingMarks}>{isSavingMarks ? 'Saving...' : 'Calculate & Save'}</Button>
-                            <Button variant="secondary" onClick={handleAutoFillScores}>Auto-fill Scores</Button>
-                        </div>
-                         <div className="overflow-x-auto">
-                             <table className="min-w-full text-sm">
-                                 <thead className="bg-slate-700">
-                                    <tr className="text-center">
-                                        <th rowSpan={2} className="p-2 text-left border-r border-slate-600">Student Name</th>
-                                        <th colSpan={5} className="p-2 border-b border-slate-600">Class Score (Weight 50%)</th>
-                                        <th rowSpan={2} className="p-2 border-x border-slate-600">End of Term Exam (100)</th>
-                                        <th colSpan={5} className="p-2 border-b border-slate-600">Final Marks</th>
-                                    </tr>
-                                    <tr className="text-xs">
-                                        <th className="p-2 font-normal border-r border-slate-600">Assignments (15)</th>
-                                        <th className="p-2 font-normal border-r border-slate-600">Group Work (15)</th>
-                                        <th className="p-2 font-normal border-r border-slate-600">Class Test (15)</th>
-                                        <th className="p-2 font-normal border-r border-slate-600">Project (15)</th>
-                                        <th className="p-2 font-bold border-r border-slate-600">Total (60)</th>
-                                        <th className="p-2 font-bold border-r border-slate-600">Scaled Class (50)</th>
-                                        <th className="p-2 font-bold border-r border-slate-600">Scaled Exam (50)</th>
-                                        <th className="p-2 font-bold border-r border-slate-600">Overall (100)</th>
-                                        <th className="p-2 font-bold border-r border-slate-600">Grade</th>
-                                        <th className="p-2 font-bold">Position</th>
-                                    </tr>
-                                 </thead>
-                                 <tbody className="divide-y divide-slate-800">
-                                    {studentsForReport.map(student => {
-                                        const mark = marks[student.uid] || {};
-                                        const totalClassScore = (mark.indivTest || 0) + (mark.groupWork || 0) + (mark.classTest || 0) + (mark.project || 0);
-                                        const scaledClassScore = (totalClassScore / 60) * 50;
-                                        const scaledExamScore = ((mark.endOfTermExams || 0) / 100) * 50;
-                                        const overallTotal = scaledClassScore + scaledExamScore;
-                                        const grade = getGrade(overallTotal);
-
-                                        let gradeColor = 'text-gray-200';
-                                        if (grade === 'A' || grade === 'B+') gradeColor = 'text-green-400';
-                                        else if (grade === 'F') gradeColor = 'text-red-400';
-                                        else if (grade === 'D' || grade === 'D+') gradeColor = 'text-yellow-400';
-
-                                        return (
-                                            <tr key={student.uid} className="even:bg-slate-800/50">
-                                                <td className="p-2 font-semibold text-left">{student.name}</td>
-                                                <td><input type="number" step="0.1" min="0" max="15" value={mark.indivTest ?? ''} onChange={e => handleMarkChange(student.uid, 'indivTest', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td><input type="number" step="0.1" min="0" max="15" value={mark.groupWork ?? ''} onChange={e => handleMarkChange(student.uid, 'groupWork', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td><input type="number" step="0.1" min="0" max="15" value={mark.classTest ?? ''} onChange={e => handleMarkChange(student.uid, 'classTest', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td><input type="number" step="0.1" min="0" max="15" value={mark.project ?? ''} onChange={e => handleMarkChange(student.uid, 'project', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td className="p-2 text-center font-semibold bg-slate-900/30">{totalClassScore.toFixed(1)}</td>
-                                                <td><input type="number" step="0.1" min="0" max="100" value={mark.endOfTermExams ?? ''} onChange={e => handleMarkChange(student.uid, 'endOfTermExams', e.target.value)} className="w-24 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td className="p-2 text-center font-bold bg-slate-900/30">{scaledClassScore.toFixed(1)}</td>
-                                                <td className="p-2 text-center font-bold bg-slate-900/30">{scaledExamScore.toFixed(1)}</td>
-                                                <td className="p-2 text-center font-bold text-lg bg-slate-900/30">{overallTotal.toFixed(1)}</td>
-                                                <td className={`p-2 text-center font-bold text-lg bg-slate-900/30 ${gradeColor}`}>{grade}</td>
-                                                <td className="p-2 text-center font-bold text-lg bg-slate-900/30">{mark.position}</td>
-                                            </tr>
-                                        );
-                                    })}
-                                 </tbody>
-                             </table>
-                         </div>
-                    </Card>
-                );
             case 'past_questions':
                 return <BECEPastQuestionsView />;
+            case 'ai_tools':
+                return <TeacherAITools students={students} userProfile={userProfile} />;
+            case 'my_voice':
+                return <TeacherMyVoice userProfile={userProfile} />;
             default:
                 return <div>Select a tab</div>;
         }
@@ -1596,6 +1837,30 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                     teacherSubjectsByClass={userProfile.subjectsByClass || null}
                 />
             )}
+             {previewStudentReport && (
+                 <div className="fixed inset-0 bg-black bg-opacity-90 flex justify-center items-center p-4 z-[60]">
+                     <div className="relative max-w-4xl w-full h-[90vh] flex flex-col bg-white rounded-lg overflow-hidden shadow-2xl">
+                         <div className="p-4 border-b flex justify-between items-center bg-slate-100 text-black shrink-0">
+                             <h3 className="font-bold text-lg">Report Card Preview: {previewStudentReport.name}</h3>
+                             <button onClick={() => setPreviewStudentReport(null)} className="p-2 hover:bg-gray-200 rounded-full">&times;</button>
+                         </div>
+                         <div className="flex-grow overflow-y-auto p-4 bg-gray-100">
+                             <StudentReportCard 
+                                 student={previewStudentReport}
+                                 report={null} // Pass null for full report to use currentMarks
+                                 schoolSettings={schoolSettings}
+                                 ranking={null} // Ranking won't be live in preview of edits
+                                 classSize={students.length}
+                                 currentMarks={marks} // Pass the unsaved marks for preview
+                             />
+                         </div>
+                         <div className="p-4 border-t bg-slate-50 flex justify-end gap-2 shrink-0">
+                             <Button variant="secondary" onClick={() => setPreviewStudentReport(null)}>Close Preview</Button>
+                             <Button onClick={calculateTotalsAndSave}>Save Marks</Button>
+                         </div>
+                     </div>
+                 </div>
+             )}
              {viewingSubmissionsFor && (
                 <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
                     <Card className="w-full max-w-4xl h-[90vh] flex flex-col">
@@ -1664,9 +1929,8 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                         </div>
                     </Card>
                 </div>
-             )}
-             
-             {showPresentationGenerator && user && userProfile && (
+            )}
+            {showPresentationGenerator && user && userProfile && (
                 <PresentationGenerator
                     onClose={() => setShowPresentationGenerator(false)}
                     classes={teacherClasses}

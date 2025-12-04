@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { db, storage, firebase } from '../services/firebase';
-import { TeachingMaterial } from '../types';
+import { TeachingMaterial, GES_CLASSES, GES_SUBJECTS } from '../types';
 import Card from './common/Card';
 import Spinner from './common/Spinner';
 import { useToast } from './common/Toast';
@@ -20,6 +20,8 @@ const AdminMaterials: React.FC = () => {
     // Upload State
     const [isDragging, setIsDragging] = useState(false);
     const [uploadQueue, setUploadQueue] = useState<{ file: File; progress: number; status: 'pending' | 'uploading' | 'completed' | 'error' }[]>([]);
+    const [targetClass, setTargetClass] = useState('All');
+    const [targetSubject, setTargetSubject] = useState(GES_SUBJECTS[0]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -75,7 +77,8 @@ const AdminMaterials: React.FC = () => {
                         const materialData: TeachingMaterial = {
                             id: docRef.id,
                             title: item.file.name.split('.')[0], // Default title is filename
-                            targetClasses: ['All'], // Default to all, can edit later
+                            targetClasses: [targetClass], 
+                            subject: targetSubject, // Added subject
                             uploaderId: user.uid,
                             uploaderName: userProfile.name,
                             originalFileName: item.file.name,
@@ -142,6 +145,31 @@ const AdminMaterials: React.FC = () => {
                 }}
             >
                 <div className="flex flex-col items-center gap-4">
+                    {/* Target & Subject Selector */}
+                    <div className="flex flex-col sm:flex-row items-center gap-2" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-2 bg-slate-700 p-1.5 rounded-lg">
+                            <span className="text-xs text-slate-300 pl-2">Target:</span>
+                            <select 
+                                value={targetClass}
+                                onChange={(e) => setTargetClass(e.target.value)}
+                                className="bg-slate-800 text-white text-sm font-bold p-1 rounded border-none focus:ring-0 cursor-pointer hover:bg-slate-600 transition-colors"
+                            >
+                                <option value="All">All Classes</option>
+                                {GES_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                        <div className="flex items-center gap-2 bg-slate-700 p-1.5 rounded-lg">
+                            <span className="text-xs text-slate-300 pl-2">Subject:</span>
+                            <select 
+                                value={targetSubject}
+                                onChange={(e) => setTargetSubject(e.target.value)}
+                                className="bg-slate-800 text-white text-sm font-bold p-1 rounded border-none focus:ring-0 cursor-pointer hover:bg-slate-600 transition-colors max-w-[150px]"
+                            >
+                                {GES_SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
                     <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center text-3xl animate-bounce">
                         ☁️
                     </div>
@@ -188,6 +216,8 @@ const AdminMaterials: React.FC = () => {
                         <thead className="text-xs text-gray-200 uppercase bg-slate-700">
                             <tr>
                                 <th className="px-4 py-3">File Name</th>
+                                <th className="px-4 py-3">Target</th>
+                                <th className="px-4 py-3">Subject</th>
                                 <th className="px-4 py-3">Uploaded By</th>
                                 <th className="px-4 py-3">Date</th>
                                 <th className="px-4 py-3 text-right">Actions</th>
@@ -195,20 +225,32 @@ const AdminMaterials: React.FC = () => {
                         </thead>
                         <tbody>
                             {loading ? (
-                                <tr><td colSpan={4} className="p-8 text-center"><Spinner/></td></tr>
+                                <tr><td colSpan={6} className="p-8 text-center"><Spinner/></td></tr>
                             ) : materials.length === 0 ? (
-                                <tr><td colSpan={4} className="p-8 text-center">No materials uploaded yet.</td></tr>
+                                <tr><td colSpan={6} className="p-8 text-center">No materials uploaded yet.</td></tr>
                             ) : (
                                 materials.map(mat => (
                                     <tr key={mat.id} className="bg-slate-800 border-b border-slate-700 hover:bg-slate-700 transition-colors">
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-3">
-                                                <div className="p-2 bg-slate-700 rounded text-xl">📄</div>
+                                                <div className="p-2 bg-slate-700 rounded text-xl">
+                                                    {mat.originalFileName.endsWith('.pdf') ? '📕' : 
+                                                     mat.originalFileName.match(/\.(doc|docx)$/) ? '📝' : 
+                                                     mat.originalFileName.match(/\.(jpg|png|jpeg)$/) ? '🖼️' : '📄'}
+                                                </div>
                                                 <div>
                                                     <p className="font-medium text-white">{mat.title}</p>
                                                     <p className="text-xs text-slate-500">{mat.originalFileName}</p>
                                                 </div>
                                             </div>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {mat.targetClasses.map(c => (
+                                                <span key={c} className="text-[10px] bg-slate-600 px-2 py-1 rounded mr-1 text-white">{c}</span>
+                                            ))}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {mat.subject && <span className="text-xs bg-blue-900/30 text-blue-300 px-2 py-1 rounded border border-blue-500/20">{mat.subject}</span>}
                                         </td>
                                         <td className="px-4 py-3">{mat.uploaderName}</td>
                                         <td className="px-4 py-3">{mat.createdAt?.toDate().toLocaleDateString()}</td>

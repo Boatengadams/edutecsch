@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { db, firebase, storage } from '../services/firebase';
-import { Presentation, Quiz, GeneratedContent, SubjectsByClass, Collaborator, UserProfile, Slide, AssignmentType } from '../types';
+import { Presentation, Quiz, GeneratedContent, SubjectsByClass, Collaborator, UserProfile, Slide, AssignmentType, TeachingMaterial, VideoContent } from '../types';
 import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
@@ -31,6 +31,16 @@ const cleanJson = (text: string) => {
 
 // Helper to ensure content is a flat array of strings (Firestore requirement)
 const sanitizeSlides = (slides: any[]): Slide[] => {
+    if (!Array.isArray(slides)) return [];
+
+    const ensureString = (val: any): string | undefined => {
+        if (val === null || val === undefined) return undefined;
+        if (typeof val === 'string') return val;
+        if (Array.isArray(val)) return val.join(' '); // Flatten accidental arrays
+        if (typeof val === 'object') return JSON.stringify(val); // Stringify objects
+        return String(val);
+    };
+
     return slides.map(slide => {
         let safeContent: string[] = [];
         if (Array.isArray(slide.content)) {
@@ -43,12 +53,15 @@ const sanitizeSlides = (slides: any[]): Slide[] => {
         }
 
         return {
-            title: slide.title || "Untitled Slide",
+            title: ensureString(slide.title) || "Untitled Slide",
             content: safeContent,
-            imageUrl: slide.imageUrl || "",
-            imageStyle: slide.imageStyle || 'cover',
-            // FIX: Avoid passing 'undefined' to Firestore. Conditionally add audioUrl.
-            ...(slide.audioUrl ? { audioUrl: slide.audioUrl } : {})
+            imageUrl: ensureString(slide.imageUrl) || "",
+            imageStyle: (slide.imageStyle === 'contain' || slide.imageStyle === 'cover') ? slide.imageStyle : 'cover',
+            ...(slide.audioUrl ? { audioUrl: ensureString(slide.audioUrl) } : {}),
+            // Add rich content fields, enforcing string type to prevent "nested array" Firestore errors
+            ...(slide.teacherScript ? { teacherScript: ensureString(slide.teacherScript) } : {}),
+            ...(slide.summaryScript ? { summaryScript: ensureString(slide.summaryScript) } : {}),
+            ...(slide.imagePrompt ? { imagePrompt: ensureString(slide.imagePrompt) } : {})
         };
     });
 };
@@ -85,11 +98,10 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
     initialContent ? 'presentation' : 'form'
   );
   
-  const [loadingState, setLoadingState] = useState<'idle' | 'generating_presentation' | 'generating_quiz' | 'saving'>('idle');
+  const [loadingState, setLoadingState] = useState<'idle' | 'generating_presentation' | 'generating_quiz' | 'saving' | 'publishing' | 'generating_video'>('idle');
   const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState('');
 
-  const isUpdatingFromFirestore = useRef(false);
   const isInitialMount = useRef(true);
 
   useEffect(() => {
@@ -149,6 +161,173 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
           setLoadingState('idle');
       }
   };
+  
+  const handlePublishToStudents = async () => {
+      if (!presentation || !user || !userProfile) return;
+      setLoadingState('publishing');
+      setLoadingMessage('Publishing to student portals...');
+      
+      try {
+          // 1. Generate Self-Contained HTML Content
+          const htmlContent = `
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>${topic}</title>
+                <style>
+                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f8fafc; margin: 0; padding: 20px; }
+                    .container { max-width: 800px; margin: 0 auto; }
+                    .header { text-align: center; margin-bottom: 40px; padding: 40px 20px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.4); }
+                    .slide-card { background: white; border-radius: 16px; padding: 40px; margin-bottom: 40px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); break-inside: avoid; }
+                    .slide-image { width: 100%; height: auto; max-height: 400px; object-fit: cover; border-radius: 12px; margin-bottom: 24px; background-color: #e2e8f0; }
+                    h1 { margin: 0; font-size: 2.5em; letter-spacing: -0.02em; }
+                    h2 { color: #1e293b; border-bottom: 2px solid #f1f5f9; padding-bottom: 15px; margin-top: 0; font-size: 1.8em; }
+                    ul { padding-left: 20px; list-style-type: none; }
+                    li { margin-bottom: 16px; font-size: 1.15em; position: relative; padding-left: 25px; }
+                    li::before { content: "•"; color: #3b82f6; font-weight: bold; position: absolute; left: 0; width: 20px; }
+                    .metadata { margin-top: 15px; font-size: 0.9em; opacity: 0.9; font-weight: 500; }
+                    .summary-box { background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 20px; margin-top: 30px; border-radius: 8px; font-size: 1em; color: #1e40af; }
+                    .footer { text-align: center; margin-top: 50px; color: #94a3b8; font-size: 0.9em; }
+                    @media print { body { background: white; } .slide-card { box-shadow: none; border: 1px solid #e2e8f0; } }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>${topic}</h1>
+                        <div class="metadata">
+                            <p>${subject.toUpperCase()} • ${targetClasses.join(', ')}</p>
+                            <p>Prepared by ${userProfile.name}</p>
+                        </div>
+                    </div>
+                    ${presentation.slides.map((slide, index) => `
+                        <div class="slide-card">
+                            <h2>${index + 1}. ${slide.title}</h2>
+                            ${slide.imageUrl ? `<img src="${slide.imageUrl}" class="slide-image" alt="${slide.title}" loading="lazy" />` : ''}
+                            <ul>
+                                ${slide.content.map(point => `<li>${point}</li>`).join('')}
+                            </ul>
+                            ${slide.summaryScript ? `<div class="summary-box"><strong>Summary:</strong> ${slide.summaryScript}</div>` : ''}
+                        </div>
+                    `).join('')}
+                    <div class="footer">
+                        <p>© ${new Date().getFullYear()} ${schoolSettings?.schoolName || 'EduTec School'}. All rights reserved.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+          `;
+          
+          const blob = new Blob([htmlContent], { type: 'text/html' });
+          const file = new File([blob], `${topic.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.html`, { type: 'text/html' });
+          
+          // 2. Upload to Storage
+          const storagePath = `teachingMaterials/generated/${user.uid}/${Date.now()}_${file.name}`;
+          const storageRef = storage.ref(storagePath);
+          await storageRef.put(file);
+          const downloadURL = await storageRef.getDownloadURL();
+          
+          // 3. Save to Teaching Materials Collection (for student access)
+          const materialRef = db.collection('teachingMaterials').doc();
+          const materialData: TeachingMaterial = {
+              id: materialRef.id,
+              title: topic,
+              targetClasses: targetClasses,
+              subject: subject,
+              uploaderId: user.uid,
+              uploaderName: userProfile.name,
+              originalFileName: file.name,
+              aiFormattedContent: downloadURL,
+              createdAt: firebase.firestore.Timestamp.now()
+          };
+          
+          await materialRef.set(materialData);
+          
+          setToast({ message: 'Published to Student Study Materials!', type: 'success' });
+
+      } catch (err: any) {
+          console.error("Publish error:", err);
+          setToast({ message: `Failed to publish: ${err.message}`, type: 'error' });
+      } finally {
+          setLoadingState('idle');
+          setLoadingMessage('');
+      }
+  };
+  
+  const handleGenerateVideo = async () => {
+    if (!presentation || !user || !userProfile) return;
+    setLoadingState('generating_video');
+    setLoadingMessage('Generating video summary with Veo...');
+    
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        
+        // Use the first slide as a visual base if available
+        const visualContext = presentation.slides[0];
+        const summaryText = presentation.slides.map(s => s.summaryScript).filter(Boolean).join(' ').substring(0, 500); // Veo limit safety
+        
+        const prompt = `Educational video summary about ${topic}. ${summaryText}. High quality, clear visuals, educational style.`;
+        
+        // Veo logic
+        let operation = await ai.models.generateVideos({
+            model: 'veo-3.1-fast-generate-preview',
+            prompt: prompt,
+            config: { numberOfVideos: 1, resolution: '720p', aspectRatio: '16:9' }
+        });
+
+        while (!operation.done) {
+            await new Promise(resolve => setTimeout(resolve, 10000));
+            operation = await ai.operations.getVideosOperation({ operation: operation });
+            if (operation.metadata?.progress) {
+                // setLoadingMessage(`Processing video... ${(operation.metadata.progress as any).percentage || 0}%`);
+            }
+        }
+        
+        const uri = operation.response?.generatedVideos?.[0]?.video?.uri;
+        
+        if (uri) {
+            const videoResponse = await fetch(`${uri}&key=${process.env.API_KEY}`);
+            if (!videoResponse.ok) throw new Error('Failed to download video.');
+            const videoBlob = await videoResponse.blob();
+            
+            // Upload to Firebase Storage
+            setLoadingMessage('Saving video to library...');
+            const collectionRef = db.collection('videoContent').doc(user.uid).collection('videos');
+            const docRef = collectionRef.doc();
+            const storagePath = `videoContent/${user.uid}/${docRef.id}.mp4`;
+            const storageRef = storage.ref(storagePath);
+            await storageRef.put(videoBlob);
+            const downloadURL = await storageRef.getDownloadURL();
+            
+            // Save metadata
+             const videoData: Omit<VideoContent, 'id'> = {
+                title: `Summary: ${topic}`,
+                description: `AI Generated summary for ${topic}.`,
+                creatorId: user.uid,
+                creatorName: userProfile.name,
+                videoUrl: downloadURL,
+                storagePath: storagePath,
+                targetClasses: targetClasses,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
+                expiresAt: firebase.firestore.Timestamp.fromMillis(Date.now() + 48 * 60 * 60 * 1000) // 48h expiry
+            };
+            await docRef.set(videoData);
+            
+            setToast({ message: 'Video summary generated and saved to "My Videos"!', type: 'success' });
+        } else {
+            throw new Error('Video generation completed but no URL returned.');
+        }
+
+    } catch (err: any) {
+        console.error("Video generation failed:", err);
+        setToast({ message: `Video generation failed: ${err.message}`, type: 'error' });
+    } finally {
+        setLoadingState('idle');
+        setLoadingMessage('');
+    }
+  };
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,11 +342,10 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         
-        setLoadingMessage('Architecting presentation structure...');
+        setLoadingMessage('Architecting immersive learning module...');
         const audienceInstruction = audience ? `Tailor the tone for: ${audience}.` : '';
         
-        // Professional Prompt
-        const textPrompt = `
+        const prompt = `
         Act as a world-class Educational Content Architect. Create a high-impact, visually structured presentation for students in '${targetClasses.join(', ')}' on '${subject}'.
         
         **Topic:** ${topic}
@@ -175,8 +353,10 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
         
         **Requirements:**
         1. **Structure**: Create 6-9 slides. Flow: Hook -> Concept -> Deep Dive -> Real World Application -> Summary.
-        2. **Content**: Use bullet points that are punchy, clear, and pedagogically sound. Avoid walls of text.
-        3. **Tone**: Professional, inspiring, and authoritative yet accessible.
+        2. **Content**: Use bullet points that are punchy, clear, and pedagogically sound.
+        3. **Teacher Script**: Provide a friendly, engaging script (2-3 sentences) for the teacher (or AI avatar) to narrate this slide.
+        4. **Summary Script**: A concise 1-sentence recap of this slide. This may be used for generating a video summary later.
+        5. **Image Prompt**: A highly descriptive prompt to generate a photorealistic or illustration style educational image for this slide.
         
         **JSON Schema:**
         Return ONLY a valid JSON object with this structure:
@@ -184,40 +364,57 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
           "slides": [
             {
               "title": "Slide Title",
-              "content": ["Point 1", "Point 2", "Point 3"]
+              "content": ["Point 1", "Point 2"],
+              "teacherScript": "Script here...",
+              "summaryScript": "Summary here...",
+              "imagePrompt": "Image prompt here..."
             }
           ]
         }
         `;
 
         const textResponse = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview', // Using stronger model for quality
-            contents: textPrompt,
-            config: {
-                responseMimeType: 'application/json',
-            }
+            model: 'gemini-3-pro-preview',
+            contents: prompt,
+            config: { responseMimeType: 'application/json' }
         });
 
         const cleanedJson = cleanJson(textResponse.text);
-        const presentationTextContent = JSON.parse(cleanedJson) as { slides: Omit<Slide, 'imageUrl'>[] };
+        const presentationData = JSON.parse(cleanedJson) as { slides: Slide[] };
         
-        const slidesWithImages: Slide[] = presentationTextContent.slides.map(slide => {
-            const sanitizedContent = Array.isArray(slide.content)
-                ? slide.content.flat(Infinity).map(item => String(item || '')).filter(Boolean)
-                : [];
-
-            return {
-                title: slide.title || "Untitled Slide",
-                content: sanitizedContent,
-                imageUrl: "", 
-                imageStyle: 'cover'
-            };
-        });
+        // Generate Images in Parallel
+        setLoadingMessage('Generating visual assets...');
+        
+        const slidesWithImages = await Promise.all(presentationData.slides.map(async (slide) => {
+             if (slide.imagePrompt) {
+                 try {
+                     const imageRes = await ai.models.generateContent({
+                        model: 'gemini-2.5-flash-image',
+                        contents: { parts: [{ text: slide.imagePrompt }] },
+                        config: { responseModalities: [Modality.IMAGE] },
+                     });
+                     const part = imageRes?.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+                     if (part && part.inlineData) {
+                         return {
+                             ...slide,
+                             imageUrl: `data:image/png;base64,${part.inlineData.data}`,
+                             imageStyle: 'cover' as const
+                         };
+                     }
+                 } catch (imgErr) {
+                     console.error("Image generation failed for slide", imgErr);
+                 }
+             }
+             return { ...slide, imageUrl: '', imageStyle: 'cover' as const };
+        }));
 
         const newPresentation: Presentation = { slides: slidesWithImages };
         setPresentation(newPresentation);
         
         // Initial Save to create ID
+        // Use sanitizeSlides to ensure clean data structure before Firestore save
+        const cleanSlides = sanitizeSlides(slidesWithImages);
+        
         const newContentRef = await db.collection('generatedContent').add({
             teacherId: user.uid,
             teacherName: userProfile.name,
@@ -225,7 +422,7 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
             subject,
             topic,
             audience: audience || null,
-            presentation: { slides: sanitizeSlides(slidesWithImages) },
+            presentation: { slides: cleanSlides },
             quiz: null,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             collaboratorUids: [user.uid],
@@ -415,8 +612,17 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
                   </div>
                   <div className="flex gap-3">
                       <Button size="sm" variant="secondary" onClick={() => setView('quiz')} className="hidden sm:flex">View Quiz</Button>
+                      
+                      {/* Video Generation Button - Optional Step */}
+                      <Button size="sm" variant="secondary" onClick={handleGenerateVideo} disabled={loadingState === 'generating_video'} className="bg-purple-900/30 border-purple-500/30 text-purple-200 hover:bg-purple-900/50">
+                          {loadingState === 'generating_video' ? <Spinner/> : '✨ Create Video Summary'}
+                      </Button>
+
                       <Button size="sm" variant="secondary" onClick={handleSaveToLibrary} disabled={loadingState === 'saving'}>
                           {loadingState === 'saving' ? <Spinner/> : 'Save'}
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={handlePublishToStudents} disabled={loadingState === 'publishing'} className="bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-500">
+                          {loadingState === 'publishing' ? <Spinner/> : 'Publish to Students'}
                       </Button>
                       <Button size="sm" onClick={handleStartLive} className="bg-green-600 hover:bg-green-500 shadow-lg shadow-green-900/20">
                          <span className="mr-2">📡</span> Go Live
@@ -428,9 +634,18 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
               <div className="flex-grow flex items-center justify-center p-4 sm:p-8 overflow-hidden bg-black relative">
                   {/* The Slide - 16:9 Container */}
                   <div className="w-full max-w-6xl aspect-video bg-slate-900 rounded-xl shadow-2xl overflow-hidden relative border border-slate-800 flex flex-col animate-fade-in-up transform transition-all">
-                        {/* Slide Background Pattern */}
-                        <div className="absolute inset-0 opacity-10 pointer-events-none bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-800 via-transparent to-transparent"></div>
-                        <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-black/40 to-transparent pointer-events-none"></div>
+                        {/* Slide Background Image or Pattern */}
+                        {slide.imageUrl ? (
+                            <>
+                                <img src={slide.imageUrl} alt="Slide Background" className="absolute inset-0 w-full h-full object-cover opacity-40" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/80 to-slate-900/40"></div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="absolute inset-0 opacity-10 pointer-events-none bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-800 via-transparent to-transparent"></div>
+                                <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-black/40 to-transparent pointer-events-none"></div>
+                            </>
+                        )}
                         
                         {/* Slide Content */}
                         <div className={`flex-grow p-8 sm:p-12 z-10 flex flex-col ${isHeroSlide ? 'justify-center items-center text-center' : 'justify-start'}`}>
@@ -445,16 +660,16 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
                                 <div className={`${isHeroSlide ? '' : 'lg:col-span-3'}`}>
                                     <ul className="space-y-4">
                                         {slide.content.map((point, idx) => (
-                                            <li key={idx} className={`flex items-start gap-3 text-slate-300 ${isHeroSlide ? 'text-xl justify-center' : 'text-lg'}`}>
+                                            <li key={idx} className={`flex items-start gap-3 text-slate-200 ${isHeroSlide ? 'text-xl justify-center' : 'text-lg'}`}>
                                                 {!isHeroSlide && <span className="text-blue-500 mt-1.5 text-xs">●</span>}
-                                                <span className="leading-relaxed">{point}</span>
+                                                <span className="leading-relaxed drop-shadow-md">{point}</span>
                                             </li>
                                         ))}
                                     </ul>
                                 </div>
                                 
-                                {/* Visual Placeholder (Right side for content slides) */}
-                                {!isHeroSlide && (
+                                {/* Visual Placeholder (Right side for content slides if no background image) */}
+                                {!isHeroSlide && !slide.imageUrl && (
                                     <div className="hidden lg:flex lg:col-span-2 flex-col justify-center">
                                         <div className="aspect-square rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 flex items-center justify-center shadow-inner relative overflow-hidden group">
                                             <div className="absolute inset-0 bg-blue-500/5 group-hover:bg-blue-500/10 transition-colors"></div>
@@ -462,16 +677,22 @@ export const PresentationGenerator: React.FC<PresentationGeneratorProps> = ({ on
                                                 💡
                                             </div>
                                         </div>
-                                        <p className="text-center text-xs text-slate-600 mt-3 font-mono">VISUAL PLACEHOLDER</p>
                                     </div>
                                 )}
                             </div>
                         </div>
 
                         {/* Footer */}
-                        <div className="h-12 px-8 flex items-center justify-between border-t border-white/5 bg-black/20 backdrop-blur-sm text-xs font-mono text-slate-500 z-20">
-                            <span>{schoolSettings?.schoolName || 'EDUTECSCH'}</span>
-                            <span>{subject.toUpperCase()}</span>
+                        <div className="h-12 px-8 flex items-center justify-between border-t border-white/5 bg-black/20 backdrop-blur-sm text-xs font-mono text-slate-400 z-20">
+                            <div className="flex gap-4">
+                                <span>{schoolSettings?.schoolName || 'EDUTECSCH'}</span>
+                                <span>{subject.toUpperCase()}</span>
+                            </div>
+                            {slide.teacherScript && (
+                                <div className="max-w-md truncate text-slate-500 italic">
+                                    Script: "{slide.teacherScript}"
+                                </div>
+                            )}
                         </div>
                   </div>
               </div>
