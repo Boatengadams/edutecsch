@@ -89,7 +89,7 @@ const LabCharacter: React.FC<LabCharacterProps> = ({ emotion, message, position,
                  )}
                  <div dangerouslySetInnerHTML={{ __html: CHAR_SVG }} />
                  <div className="absolute bottom-0 w-full bg-slate-800 text-white text-[9px] text-center rounded-full py-0.5 font-bold uppercase tracking-wider border border-slate-600">
-                     Dr. Stone
+                     Dr. Adams
                  </div>
              </div>
         </div>

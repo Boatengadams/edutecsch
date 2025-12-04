@@ -17,7 +17,7 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ level }) => {
     const [mode, setMode] = useState<PhysicsMode>('Mechanics');
     const [labState, setLabState] = useState({
         emotion: 'idle' as 'idle' | 'thinking' | 'success' | 'warning',
-        message: "Welcome to the Physics Lab! I am Dr. Stone. Select an experiment to begin.",
+        message: "Welcome to the Physics Lab! I am Dr. Adams, your senior lab technician. Select an experiment to begin.",
         characterPos: null as {x: number, y: number} | null
     });
 
@@ -51,7 +51,7 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ level }) => {
                 {mode === 'Optics' && <Optics onUpdateChar={updateCharacter} />}
             </div>
             
-            {/* Dr. Stone Character Overlay */}
+            {/* Dr. Adams Character Overlay */}
             <LabCharacter 
                 emotion={labState.emotion}
                 message={labState.message}
