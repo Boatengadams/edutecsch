@@ -14,7 +14,7 @@ interface CircuitComponent {
     x: number;
     y: number;
     rotation: number; 
-    state: { isOpen?: boolean; voltage?: number; resistance?: number; cellCount?: number; length?: number; jockeyPos?: number }; 
+    state: { isOpen?: boolean; voltage?: number; resistance?: number; cellCount?: number; length?: number; jockeyPos?: number; magneticField?: number }; 
 }
 
 interface Wire {
@@ -26,156 +26,94 @@ interface Wire {
     color: string;
 }
 
-// COMPONENT VISUAL RENDERER
+// VISUAL RENDERER
 const ComponentVisual = ({ type, state, rotation }: { type: string, state: any, rotation: number }) => {
     const style = { transform: `translate(-50%, -50%) rotate(${rotation}deg)`, pointerEvents: 'none' as const };
     
     switch (type) {
-        case 'potentiometer':
-            return (
-                <div style={style} className="absolute w-[400px] h-24 flex flex-col items-center justify-center">
-                    <div className="w-full h-16 bg-[#5d4037] rounded-md border border-[#3e2723] relative shadow-[0_10px_20px_rgba(0,0,0,0.5)]">
-                        {/* Wood Grain Effect */}
-                        <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/wood-pattern.png')] rounded-md"></div>
-                        
-                        {/* Ruler markings */}
-                        <div className="absolute top-1 left-4 right-4 h-6 bg-[#fef3c7] flex justify-between px-1 opacity-90 border border-amber-200 shadow-inner rounded-sm">
-                            {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(m => (
-                                <div key={m} className="flex flex-col items-center h-full justify-end pb-0.5">
-                                    <div className="w-px h-2 bg-black/50"></div>
-                                    <span className="text-[6px] text-black/70 font-mono leading-none">{m}</span>
-                                </div>
-                            ))}
-                        </div>
-                        
-                        {/* Resistive Wire */}
-                        <div className="absolute top-10 left-4 right-4 h-0.5 bg-gradient-to-b from-slate-300 to-slate-500 shadow-[0_1px_2px_rgba(0,0,0,0.8)]"></div>
-                        
-                        {/* Terminals */}
-                        <div className="absolute top-8 left-2 w-4 h-4 bg-gradient-to-br from-yellow-600 to-yellow-800 rounded-full border border-yellow-900 shadow-lg flex items-center justify-center"><div className="w-1.5 h-1.5 bg-black rounded-full opacity-50"></div></div>
-                        <div className="absolute top-8 right-2 w-4 h-4 bg-gradient-to-br from-yellow-600 to-yellow-800 rounded-full border border-yellow-900 shadow-lg flex items-center justify-center"><div className="w-1.5 h-1.5 bg-black rounded-full opacity-50"></div></div>
-                        
-                        {/* Jockey Visual */}
-                        <div 
-                            className="absolute top-2 w-6 h-16 z-50 transition-all duration-75 drop-shadow-xl"
-                            style={{ left: `${state.jockeyPos || 50}%`, transform: 'translateX(-50%)' }}
-                        >
-                            <div className="w-2 h-12 bg-gradient-to-r from-gray-700 to-black rounded-t mx-auto border-x border-gray-600"></div>
-                            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[8px] border-t-gray-800"></div>
-                            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-4 h-4 bg-red-600 rounded-full border-2 border-red-800 shadow-inner"></div>
-                        </div>
-                    </div>
-                </div>
-            );
         case 'battery':
             return (
-                <div style={style} className="absolute w-24 h-10 flex items-center justify-center drop-shadow-lg">
-                    {/* Battery Body */}
-                    <div className="w-20 h-10 bg-gradient-to-b from-yellow-400 via-yellow-500 to-yellow-600 rounded-sm border border-yellow-700 relative overflow-hidden flex items-center justify-center shadow-inner">
-                        <div className="absolute inset-0 bg-gradient-to-r from-black/10 via-transparent to-black/10"></div>
-                        <div className="absolute top-1 bottom-1 left-1 right-1 border border-yellow-700/30 rounded-sm"></div>
-                        <span className="font-black text-yellow-900/40 text-lg italic tracking-tighter">POWER CELL</span>
-                        <div className="absolute right-2 text-[8px] font-bold text-black">1.5V</div>
+                <div style={style} className="absolute w-24 h-10 flex items-center justify-center drop-shadow-xl">
+                    {/* Main Body */}
+                    <div className="w-20 h-10 bg-gradient-to-b from-yellow-400 to-yellow-600 rounded-sm border border-yellow-700 flex items-center justify-center shadow-inner relative overflow-hidden">
+                         <div className="absolute top-0 left-0 right-0 h-2 bg-white/20"></div>
+                         <span className="font-black text-xs text-yellow-900 tracking-widest z-10">VOLT</span>
+                         <div className="absolute bottom-0 w-full h-1 bg-black/20"></div>
                     </div>
-                    {/* Positive Terminal (Nub) */}
-                    <div className="w-2 h-5 bg-gradient-to-b from-gray-300 to-gray-500 rounded-r-sm border-l border-gray-600"></div>
-                    {/* Negative Terminal (Flat) */}
-                    <div className="absolute left-0 w-1 h-8 bg-gray-400 rounded-l-sm"></div>
+                    {/* Positive Nub */}
+                    <div className="w-2 h-5 bg-gray-400 rounded-r-sm border-l border-gray-600 bg-gradient-to-b from-gray-300 to-gray-500"></div>
                 </div>
             );
         case 'key':
             return (
-                <div style={style} className="absolute w-16 h-16 bg-[#262626] rounded-lg border-2 border-black flex items-center justify-center shadow-[0_5px_10px_black]">
-                     <div className="w-12 h-8 border-2 border-gray-600 bg-black/50 rounded flex justify-between px-1 items-center relative">
-                         <div className="w-2 h-2 rounded-full bg-yellow-600 shadow-inner"></div>
-                         <div className="w-2 h-2 rounded-full bg-yellow-600 shadow-inner"></div>
+                <div style={style} className="absolute w-16 h-16 bg-[#1a1a1a] rounded-xl border-2 border-gray-800 shadow-2xl flex items-center justify-center">
+                     <div className="w-12 h-1.5 bg-gray-600 relative rounded-full">
                          {/* Switch Arm */}
-                         <div className={`w-10 h-1.5 bg-gradient-to-b from-gray-300 to-gray-500 absolute left-1 top-1/2 -translate-y-1/2 origin-left transition-transform duration-200 rounded-full shadow-sm ${state.isOpen ? 'rotate-[-25deg]' : 'rotate-0'}`}></div>
+                         <div className={`w-full h-1.5 bg-gradient-to-r from-gray-300 to-white absolute left-0 top-0 origin-left transition-transform duration-200 rounded-full shadow-sm ${state.isOpen ? 'rotate-[-30deg]' : 'rotate-0'}`}>
+                             <div className="absolute right-0 -top-1 w-3 h-3 bg-black rounded-full"></div>
+                         </div>
                      </div>
-                     <span className="absolute bottom-1 text-[6px] text-gray-500 font-mono">{state.isOpen ? 'OFF' : 'ON'}</span>
+                     <div className="absolute bottom-1 text-[8px] text-gray-500 font-mono">SWITCH</div>
                 </div>
             );
         case 'voltmeter':
         case 'ammeter':
         case 'galvanometer':
              const label = type === 'voltmeter' ? 'V' : type === 'ammeter' ? 'A' : 'G';
-             const labelColor = type === 'voltmeter' ? 'text-green-500' : type === 'ammeter' ? 'text-blue-500' : 'text-yellow-500';
+             const colorClass = type === 'voltmeter' ? 'text-green-600' : type === 'ammeter' ? 'text-blue-600' : 'text-yellow-600';
              return (
-                 <div style={style} className="absolute w-24 h-24 bg-[#111] rounded-full border-4 border-gray-700 shadow-[0_10px_25px_black] flex items-center justify-center relative">
-                     {/* Dial Face */}
-                     <div className="absolute inset-2 bg-white rounded-full shadow-inner flex items-center justify-center overflow-hidden">
-                         {/* Scale */}
-                         <div className="absolute top-2 w-full text-center">
-                             <svg width="80" height="40" viewBox="0 0 100 50">
-                                 <path d="M10 45 A 40 40 0 0 1 90 45" fill="none" stroke="black" strokeWidth="1" />
-                                 {[...Array(11)].map((_, i) => {
-                                     const angle = (i * 18) - 90;
-                                     const rad = (angle * Math.PI) / 180;
-                                     const x1 = 50 + 35 * Math.sin(rad);
-                                     const y1 = 45 - 35 * Math.cos(rad);
-                                     const x2 = 50 + 40 * Math.sin(rad);
-                                     const y2 = 45 - 40 * Math.cos(rad);
-                                     return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="black" strokeWidth="1" />;
-                                 })}
-                             </svg>
+                 <div style={style} className="absolute w-24 h-24 bg-black rounded-full border-4 border-gray-600 shadow-2xl flex items-center justify-center ring-1 ring-white/10">
+                     <div className="absolute inset-1 bg-white rounded-full flex flex-col items-center justify-center shadow-inner">
+                         {/* Dial Scale */}
+                         <div className="w-16 h-8 border-t-2 border-gray-300 rounded-t-full mb-1 relative">
+                             <div className="absolute bottom-0 left-1/2 w-0.5 h-8 bg-red-600 origin-bottom transform -translate-x-1/2 rotate-[-45deg]"></div>
                          </div>
-                         {/* Needle */}
-                         <div className="absolute bottom-4 left-1/2 w-0.5 h-10 bg-red-600 origin-bottom transform -translate-x-1/2 rotate-[-45deg] z-10 shadow-sm"></div>
-                         {/* Pivot */}
-                         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 w-3 h-3 bg-gray-800 rounded-full border border-gray-500 z-20"></div>
-                         <div className={`absolute bottom-8 font-black text-xl ${labelColor}`}>{label}</div>
+                         <span className={`font-black text-2xl ${colorClass}`}>{label}</span>
                      </div>
                      {/* Glass Reflection */}
-                     <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-transparent via-white/10 to-transparent pointer-events-none"></div>
+                     <div className="absolute inset-2 rounded-full bg-gradient-to-tr from-transparent via-white/10 to-transparent pointer-events-none"></div>
                  </div>
              );
-        case 'resistor_box':
+        case 'potentiometer':
             return (
-                <div style={style} className="absolute w-28 h-16 bg-[#3e2723] rounded-lg border-b-4 border-[#1b110f] shadow-xl flex flex-col items-center p-2">
-                    <div className="w-full h-full grid grid-cols-4 gap-2">
-                        {[...Array(8)].map((_,i) => (
-                            <div key={i} className="bg-black rounded-full w-full h-full border-2 border-gray-700 shadow-inner relative">
-                                <div className="absolute inset-1 bg-black rounded-full border border-gray-600"></div>
-                            </div>
-                        ))}
+                <div style={style} className="absolute w-[350px] h-20 flex flex-col items-center justify-center">
+                    <div className="w-full h-14 bg-gradient-to-b from-[#5d4037] to-[#3e2723] rounded-lg border border-[#2d1b18] relative shadow-xl flex items-center px-6">
+                        {/* Resistance Wire */}
+                        <div className="w-full h-0.5 bg-gray-300 shadow-[0_0_5px_rgba(255,255,255,0.5)]"></div>
+                        {/* Ruler Markings */}
+                        <div className="absolute bottom-1 left-6 right-6 h-2 flex justify-between">
+                            {[...Array(11)].map((_,i) => <div key={i} className="w-px h-full bg-white/30"></div>)}
+                        </div>
+                        {/* Jockey */}
+                        <div 
+                            className="absolute top-[-5px] w-6 h-16 z-50 transition-all duration-75 drop-shadow-xl"
+                            style={{ left: `${state.jockeyPos || 50}%` }}
+                        >
+                            <div className="w-2 h-full bg-black mx-auto rounded-full bg-gradient-to-r from-gray-700 to-black"></div>
+                            <div className="w-6 h-4 bg-red-600 rounded absolute top-0 -ml-2"></div>
+                        </div>
                     </div>
                 </div>
             );
-        case 'resistor_2':
-        case 'resistor_5':
-        case 'resistor_10':
-             const val = type.split('_')[1];
-             // Ceramic Resistor Look
-             return (
-                 <div style={style} className="absolute w-20 h-8 flex items-center justify-center drop-shadow-md">
-                     <div className="w-16 h-6 bg-stone-100 rounded-full border border-stone-300 relative overflow-hidden flex items-center justify-center shadow-inner">
-                         {/* Bands */}
-                         <div className="absolute left-3 w-1.5 h-full bg-amber-600"></div>
-                         <div className="absolute left-6 w-1.5 h-full bg-blue-600"></div>
-                         <div className="absolute left-9 w-1.5 h-full bg-red-600"></div>
-                         <div className="absolute right-3 w-1.5 h-full bg-yellow-500"></div>
-                         <span className="relative z-10 text-[9px] font-bold text-black bg-white/80 px-1 rounded border border-stone-300">{val}Ω</span>
-                     </div>
-                     {/* Leads */}
-                     <div className="absolute left-0 w-2 h-0.5 bg-gray-400"></div>
-                     <div className="absolute right-0 w-2 h-0.5 bg-gray-400"></div>
-                 </div>
-             );
-        default: return null;
+        case 'resistor_box':
+            return (
+                <div style={style} className="absolute w-28 h-16 bg-gradient-to-b from-[#4e342e] to-[#3e2723] rounded-lg border-b-4 border-[#1b110f] shadow-xl flex items-center justify-center gap-2 px-2">
+                    {[1,2,3,4].map(k => (
+                        <div key={k} className="w-4 h-4 rounded-full bg-black border border-gray-600 shadow-inner"></div>
+                    ))}
+                </div>
+            );
+        default: return <div style={style} className="w-10 h-10 bg-gray-500 rounded"></div>;
     }
 };
 
 const TOOLS: Record<string, any> = {
-    'battery': { name: 'Battery', type: 'source', terminals: [{id:'pos',x:50,y:0},{id:'neg',x:-50,y:0}], icon: '🔋' },
-    'key': { name: 'Key (Switch)', type: 'control', terminals: [{id:'in',x:-35,y:0},{id:'out',x:35,y:0}], icon: '🔌' },
-    'potentiometer': { name: 'Potentiometer', type: 'control', terminals: [{id:'A',x:-190,y:8},{id:'B',x:190,y:8},{id:'J',x:0,y:-30}], icon: '📏' },
-    'voltmeter': { name: 'Voltmeter', type: 'meter', terminals: [{id:'pos',x:35,y:35},{id:'neg',x:-35,y:35}], icon: '⚡' },
-    'ammeter': { name: 'Ammeter', type: 'meter', terminals: [{id:'pos',x:35,y:35},{id:'neg',x:-35,y:35}], icon: '⏱️' },
-    'galvanometer': { name: 'Galvanometer', type: 'meter', terminals: [{id:'pos',x:35,y:35},{id:'neg',x:-35,y:35}], icon: '🧭' },
-    'resistor_box': { name: 'Resistor Box', type: 'load', terminals: [{id:'t1',x:-60,y:0},{id:'t2',x:60,y:0}], icon: '🎛️' },
-    'resistor_2': { name: '2Ω Resistor', type: 'load', terminals: [{id:'t1',x:-40,y:0},{id:'t2',x:40,y:0}], icon: '2️⃣' },
-    'resistor_5': { name: '5Ω Resistor', type: 'load', terminals: [{id:'t1',x:-40,y:0},{id:'t2',x:40,y:0}], icon: '5️⃣' },
-    'resistor_10': { name: '10Ω Resistor', type: 'load', terminals: [{id:'t1',x:-40,y:0},{id:'t2',x:40,y:0}], icon: '🔟' },
+    'battery': { name: 'Battery', terminals: [{id:'pos',x:45,y:0},{id:'neg',x:-45,y:0}], icon: '🔋' },
+    'key': { name: 'Key', terminals: [{id:'in',x:-35,y:0},{id:'out',x:35,y:0}], icon: '🔌' },
+    'potentiometer': { name: 'Potentiometer', terminals: [{id:'A',x:-170,y:0},{id:'B',x:170,y:0},{id:'J',x:0,y:-20}], icon: '📏' },
+    'voltmeter': { name: 'Voltmeter', terminals: [{id:'pos',x:30,y:30},{id:'neg',x:-30,y:30}], icon: '⚡' },
+    'ammeter': { name: 'Ammeter', terminals: [{id:'pos',x:30,y:30},{id:'neg',x:-30,y:30}], icon: '⏱️' },
+    'resistor_box': { name: 'Resistor Box', terminals: [{id:'t1',x:-50,y:0},{id:'t2',x:50,y:0}], icon: '🎛️' },
 };
 
 const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
@@ -184,41 +122,85 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
     const [drawingWireStart, setDrawingWireStart] = useState<{ compId: string, terminal: string, pos: Point } | null>(null);
     const [mousePos, setMousePos] = useState<Point>({ x: 0, y: 0 });
     const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-    const [draggingId, setDraggingId] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    
     const workbenchRef = useRef<HTMLDivElement>(null);
+    const requestRef = useRef<number>();
+
+    const dragRef = useRef<{
+        isDragging: boolean;
+        id: string | null;
+        type: 'move' | 'interact';
+        mouseX: number;
+        mouseY: number;
+        offsetX: number;
+        offsetY: number;
+    }>({ isDragging: false, id: null, type: 'move', mouseX: 0, mouseY: 0, offsetX: 0, offsetY: 0 });
+
+    // --- SMOOTH DRAG LOOP ---
+    const animate = () => {
+        if (dragRef.current.isDragging && dragRef.current.id) {
+            const { id, type, mouseX, mouseY, offsetX, offsetY } = dragRef.current;
+            
+            setComponents(prev => prev.map(c => {
+                if (c.id === id) {
+                    if (type === 'move') {
+                        let newX = mouseX - offsetX;
+                        let newY = mouseY - offsetY;
+
+                         // Boundary Checks
+                         const benchRect = workbenchRef.current?.getBoundingClientRect();
+                         if (benchRect) {
+                            newX = Math.max(0, Math.min(benchRect.width, newX));
+                            newY = Math.max(0, Math.min(benchRect.height, newY));
+                         }
+
+                        return { ...c, x: newX, y: newY };
+                    } else if (type === 'interact' && c.typeId === 'potentiometer') {
+                        const relX = mouseX - c.x;
+                        const percent = Math.max(0, Math.min(100, ((relX + 170) / 340) * 100));
+                        return { ...c, state: { ...c.state, jockeyPos: percent } };
+                    }
+                }
+                return c;
+            }));
+        }
+        requestRef.current = requestAnimationFrame(animate);
+    };
 
     useEffect(() => {
-        onUpdateChar('idle', "Electricity Lab ready. Drag components to the board and click terminals to wire them.");
+        requestRef.current = requestAnimationFrame(animate);
+        return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
     }, []);
+
 
     const addComponent = (typeId: string) => {
         const template = TOOLS[typeId];
-        setComponents([...components, {
+        const newComp = {
             id: Math.random().toString(36).substr(2, 9),
             typeId,
             name: template.name,
-            x: 300 + (Math.random() * 100),
-            y: 200 + (Math.random() * 100),
+            x: 200 + Math.random() * 50,
+            y: 200 + Math.random() * 50,
             rotation: 0,
             state: { jockeyPos: 50, isOpen: true }
-        }]);
+        };
+        setComponents(prev => [...prev, newComp]);
+        setSelectedId(newComp.id);
     };
 
     const getTerminalPos = (comp: CircuitComponent, terminalId: string): Point => {
         const tool = TOOLS[comp.typeId];
         const termDef = tool.terminals.find((t: any) => t.id === terminalId);
-        
         if (termDef) {
             const rad = comp.rotation * (Math.PI / 180);
             let tX = termDef.x;
             let tY = termDef.y;
-            
+            // Special Potentiometer Jockey Logic
             if (comp.typeId === 'potentiometer' && terminalId === 'J') {
-                tX = ((comp.state.jockeyPos || 50) - 50) * 3.8;
-                tY = -30;
+                 tX = ((comp.state.jockeyPos || 50) - 50) * 3.4;
+                 tY = -30;
             }
-
             const rotX = tX * Math.cos(rad) - tY * Math.sin(rad);
             const rotY = tX * Math.sin(rad) + tY * Math.cos(rad);
             return { x: comp.x + rotX, y: comp.y + rotY };
@@ -226,7 +208,7 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
         return { x: comp.x, y: comp.y };
     };
 
-    const handleTerminalClick = (compId: string, terminalId: string, e: React.MouseEvent) => {
+    const handleTerminalClick = (compId: string, terminalId: string, e: React.MouseEvent | React.TouchEvent) => {
         e.stopPropagation();
         const comp = components.find(c => c.id === compId);
         if (!comp) return;
@@ -234,16 +216,13 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
 
         if (drawingWireStart) {
             if (drawingWireStart.compId === compId && drawingWireStart.terminal === terminalId) {
-                setDrawingWireStart(null);
-                return;
+                setDrawingWireStart(null); return;
             }
             setWires([...wires, {
                 id: Math.random().toString(36),
-                fromCompId: drawingWireStart.compId,
-                fromTerminal: drawingWireStart.terminal,
-                toCompId: compId,
-                toTerminal: terminalId,
-                color: '#dc2626' // Red wire
+                fromCompId: drawingWireStart.compId, fromTerminal: drawingWireStart.terminal,
+                toCompId: compId, toTerminal: terminalId,
+                color: '#ef4444' // Red wire
             }]);
             setDrawingWireStart(null);
         } else {
@@ -251,182 +230,188 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
         }
     };
 
-    const handleMouseDown = (e: React.MouseEvent, id: string) => {
+    const handleMouseDown = (e: React.MouseEvent | React.TouchEvent, id: string, type: 'move' | 'interact' = 'move') => {
         e.stopPropagation();
-        e.preventDefault();
+        if (type === 'move') e.preventDefault();
         
-        const comp = components.find(c => c.id === id);
-        if (comp && workbenchRef.current) {
-            const rect = workbenchRef.current.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            
-            setDragOffset({
-                x: mouseX - comp.x,
-                y: mouseY - comp.y
-            });
-            
-            setDraggingId(id);
-            setSelectedId(id);
-        }
-    };
-
-    const handleMouseMove = (e: React.MouseEvent) => {
-        if (workbenchRef.current) {
-            const rect = workbenchRef.current.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            setMousePos({ x: mouseX, y: mouseY });
-
-            if (draggingId) {
-                const newX = mouseX - dragOffset.x;
-                const newY = mouseY - dragOffset.y;
-                setComponents(prev => prev.map(c => c.id === draggingId ? { ...c, x: newX, y: newY } : c));
-            }
-        }
-    };
-    
-    const handleRotation = (delta: number) => {
-        if (selectedId) {
-            setComponents(prev => prev.map(c => c.id === selectedId ? { ...c, rotation: (c.rotation + delta) % 360 } : c));
-        }
-    };
-
-    const moveJockey = (id: string, e: React.MouseEvent) => {
-        e.stopPropagation();
         const comp = components.find(c => c.id === id);
         if (!comp || !workbenchRef.current) return;
+
+        // Bring to front
+        setComponents(prev => [...prev.filter(c => c.id !== id), comp]);
+        setSelectedId(id);
+
+        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+        const rect = workbenchRef.current.getBoundingClientRect();
+        const mouseX = clientX - rect.left;
+        const mouseY = clientY - rect.top;
         
-        const handleDrag = (moveEvent: MouseEvent) => {
-            const rect = workbenchRef.current!.getBoundingClientRect();
-            const currentX = moveEvent.clientX - rect.left;
-            // Only horizontal drag relative to rotation 0 for simplicity in this demo
-            const delta = currentX - comp.x;
-            const newPercent = Math.max(0, Math.min(100, 50 + (delta / 3.8)));
-            setComponents(prev => prev.map(c => c.id === id ? { ...c, state: { ...c.state, jockeyPos: newPercent } } : c));
+        dragRef.current = {
+            isDragging: true, id, type,
+            mouseX, mouseY,
+            offsetX: mouseX - comp.x,
+            offsetY: mouseY - comp.y
         };
-
-        const stopDrag = () => {
-            window.removeEventListener('mousemove', handleDrag);
-            window.removeEventListener('mouseup', stopDrag);
-        };
-
-        window.addEventListener('mousemove', handleDrag);
-        window.addEventListener('mouseup', stopDrag);
+        
+        window.addEventListener('mousemove', handleGlobalMove);
+        window.addEventListener('mouseup', handleGlobalUp);
+        window.addEventListener('touchmove', handleGlobalMove, { passive: false });
+        window.addEventListener('touchend', handleGlobalUp);
     };
 
-    const selectedComponent = components.find(c => c.id === selectedId);
+    const handleGlobalMove = (e: MouseEvent | TouchEvent) => {
+        if (!dragRef.current.isDragging || !workbenchRef.current) return;
+        if (e.type === 'touchmove') e.preventDefault();
+
+        const clientX = 'touches' in e ? (e as TouchEvent).touches[0].clientX : (e as MouseEvent).clientX;
+        const clientY = 'touches' in e ? (e as TouchEvent).touches[0].clientY : (e as MouseEvent).clientY;
+        const rect = workbenchRef.current.getBoundingClientRect();
+        
+        // Simply update the ref coordinate, the animate loop handles the state update
+        dragRef.current.mouseX = clientX - rect.left;
+        dragRef.current.mouseY = clientY - rect.top;
+    };
+
+    const handleGlobalUp = () => {
+        dragRef.current.isDragging = false;
+        window.removeEventListener('mousemove', handleGlobalMove);
+        window.removeEventListener('mouseup', handleGlobalUp);
+        window.removeEventListener('touchmove', handleGlobalMove);
+        window.removeEventListener('touchend', handleGlobalUp);
+    };
+
+    const handleWorkbenchMove = (e: React.MouseEvent) => {
+        if (workbenchRef.current) {
+            const rect = workbenchRef.current.getBoundingClientRect();
+            setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+        }
+    };
+
+    const deleteComponent = (id: string) => {
+        setComponents(prev => prev.filter(c => c.id !== id));
+        setWires(prev => prev.filter(w => w.fromCompId !== id && w.toCompId !== id));
+        setSelectedId(null);
+    };
+
+    const updateRotation = (id: string, deg: number) => {
+        setComponents(prev => prev.map(c => c.id === id ? { ...c, rotation: deg } : c));
+    };
+
+    const filteredTools = Object.entries(TOOLS).filter(([key, tool]) => 
+        tool.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     return (
-        <div className="h-full flex flex-col-reverse md:flex-row bg-[#0f172a]" onMouseMove={handleMouseMove} onMouseUp={() => setDraggingId(null)} onClick={() => setSelectedId(null)}>
+        <div className="h-full flex flex-col-reverse md:flex-row bg-[#0f172a]" onMouseMove={handleWorkbenchMove} onClick={() => setSelectedId(null)}>
             {/* Sidebar */}
-            <div className="w-full md:w-64 bg-[#0B0F19] border-r border-slate-800 p-4 z-20 overflow-y-auto custom-scrollbar shadow-xl">
-                <h4 className="text-xs font-bold text-blue-400 uppercase mb-4 flex items-center gap-2">
-                    <span>⚡</span> Components
-                </h4>
-                <div className="grid grid-cols-2 gap-3">
-                    {Object.entries(TOOLS).map(([key, tool]) => (
-                        <button key={key} onClick={() => addComponent(key)} className="flex flex-col items-center p-3 bg-slate-800/50 rounded-xl border border-slate-700 hover:border-blue-500 hover:bg-slate-700 transition-all active:scale-95 group shadow-sm">
-                            <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">{tool.icon}</div>
-                            <span className="text-[9px] text-slate-300 text-center font-medium">{tool.name}</span>
+            <div className="w-full md:w-64 h-48 md:h-full bg-[#0B0F19] border-r border-slate-800 p-4 flex flex-col gap-4 z-20 overflow-y-auto shadow-2xl">
+                <div>
+                    <input
+                        type="text"
+                        placeholder="Search components..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full p-2 bg-slate-800 rounded-lg text-xs text-white border border-slate-700 focus:border-blue-500 outline-none placeholder-slate-500"
+                    />
+                </div>
+                
+                <h4 className="text-xs font-bold text-yellow-500 uppercase tracking-wider">Electronics</h4>
+                <div className="grid grid-cols-3 gap-2">
+                    {filteredTools.map(([key, tool]) => (
+                        <button key={key} onClick={() => addComponent(key)} className="flex flex-col items-center p-2 bg-slate-800/50 rounded-xl border border-slate-700 hover:border-yellow-500 hover:bg-slate-700 transition-all active:scale-95">
+                            <span className="text-2xl mb-1">{tool.icon}</span>
+                            <span className="text-[9px] text-slate-300 font-bold text-center">{tool.name}</span>
                         </button>
                     ))}
                 </div>
-                 <div className="mt-8 border-t border-slate-800 pt-4">
-                    <button onClick={() => { setComponents([]); setWires([]); }} className="w-full py-2 bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors">Clear Workbench</button>
-                </div>
+                <button onClick={() => {setComponents([]); setWires([])}} className="mt-auto w-full py-2 bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors">Reset Board</button>
             </div>
 
-            {/* Workbench */}
-            <div ref={workbenchRef} className="flex-grow relative bg-[#1e293b] overflow-hidden shadow-inner cursor-crosshair">
+            {/* Circuit Board */}
+            <div ref={workbenchRef} className="flex-grow relative bg-[#1e293b] overflow-hidden cursor-default touch-none">
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/graphy-dark.png')] opacity-20 pointer-events-none"></div>
                 
-                {/* Wires */}
-                <svg className="absolute inset-0 w-full h-full pointer-events-none z-10 drop-shadow-md">
+                {/* Wires Layer */}
+                <svg className="absolute inset-0 w-full h-full pointer-events-none z-10 filter drop-shadow-sm">
                     {wires.map(w => {
                         const c1 = components.find(c => c.id === w.fromCompId);
                         const c2 = components.find(c => c.id === w.toCompId);
                         if (!c1 || !c2) return null;
                         const p1 = getTerminalPos(c1, w.fromTerminal);
                         const p2 = getTerminalPos(c2, w.toTerminal);
-                        return (
-                            <g key={w.id}>
-                                {/* Wire Insulation */}
-                                <path d={`M ${p1.x} ${p1.y} C ${p1.x + 40} ${p1.y}, ${p2.x - 40} ${p2.y}, ${p2.x} ${p2.y}`} stroke="#b91c1c" strokeWidth="4" fill="none" strokeLinecap="round" />
-                                {/* Wire Highlight */}
-                                <path d={`M ${p1.x} ${p1.y} C ${p1.x + 40} ${p1.y}, ${p2.x - 40} ${p2.y}, ${p2.x} ${p2.y}`} stroke="#fca5a5" strokeWidth="1" fill="none" strokeLinecap="round" className="opacity-40" />
-                                <circle cx={p1.x} cy={p1.y} r="3" fill="#7f1d1d" />
-                                <circle cx={p2.x} cy={p2.y} r="3" fill="#7f1d1d" />
-                            </g>
-                        );
+                        return <path key={w.id} d={`M ${p1.x} ${p1.y} C ${p1.x+50} ${p1.y}, ${p2.x-50} ${p2.y}, ${p2.x} ${p2.y}`} stroke={w.color} strokeWidth="4" fill="none" strokeLinecap="round" />;
                     })}
-                    {drawingWireStart && <path d={`M ${drawingWireStart.pos.x} ${drawingWireStart.pos.y} L ${mousePos.x} ${mousePos.y}`} stroke="#ef4444" strokeWidth="2" strokeDasharray="5,5" fill="none" />}
+                    {drawingWireStart && <path d={`M ${drawingWireStart.pos.x} ${drawingWireStart.pos.y} L ${mousePos.x} ${mousePos.y}`} stroke="#ef4444" strokeWidth="3" strokeDasharray="5,5" fill="none" opacity="0.8" />}
                 </svg>
 
-                {/* Components */}
-                {components.map(comp => (
-                    <div 
-                        key={comp.id} 
-                        style={{ left: comp.x, top: comp.y }} 
-                        className={`absolute ${selectedId === comp.id ? 'z-30' : 'z-20'} cursor-grab active:cursor-grabbing`}
-                        onMouseDown={(e) => handleMouseDown(e, comp.id)}
-                    >
-                        <ComponentVisual type={comp.typeId} state={comp.state} rotation={comp.rotation} />
-                        
-                        {/* Terminals */}
-                        {TOOLS[comp.typeId].terminals.map((t: any) => {
-                            let tPos = {x: t.x, y: t.y};
-                            const rad = comp.rotation * (Math.PI / 180);
-                            
-                            if (comp.typeId === 'potentiometer' && t.id === 'J') {
-                                tPos.x = ((comp.state.jockeyPos || 50) - 50) * 3.8;
-                                tPos.y = -30;
-                            }
-
-                            const rotX = tPos.x * Math.cos(rad) - tPos.y * Math.sin(rad);
-                            const rotY = tPos.x * Math.sin(rad) + tPos.y * Math.cos(rad);
-
-                            return (
-                                <div
-                                    key={t.id}
-                                    className="absolute w-5 h-5 -ml-2.5 -mt-2.5 rounded-full bg-white/10 border border-white/30 hover:bg-red-500/30 cursor-pointer flex items-center justify-center z-40 transition-all scale-0 group-hover:scale-100"
-                                    style={{ transform: `translate(${rotX}px, ${rotY}px)` }}
-                                    onMouseDown={(e) => {
-                                        if (comp.typeId === 'potentiometer' && t.id === 'J') moveJockey(comp.id, e);
-                                        else handleTerminalClick(comp.id, t.id, e);
-                                    }}
-                                    title={`Connect ${t.id}`}
-                                >
-                                    <div className="w-1.5 h-1.5 bg-red-500 rounded-full shadow-sm"></div>
+                {/* Components Layer */}
+                {components.map(comp => {
+                    const isSelected = selectedId === comp.id;
+                    
+                    return (
+                        <div 
+                            key={comp.id} 
+                            style={{ left: comp.x, top: comp.y, zIndex: isSelected ? 100 : 20 }} 
+                            className="absolute"
+                            onMouseDown={(e) => handleMouseDown(e, comp.id)} 
+                            onTouchStart={(e) => handleMouseDown(e, comp.id)}
+                        >
+                            {/* Control Panel (Popover) */}
+                            {isSelected && (
+                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-4 bg-slate-800 p-2 rounded-xl border border-slate-600 shadow-xl z-50 flex gap-2 animate-fade-in-up" onMouseDown={e => e.stopPropagation()}>
+                                    <button onClick={() => updateRotation(comp.id, comp.rotation - 45)} className="p-2 hover:bg-slate-700 rounded-lg text-white" title="Rotate Left">
+                                        ↺
+                                    </button>
+                                    <div className="w-px bg-slate-600 mx-1"></div>
+                                    <button onClick={() => updateRotation(comp.id, comp.rotation + 45)} className="p-2 hover:bg-slate-700 rounded-lg text-white" title="Rotate Right">
+                                        ↻
+                                    </button>
+                                    <div className="w-px bg-slate-600 mx-1"></div>
+                                    <button onClick={() => deleteComponent(comp.id)} className="p-2 hover:bg-red-900/30 text-red-400 rounded-lg" title="Delete">
+                                        🗑️
+                                    </button>
                                 </div>
-                            );
-                        })}
-                        
-                        {/* Key Toggle */}
-                        {comp.typeId === 'key' && (
-                            <div className="absolute inset-0 cursor-pointer z-30" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, state: { ...c.state, isOpen: !c.state.isOpen } } : c))} />
-                        )}
-                        
-                         {selectedId === comp.id && (
-                            <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] px-2 py-1 rounded shadow pointer-events-none whitespace-nowrap z-50">
-                                {comp.name}
-                            </div>
-                        )}
-                    </div>
-                ))}
+                            )}
 
-                {/* Controls Overlay */}
-                {selectedComponent && (
-                     <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-slate-900/90 backdrop-blur-md p-2 rounded-xl border border-slate-700 flex items-center gap-3 shadow-2xl z-50" onClick={e => e.stopPropagation()}>
-                        <span className="text-xs font-bold text-slate-300 uppercase">{selectedComponent.name}</span>
-                         <div className="flex items-center gap-1">
-                            <button onClick={() => handleRotation(-15)} className="p-1.5 bg-slate-800 rounded text-white hover:bg-slate-700">↺</button>
-                            <span className="text-xs w-8 text-center font-mono">{Math.round(selectedComponent.rotation)}°</span>
-                            <button onClick={() => handleRotation(15)} className="p-1.5 bg-slate-800 rounded text-white hover:bg-slate-700">↻</button>
-                         </div>
-                         <button onClick={() => { setComponents(prev => prev.filter(c => c.id !== selectedId)); setSelectedId(null); }} className="p-1.5 bg-red-900/50 text-red-200 rounded hover:bg-red-800">🗑️</button>
-                     </div>
-                )}
+                            <div className={`${isSelected ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-slate-900 rounded-lg' : ''}`}>
+                                <ComponentVisual type={comp.typeId} state={comp.state} rotation={comp.rotation} />
+                            </div>
+                            
+                            {/* Terminals */}
+                            {TOOLS[comp.typeId].terminals.map((t: any) => {
+                                let tPos = {x: t.x, y: t.y};
+                                const rad = comp.rotation * (Math.PI / 180);
+                                
+                                if (comp.typeId === 'potentiometer' && t.id === 'J') {
+                                    tPos.x = ((comp.state.jockeyPos || 50) - 50) * 3.4;
+                                    tPos.y = -20;
+                                }
+                                const rotX = tPos.x * Math.cos(rad) - tPos.y * Math.sin(rad);
+                                const rotY = tPos.x * Math.sin(rad) + tPos.y * Math.cos(rad);
+
+                                return (
+                                    <div key={t.id} className="absolute w-5 h-5 -ml-2.5 -mt-2.5 rounded-full bg-red-500/20 border-2 border-red-400 cursor-pointer z-40 hover:bg-red-500 hover:scale-125 transition-transform" style={{ transform: `translate(${rotX}px, ${rotY}px)` }} onMouseDown={(e) => handleTerminalClick(comp.id, t.id, e)} onTouchStart={(e) => handleTerminalClick(comp.id, t.id, e)} />
+                                );
+                            })}
+                            
+                            {/* Potentiometer Interaction Zone Override */}
+                            {comp.typeId === 'potentiometer' && (
+                                <div 
+                                    className="absolute w-80 h-10 cursor-ew-resize z-50"
+                                    style={{ transform: `translate(-50%, -50%) rotate(${comp.rotation}deg)`, top: -10 }}
+                                    onMouseDown={(e) => handleMouseDown(e, comp.id, 'interact')}
+                                    onTouchStart={(e) => handleMouseDown(e, comp.id, 'interact')}
+                                />
+                            )}
+                            
+                            {/* Switch Interaction */}
+                            {comp.typeId === 'key' && (
+                                <div className="absolute inset-0 cursor-pointer z-30" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, state: { ...c.state, isOpen: !c.state.isOpen } } : c))} />
+                            )}
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
