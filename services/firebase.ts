@@ -30,6 +30,16 @@ if (!firebase.apps.length) {
 
 const firebaseAuth = firebase.auth();
 const db = firebase.firestore();
+
+// Apply settings to fix "Could not reach Cloud Firestore backend"
+try {
+  db.settings({
+    experimentalForceLongPolling: true, // Force long polling to bypass proxy/firewall issues
+  });
+} catch (err) {
+  console.warn("Firestore settings could not be applied:", err);
+}
+
 const rtdb = firebase.database(); // Initialize RTDB
 
 
