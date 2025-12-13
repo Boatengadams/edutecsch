@@ -2,14 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useCreateParentByTeacher } from '../hooks/useCreateParentByTeacher';
 import { UserProfile } from '../types';
 import Button from './common/Button';
-import { useToast } from './common/Toast';
 
 interface TeacherCreateParentFormProps {
     allStudents: UserProfile[];
+    setToast: (toast: { message: string, type: 'success' | 'error' } | null) => void;
 }
 
-export const TeacherCreateParentForm: React.FC<TeacherCreateParentFormProps> = ({ allStudents }) => {
-  const { showToast } = useToast();
+export const TeacherCreateParentForm: React.FC<TeacherCreateParentFormProps> = ({ allStudents, setToast }) => {
   const [students, setStudents] = useState<UserProfile[]>([]);
   const [createParent, { loading, error, successData }] = useCreateParentByTeacher();
   const [name, setName] = useState('');
@@ -17,12 +16,12 @@ export const TeacherCreateParentForm: React.FC<TeacherCreateParentFormProps> = (
 
   useEffect(() => {
     if (successData) {
-        showToast(
-            `Parent account for ${successData.name} created with email ${successData.email} and password: ${successData.password}. Pending admin approval.`,
-            'success'
-        );
+        setToast({
+            message: `Parent account for ${successData.name} created with email ${successData.email} and password: ${successData.password}. Pending admin approval.`,
+            type: 'success'
+        });
     }
-  }, [successData, showToast]);
+  }, [successData, setToast]);
 
   useEffect(() => {
     const approvedStudents = allStudents.filter(student => student.status === 'approved');

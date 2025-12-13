@@ -13,8 +13,8 @@ type ContainerType = 'test_tube' | 'beaker' | 'conical_flask' | 'measuring_cylin
 interface Chemical {
     id: string;
     name: string;
-    concentration: number; // Molarity
-    volume: number; // mL
+    concentration: number; 
+    volume: number; 
     color: string;
     type: 'acid' | 'base' | 'salt' | 'indicator' | 'oxidizer' | 'reducer' | 'solvent';
     formula?: string;
@@ -26,35 +26,28 @@ interface LabContainer {
     name: string;
     capacity: number;
     currentVolume: number;
-    contents: Chemical[]; // Array of chemicals inside
+    contents: Chemical[]; 
     temperature: number;
-    precipitate?: { color: string; name: string; amount: number }; // Solid ppt
+    precipitate?: { color: string; name: string; amount: number }; 
     x: number;
     y: number;
 }
 
 const STOCK_CHEMICALS: LabEquipment[] = [
-    // Titration Reagents (From Exam Q1, Q3, Q4)
-    { id: 'na2s2o3', name: 'Sodium Thiosulfate', type: 'chemical', icon: '⚪', description: '0.1M Standard Sol.', properties: { color: '#ffffff05', volume: 0.1 } }, // Clear
-    { id: 'i2', name: 'Iodine Solution', type: 'chemical', icon: '🟤', description: '0.05M Oxidizer', properties: { color: '#92400e', volume: 0.05 } }, // Brown
+    { id: 'na2s2o3', name: 'Sodium Thiosulfate', type: 'chemical', icon: '⚪', description: '0.1M Standard Sol.', properties: { color: '#ffffff05', volume: 0.1 } }, 
+    { id: 'i2', name: 'Iodine Solution', type: 'chemical', icon: '🟤', description: '0.05M Oxidizer', properties: { color: '#92400e', volume: 0.05 } }, 
     { id: 'hcl', name: 'Dilute HCl', type: 'chemical', icon: '🧪', description: '1.0M Acid', properties: { color: '#ffffff05', volume: 1.0 } },
     { id: 'naoh', name: 'Sodium Hydroxide', type: 'chemical', icon: '🧴', description: '1.0M Base', properties: { color: '#ffffff05', volume: 1.0 } },
-    { id: 'kmno4', name: 'Potassium Manganate(VII)', type: 'chemical', icon: '🟣', description: '0.05M Oxidizer', properties: { color: '#7e22ce', volume: 0.05 } }, // Purple
-    { id: 'feso4', name: 'Iron(II) Sulfate', type: 'chemical', icon: '🟢', description: '0.1M Sample F', properties: { color: '#dcfce7', volume: 0.1 } }, // Pale Green
-
-    // Qualitative Analysis Reagents (From Exam Q2, Q3)
+    { id: 'kmno4', name: 'Potassium Manganate(VII)', type: 'chemical', icon: '🟣', description: '0.05M Oxidizer', properties: { color: '#7e22ce', volume: 0.05 } }, 
+    { id: 'feso4', name: 'Iron(II) Sulfate', type: 'chemical', icon: '🟢', description: '0.1M Sample F', properties: { color: '#dcfce7', volume: 0.1 } }, 
     { id: 'bacl2', name: 'Barium Chloride', type: 'chemical', icon: '⚪', description: 'Test for Sulfate', properties: { color: '#ffffff05', volume: 0.1 } },
     { id: 'agno3', name: 'Silver Nitrate', type: 'chemical', icon: '⚪', description: 'Test for Halides', properties: { color: '#ffffff05', volume: 0.1 } },
     { id: 'nh3', name: 'Ammonia (aq)', type: 'chemical', icon: '💨', description: 'Weak Base', properties: { color: '#ffffff05', volume: 1.0 } },
     { id: 'cuso4', name: 'Copper Sulfate', type: 'chemical', icon: '🔷', description: '0.5M Solution', properties: { color: '#3b82f6', volume: 0.5 } },
     { id: 'fecl3', name: 'Iron(III) Chloride', type: 'chemical', icon: '🟠', description: 'Yellow/Brown Sol.', properties: { color: '#f59e0b', volume: 0.1 } },
-    
-    // Indicators
-    { id: 'starch', name: 'Starch Indicator', type: 'chemical', icon: '🥔', description: 'Test for Iodine', properties: { color: '#ffffffaa', volume: 0 } }, // Cloudy white
+    { id: 'starch', name: 'Starch Indicator', type: 'chemical', icon: '🥔', description: 'Test for Iodine', properties: { color: '#ffffffaa', volume: 0 } }, 
     { id: 'methyl_orange', name: 'Methyl Orange', type: 'chemical', icon: '🟠', description: 'Acid-Base Ind.', properties: { color: '#fb923c', volume: 0 } },
     { id: 'phenolphthalein', name: 'Phenolphthalein', type: 'chemical', icon: '⚪', description: 'Acid-Base Ind.', properties: { color: '#ffffff00', volume: 0 } },
-    
-    // Solvents
     { id: 'h2o', name: 'Distilled Water', type: 'chemical', icon: '💧', description: 'Pure Solvent', properties: { color: '#f0f9ff', volume: 0 } },
 ];
 
@@ -70,6 +63,7 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
     const { showToast } = useToast();
     const [containers, setContainers] = useState<LabContainer[]>([]);
     const [heldContainer, setHeldContainer] = useState<LabContainer | null>(null);
+    const [isSidebarOpen, setSidebarOpen] = useState(false);
     
     // Interaction State
     const [burnerState, setBurnerState] = useState<'off' | 'yellow' | 'blue'>('off');
@@ -84,7 +78,7 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
     
     // Burette specific state
     const [activeBuretteId, setActiveBuretteId] = useState<string | null>(null);
-    const [buretteFlowRate, setBuretteFlowRate] = useState(0); // 0 = closed, 1 = slow, 5 = fast
+    const [buretteFlowRate, setBuretteFlowRate] = useState(0); 
 
     const workbenchRef = useRef<HTMLDivElement>(null);
 
@@ -112,46 +106,29 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
                 concentration: template.properties?.volume || 0,
                 volume: vol,
                 color: template.properties?.color || '#fff',
-                type: 'salt' // Simplification
+                type: 'salt'
             });
         };
 
-        // 1. IODOMETRIC TITRATION (I2 + Thiosulfate)
         const iodine = getChem('i2');
         const thiosulfate = getChem('na2s2o3');
         const starch = getChem('starch');
 
         if (iodine && thiosulfate) {
-            // Reaction: 2S2O3(2-) + I2 -> S4O6(2-) + 2I-
-            // Moles
             const molI2 = iodine.concentration * (iodine.volume / 1000);
             const molThio = thiosulfate.concentration * (thiosulfate.volume / 1000);
             
-            // Stoichiometry 1:2 (I2 : Thio)
-            // Determine limiting reagent logic for simulation step (instant reaction for simplicity)
-            // If we have enough Thio to neutralize I2:
             if (molThio >= molI2 * 2) {
                 removeChem('i2', iodine.volume);
-                // Add Iodide (colorless) - effectively removing I2 color
                 showToast("Solution turned colorless (Endpoint reached)", "success");
             } else {
-                // Partial reaction
                 removeChem('na2s2o3', thiosulfate.volume);
-                // Reduce I2 proportionally
                 const reactedI2Moles = molThio / 2;
                 const reactedI2Vol = (reactedI2Moles / iodine.concentration) * 1000;
                 removeChem('i2', reactedI2Vol);
             }
         }
         
-        // Starch Logic
-        if (starch && getChem('i2')) {
-             // Starch + I2 = Blue-Black Complex
-             // We simulate this by overriding the container color later
-        }
-
-        // 2. PRECIPITATION REACTIONS (Qualitative Analysis)
-        // Fe2+ + OH- -> Fe(OH)2 (Green ppt)
         const fe2 = getChem('feso4');
         const base = getChem('naoh') || getChem('nh3');
         
@@ -160,33 +137,26 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
              showToast("Green precipitate formed (Fe²⁺ confirmed)", "success");
         }
 
-        // Fe3+ + OH- -> Fe(OH)3 (Red-Brown ppt)
         const fe3 = getChem('fecl3');
         if (fe3 && base && !newContainer.precipitate) {
             newContainer.precipitate = { name: 'Iron(III) Hydroxide', color: '#9a3412', amount: 1 }; // Rust
             showToast("Red-brown precipitate formed (Fe³⁺ confirmed)", "success");
         }
 
-        // Cu2+ + OH- -> Cu(OH)2 (Blue ppt)
         const cu2 = getChem('cuso4');
         if (cu2 && base && !newContainer.precipitate) {
             newContainer.precipitate = { name: 'Copper(II) Hydroxide', color: '#60a5fa', amount: 1 }; // Light Blue
             showToast("Blue precipitate formed (Cu²⁺ confirmed)", "success");
         }
         
-        // Cu(OH)2 + Excess NH3 -> Deep Blue Solution
         if (newContainer.precipitate?.name === 'Copper(II) Hydroxide' && getChem('nh3') && (getChem('nh3')?.volume || 0) > 10) {
-            newContainer.precipitate = undefined; // Dissolves
-            // Add deep blue complex visual logic handled in renderer
+            newContainer.precipitate = undefined; 
             showToast("Precipitate dissolved in excess NH₃ (Deep Blue Solution)", "success");
         }
 
-        // Sulfate Test: SO4 + BaCl2 -> BaSO4 (White ppt)
-        const sulfate = getChem('feso4') || getChem('cuso4') || getChem('na2s2o3'); // Sources of sulfur/sulfate (simplified)
         const barium = getChem('bacl2');
-        // Ensure acid is present for valid sulfate test if needed, but simplified here:
         if ((getChem('feso4') || getChem('cuso4')) && barium && !newContainer.precipitate) {
-             newContainer.precipitate = { name: 'Barium Sulfate', color: '#ffffff', amount: 1 }; // White
+             newContainer.precipitate = { name: 'Barium Sulfate', color: '#ffffff', amount: 1 }; 
              showToast("White precipitate formed (Sulfate confirmed)", "success");
         }
 
@@ -196,9 +166,12 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
     const spawnGlassware = (type: ContainerType) => {
         const template = GLASSWARE.find(g => g.type === type);
         if (!template) return;
-        // Center spawn or grid spawn
-        const x = 300 + (containers.length * 50) % 400;
-        const y = type === 'burette' ? 150 : 350; // Burettes spawn higher
+        
+        const scrollX = workbenchRef.current?.scrollLeft || 0;
+        const scrollY = workbenchRef.current?.scrollTop || 0;
+        
+        const x = 300 + scrollX + (containers.length * 50) % 400;
+        const y = (type === 'burette' ? 150 : 350) + scrollY; 
 
         const newContainer: LabContainer = {
             id: Math.random().toString(36).substr(2, 9),
@@ -235,16 +208,19 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
     };
 
     const handleBenchClick = (e: React.MouseEvent) => {
+        setSidebarOpen(false);
         if (heldContainer && animationState === 'idle') {
             const rect = workbenchRef.current?.getBoundingClientRect();
             if (rect) {
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
+                const scrollX = workbenchRef.current?.scrollLeft || 0;
+                const scrollY = workbenchRef.current?.scrollTop || 0;
+                
+                const x = e.clientX - rect.left + scrollX;
+                const y = e.clientY - rect.top + scrollY;
                 
                 if (heldContainer.id.startsWith('stock_')) {
-                    setHeldContainer(null); // Put back stock
+                    setHeldContainer(null); 
                 } else {
-                    // Place container
                     setContainers([...containers, { ...heldContainer, x, y }]);
                     setHeldContainer(null);
                 }
@@ -256,7 +232,6 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
         e.stopPropagation();
         if (animationState === 'pouring') return; 
         
-        // Burette Control override
         if (container.type === 'burette' && !heldContainer) {
             setActiveBuretteId(container.id === activeBuretteId ? null : container.id);
             return;
@@ -264,18 +239,15 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
 
         if (heldContainer) {
             if (heldContainer.id === container.id) return;
-            // Pouring Logic
             setPourTarget(container);
             setIsPouringModalOpen(true);
         } else {
-            // Pick up
             setHeldContainer(container);
             setContainers(containers.filter(c => c.id !== container.id));
             setActiveBuretteId(null);
         }
     };
 
-    // Burette Dripping Logic
     useEffect(() => {
         if (!activeBuretteId || buretteFlowRate === 0) return;
 
@@ -286,42 +258,37 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
                 
                 const burette = prev[buretteIndex];
                 if (burette.currentVolume <= 0) {
-                    setBuretteFlowRate(0); // Empty
+                    setBuretteFlowRate(0); 
                     return prev;
                 }
 
-                const dropVolume = buretteFlowRate * 0.1; // 0.1ml to 0.5ml per tick
+                const dropVolume = buretteFlowRate * 0.1; 
                 
-                // Find flask below burette
                 const targetIndex = prev.findIndex(c => 
                     c.id !== burette.id && 
-                    Math.abs(c.x - burette.x) < 40 && // Aligned X
-                    c.y > burette.y && c.y < burette.y + 300 // Below
+                    Math.abs(c.x - burette.x) < 40 && 
+                    c.y > burette.y && c.y < burette.y + 300 
                 );
 
                 if (targetIndex !== -1) {
                     const target = prev[targetIndex];
                     
-                    // Transfer liquid
                     const newBuretteVol = Math.max(0, burette.currentVolume - dropVolume);
                     const ratio = dropVolume / burette.currentVolume;
                     const transferredContents = burette.contents.map(c => ({ ...c, volume: c.volume * ratio }));
 
-                    // Update Target
                     let newTarget = {
                         ...target,
                         currentVolume: target.currentVolume + dropVolume,
                         contents: [...target.contents]
                     };
                     
-                    // Mix logic simplified
                     transferredContents.forEach(tc => {
                         const ex = newTarget.contents.find(c => c.id === tc.id);
                         if(ex) ex.volume += tc.volume;
                         else newTarget.contents.push(tc);
                     });
                     
-                    // Run Reaction
                     newTarget = processReaction(newTarget);
 
                     const newContainers = [...prev];
@@ -329,7 +296,6 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
                     newContainers[targetIndex] = newTarget;
                     return newContainers;
                 } else {
-                    // Drip on floor (waste)
                     const newContainers = [...prev];
                     newContainers[buretteIndex] = { ...burette, currentVolume: Math.max(0, burette.currentVolume - dropVolume) };
                     return newContainers;
@@ -345,21 +311,29 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
         if (!heldContainer) return;
         
         let targetX = 0, targetY = 0;
+        
+        // Adjust coordinates for scrolling
+        const scrollX = workbenchRef.current?.scrollLeft || 0;
+        const scrollY = workbenchRef.current?.scrollTop || 0;
+
         if (typeof pourTarget === 'string' && pourTarget === 'drain') {
              const bench = workbenchRef.current?.getBoundingClientRect();
-             if(bench) { targetX = bench.width - 60; targetY = bench.height - 60; }
+             if(bench) { targetX = bench.width - 60 + scrollX; targetY = bench.height - 60 + scrollY; }
         } else {
              const target = pourTarget as LabContainer;
              targetX = target.x;
              targetY = target.y;
         }
 
-        // Position source for pouring
-        // If target is burette, pour from top. Else standard pour.
         const isBuretteTarget = typeof pourTarget !== 'string' && pourTarget.type === 'burette';
         const yOffset = isBuretteTarget ? -200 : -100;
 
-        setPourSourcePos({ x: targetX - 40, y: targetY + yOffset });
+        // Position relative to viewport (fixed)
+        const rect = workbenchRef.current?.getBoundingClientRect();
+        const absoluteX = rect ? targetX - scrollX + rect.left : targetX;
+        const absoluteY = rect ? targetY - scrollY + rect.top : targetY;
+
+        setPourSourcePos({ x: absoluteX - 40, y: absoluteY + yOffset });
         setAnimationState('pouring');
         setIsPouringModalOpen(false);
         
@@ -384,19 +358,16 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
                 setContainers(prev => prev.map(c => {
                     if (c.id === target.id) {
                         let newC = { ...c, currentVolume: c.currentVolume + actualPour };
-                        // Mix
                         transferredContents.forEach(tc => {
                             const ex = newC.contents.find(x => x.id === tc.id);
                             if(ex) ex.volume += tc.volume;
                             else newC.contents.push(tc);
                         });
-                        // React
                         return processReaction(newC);
                     }
                     return c;
                 }));
 
-                // Reduce source
                 const remainingContents = heldContainer.contents.map(c => ({...c, volume: c.volume * (1 - ratio)})).filter(c => c.volume > 0.01);
                 setHeldContainer({ ...heldContainer, currentVolume: heldContainer.currentVolume - actualPour, contents: remainingContents });
             }
@@ -406,10 +377,23 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
     };
 
     return (
-        <div className="h-full flex flex-col-reverse md:flex-row bg-[#0f172a] overflow-hidden select-none" onMouseMove={(e) => { if(animationState === 'idle') setMousePos({ x: e.clientX, y: e.clientY }); }}>
-            {/* LEFT SIDEBAR - STOCK */}
-            <div className="w-full md:w-64 bg-[#0B0F19] border-r border-slate-800 flex flex-col z-20 shadow-xl">
-                <div className="p-4 border-b border-slate-800 bg-slate-900/50">
+        <div className="h-full flex flex-col-reverse md:flex-row bg-[#0f172a] overflow-hidden select-none relative" onMouseMove={(e) => { if(animationState === 'idle') setMousePos({ x: e.clientX, y: e.clientY }); }}>
+            
+            {/* Floating Menu Toggle */}
+            <button 
+                onClick={(e) => { e.stopPropagation(); setSidebarOpen(!isSidebarOpen); }} 
+                className="absolute top-4 left-4 z-50 p-3 bg-slate-800 rounded-full text-white shadow-lg border border-slate-600 hover:bg-slate-700 transition-colors"
+                title="Toggle Chemicals"
+            >
+                {isSidebarOpen ? '✖️' : '🧪'}
+            </button>
+
+            {/* LEFT SIDEBAR - STOCK (Hidden) */}
+            <div 
+                className={`absolute top-0 left-0 h-full w-64 bg-[#0B0F19] border-r border-slate-800 z-40 shadow-xl transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="p-4 pt-16 border-b border-slate-800 bg-slate-900/50">
                     <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-3">Apparatus</h4>
                     <div className="grid grid-cols-2 gap-2">
                         {GLASSWARE.map(glass => (
@@ -420,7 +404,7 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
                         ))}
                     </div>
                 </div>
-                <div className="p-4 flex-grow overflow-y-auto custom-scrollbar">
+                <div className="p-4 flex-grow overflow-y-auto custom-scrollbar h-[calc(100%-180px)]">
                     <h4 className="text-xs font-bold text-green-400 uppercase tracking-wider mb-3">Reagents</h4>
                     <div className="space-y-2">
                         {STOCK_CHEMICALS.map(chem => (
@@ -437,11 +421,11 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
             </div>
 
             {/* MAIN WORKBENCH */}
-            <div className="flex-grow relative bg-[#1e293b] overflow-hidden cursor-default" onClick={handleBenchClick} ref={workbenchRef}>
-                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')] opacity-20 pointer-events-none"></div>
+            <div className="flex-grow relative bg-[#1e293b] overflow-auto custom-scrollbar cursor-default" onClick={handleBenchClick} ref={workbenchRef}>
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')] opacity-20 pointer-events-none" style={{minWidth: '100%', minHeight: '100%', width: '2000px', height: '1500px'}}></div>
                 
-                {/* Sink */}
-                <div className="absolute bottom-10 right-10 w-24 h-24 bg-slate-800 rounded-full border-4 border-slate-600 flex items-center justify-center shadow-inner cursor-pointer hover:border-slate-400 transition-colors z-10 group" onClick={(e) => { e.stopPropagation(); if(heldContainer) { setPourTarget('drain'); setIsPouringModalOpen(true); } }}>
+                {/* Sink - Fixed to view or absolute in scroll? Absolute in scroll area */}
+                <div className="absolute bottom-10 right-10 w-24 h-24 bg-slate-800 rounded-full border-4 border-slate-600 flex items-center justify-center shadow-inner cursor-pointer hover:border-slate-400 transition-colors z-10 group" style={{ position: 'fixed', bottom: '20px', right: '20px' }} onClick={(e) => { e.stopPropagation(); if(heldContainer) { setPourTarget('drain'); setIsPouringModalOpen(true); } }}>
                     <div className="text-4xl opacity-50 group-hover:opacity-100 transition-opacity">🚰</div>
                     <span className="absolute bottom-full mb-2 whitespace-nowrap text-[9px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 px-2 py-1 rounded">Pour to Empty</span>
                 </div>
@@ -472,7 +456,7 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
 
                 {/* Held Container */}
                 {heldContainer && (
-                    <div className="fixed pointer-events-none z-50 filter drop-shadow-2xl transition-all duration-700 ease-in-out" style={{ left: animationState === 'pouring' ? workbenchRef.current!.getBoundingClientRect().left + pourSourcePos.x : mousePos.x + 20, top: animationState === 'pouring' ? workbenchRef.current!.getBoundingClientRect().top + pourSourcePos.y : mousePos.y + 20 }}>
+                    <div className="fixed pointer-events-none z-50 filter drop-shadow-2xl transition-all duration-700 ease-in-out" style={{ left: animationState === 'pouring' ? pourSourcePos.x : mousePos.x + 20, top: animationState === 'pouring' ? pourSourcePos.y : mousePos.y + 20 }}>
                         <div className={`transform transition-transform duration-500 ${animationState === 'pouring' ? 'rotate-[-45deg]' : 'rotate-0'}`}>
                             {heldContainer.type === 'test_tube' && <div className="absolute -left-6 top-1/2 w-12 h-2 bg-amber-700 rounded origin-right"></div>}
                             <GlasswareVisual container={heldContainer} isHeld />
@@ -512,19 +496,15 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
 const GlasswareVisual: React.FC<{ container: LabContainer; isHeld?: boolean }> = ({ container, isHeld }) => {
     const liquidHeight = (container.currentVolume / container.capacity) * 100;
     
-    // Color Logic: Mix colors, handle precipitates, handle indicators
     let displayColor = 'transparent';
     if (container.contents.length > 0) {
-        // Check for Iodine-Starch Complex
         if (container.contents.some(c => c.id === 'i2') && container.contents.some(c => c.id === 'starch')) {
             displayColor = '#1e1b4b'; // Deep Blue-Black
         } 
-        // Check for Complex Ion (Deep Blue Copper Ammonia)
         else if (container.contents.some(c => c.id === 'cuso4') && container.contents.some(c => c.id === 'nh3') && !container.precipitate) {
             displayColor = '#1d4ed8'; // Deep Blue
         }
         else {
-            // Simple dominant color mix
             const dominant = container.contents.reduce((prev, current) => (prev.volume > current.volume) ? prev : current);
             displayColor = dominant.color;
         }
@@ -562,15 +542,12 @@ const GlasswareVisual: React.FC<{ container: LabContainer; isHeld?: boolean }> =
                         boxShadow: `inset 0 -5px 10px rgba(0,0,0,0.2)`
                     }}
                 >
-                    {/* Precipitate Particles Effect */}
                     {isPrecipitate && (
                          <div className="absolute inset-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-50 animate-pulse"></div>
                     )}
-                    {/* Meniscus */}
                     {!isPrecipitate && <div className="w-full h-1 bg-white/30 absolute top-0 rounded-[100%]"></div>}
                 </div>
                 
-                {/* Reflections */}
                 <div className="absolute inset-0 pointer-events-none opacity-30 flex flex-col justify-evenly p-1">
                      <div className="w-1 h-full bg-white/20 absolute right-1 rounded-full"></div>
                 </div>

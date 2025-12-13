@@ -29,6 +29,7 @@ const BiologyLab: React.FC<BiologyLabProps> = ({ level }) => {
     const [focus, setFocus] = useState(50); // 0-100, 50 is perfect
     const [brightness, setBrightness] = useState(100);
     const [contrast, setContrast] = useState(100);
+    const [isSidebarOpen, setSidebarOpen] = useState(false);
     
     // Viewport State
     const [position, setPosition] = useState({ x: 50, y: 50 }); // Percentage center
@@ -60,7 +61,7 @@ const BiologyLab: React.FC<BiologyLabProps> = ({ level }) => {
     const zoomScale = magnification / 40; // Normalize scale for CSS
 
     return (
-        <div className="h-full flex flex-col md:flex-row bg-slate-950">
+        <div className="h-full flex flex-col md:flex-row bg-slate-950 relative overflow-hidden" onClick={() => setSidebarOpen(false)}>
             
             {/* Main Viewport (Microscope View) */}
             <div className="flex-grow relative bg-black flex flex-col items-center justify-center overflow-hidden">
@@ -111,11 +112,23 @@ const BiologyLab: React.FC<BiologyLabProps> = ({ level }) => {
                 )}
             </div>
 
-            {/* Controls Dashboard */}
-            <div className="w-full md:w-80 bg-[#0f172a] border-l border-slate-800 p-6 flex flex-col gap-6 shadow-2xl z-20 overflow-y-auto">
+            {/* Floating Toggle Button */}
+            <button 
+                onClick={(e) => { e.stopPropagation(); setSidebarOpen(!isSidebarOpen); }} 
+                className="absolute top-4 right-4 z-50 p-3 bg-slate-800 rounded-full text-white shadow-lg border border-slate-600 hover:bg-slate-700 transition-colors"
+                title="Microscope Controls"
+            >
+                {isSidebarOpen ? '✖️' : '🔬'}
+            </button>
+
+            {/* Controls Dashboard (Hidden by Default) */}
+            <div 
+                className={`absolute top-0 right-0 h-full w-80 bg-[#0f172a] border-l border-slate-800 p-6 flex flex-col gap-6 shadow-2xl z-40 overflow-y-auto transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}
+                onClick={(e) => e.stopPropagation()}
+            >
                 
                 {/* Header */}
-                <div>
+                <div className="pt-12">
                     <h2 className="text-2xl font-bold text-white mb-1">BioScope Pro</h2>
                     <p className="text-xs text-slate-400 font-mono">MODEL X-2025 // OPTICAL SYSTEM</p>
                 </div>

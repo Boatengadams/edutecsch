@@ -1,4 +1,6 @@
+
 import React, { useEffect, useRef } from 'react';
+import WeatherWidget from './WeatherWidget';
 
 interface SidebarProps {
   isExpanded: boolean;
@@ -96,6 +98,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isExpanded, navItems, activeTab, setA
             </ul>
         </nav>
         
+        {/* Weather Widget */}
+        <WeatherWidget />
+
         <div className="p-4 text-xs text-slate-600 text-center border-t border-slate-800/50">
             EduTec Platform v2.0
         </div>

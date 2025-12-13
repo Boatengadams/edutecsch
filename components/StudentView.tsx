@@ -17,6 +17,7 @@ import StudentLiveClassroom from './StudentLiveClassroom';
 import StudentStudyMode from './StudentStudyMode';
 import ChatInput from './common/ChatInput';
 import ScienceLab from './ScienceLab/ScienceLab';
+import FlyerCard from './common/FlyerCard';
 
 interface StudentViewProps {
   isSidebarExpanded: boolean;
@@ -39,6 +40,26 @@ const getGreeting = () => {
     if (hour < 18) return 'Good Afternoon';
     return 'Good Evening';
 };
+
+const gradeToNumeric = (grade?: string): number | null => {
+    if (!grade) return null;
+    const numericGrade = parseFloat(grade);
+    if (!isNaN(numericGrade)) return numericGrade;
+
+    const upperGrade = grade.toUpperCase();
+    if (upperGrade.startsWith('A')) return 95;
+    if (upperGrade.startsWith('B')) return 85;
+    if (upperGrade.startsWith('C')) return 75;
+    if (upperGrade.startsWith('D')) return 65;
+    if (upperGrade.startsWith('F')) return 50;
+    return null;
+}
+
+type FeedItem = 
+    | { type: 'assignment', data: Assignment, date: Date }
+    | { type: 'submission', data: Submission, date: Date }
+    | { type: 'attendance', data: AttendanceRecord, date: Date }
+    | { type: 'flyer', data: PublishedFlyer, date: Date };
 
 export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
   const { user, userProfile, schoolSettings } = useAuthentication();
@@ -558,21 +579,11 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                               </h3>
                               <div className="flex gap-4 overflow-x-auto pb-6 custom-scrollbar snap-x">
                                   {publishedFlyers.map(flyer => (
-                                      <div 
-                                          key={flyer.id}
-                                          onClick={() => setSelectedFlyer(flyer)}
-                                          className="flex-shrink-0 w-80 snap-center bg-slate-800/50 backdrop-blur-md border border-slate-700 hover:border-purple-500/50 rounded-2xl p-5 cursor-pointer transition-all hover:shadow-xl hover:shadow-purple-500/10 flex flex-col justify-between h-48 group"
-                                      >
-                                          <div>
-                                              <div className="flex justify-between items-start mb-2">
-                                                  <span className="text-[10px] text-slate-500 font-mono bg-slate-900 px-2 py-1 rounded border border-slate-800">
-                                                      {flyer.createdAt?.toDate().toLocaleDateString()}
-                                                  </span>
-                                                  <span className="text-xs opacity-0 group-hover:opacity-100 transition-opacity text-purple-400">↗</span>
-                                              </div>
-                                              <h4 className="font-bold text-white line-clamp-2 mb-2 group-hover:text-purple-300 transition-colors">{flyer.title}</h4>
-                                              <p className="text-sm text-slate-400 line-clamp-3 leading-relaxed">{flyer.content}</p>
-                                          </div>
+                                      <div key={flyer.id} className="snap-center flex-shrink-0 w-80">
+                                          <FlyerCard 
+                                              data={flyer.content} // Pass the content string (or JSON string)
+                                              onClick={() => setSelectedFlyer(flyer)}
+                                          />
                                       </div>
                                   ))}
                               </div>
@@ -817,7 +828,8 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
         onClose={() => setIsSidebarExpanded(false)}
         title="Student Portal"
       />
-      <main className="flex-1 p-4 sm:p-6 overflow-y-auto relative custom-scrollbar">
+      {/* UPDATE: Removed default padding when in immersive modes like Science Lab or Study Mode */}
+      <main className={`flex-1 overflow-y-auto relative custom-scrollbar ${['science_lab', 'study_mode', 'live_lesson'].includes(activeTab) ? 'p-0' : 'p-4 sm:p-6'}`}>
         {renderContent()}
       </main>
       <AIAssistant systemInstruction={aiSystemInstruction} suggestedPrompts={aiSuggestedPrompts} />
@@ -899,20 +911,17 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
 
       {selectedFlyer && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex justify-center items-center p-4 z-50" onClick={() => setSelectedFlyer(null)}>
-              <div className="max-w-2xl w-full max-h-[90vh] overflow-auto relative bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
-                  <div className="flex justify-between items-center p-6 border-b border-slate-700 bg-slate-800/50">
-                        <h2 className="text-2xl font-bold text-white">{selectedFlyer.title}</h2>
-                        <button onClick={() => setSelectedFlyer(null)} className="bg-slate-700/50 text-slate-300 p-2 rounded-full hover:bg-slate-600 hover:text-white transition-colors">&times;</button>
-                  </div>
-                  
-                  <div className="p-8 overflow-y-auto bg-slate-900 custom-scrollbar">
-                      <p className="text-lg text-slate-200 whitespace-pre-wrap leading-loose">{selectedFlyer.content}</p>
-                  </div>
-                  
-                  <div className="p-4 bg-slate-800 border-t border-slate-700 text-xs text-slate-500 font-mono text-right">
-                      POSTED BY: {selectedFlyer.publisherName.toUpperCase()} // {selectedFlyer.createdAt?.toDate().toLocaleDateString()}
-                  </div>
-              </div>
+               <div className="w-full max-w-2xl animate-fade-in-up" onClick={e => e.stopPropagation()}>
+                    <FlyerCard 
+                        data={selectedFlyer.content}
+                        className="min-h-[400px]"
+                    />
+                    <div className="mt-4 flex justify-center">
+                        <button onClick={() => setSelectedFlyer(null)} className="bg-white/10 hover:bg-white/20 text-white rounded-full p-2 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+               </div>
           </div>
       )}
       

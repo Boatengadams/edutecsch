@@ -77,6 +77,23 @@ const compressImage = (file: Blob, quality = 0.85): Promise<Blob> => {
     });
 };
 
+const getSubjectTheme = (subject: string) => {
+    const s = subject?.toLowerCase() || '';
+    if (s.includes('science') || s.includes('physics') || s.includes('chem') || s.includes('bio')) 
+        return { from: 'from-cyan-600', to: 'to-blue-600', icon: '🧪', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', text: 'text-cyan-400', badge: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' };
+    if (s.includes('math')) 
+        return { from: 'from-red-600', to: 'to-orange-600', icon: '📐', bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400', badge: 'bg-red-500/20 text-red-300 border-red-500/30' };
+    if (s.includes('english') || s.includes('lang')) 
+        return { from: 'from-amber-500', to: 'to-yellow-600', icon: '📖', bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-400', badge: 'bg-amber-500/20 text-amber-300 border-amber-500/30' };
+    if (s.includes('hist') || s.includes('social') || s.includes('rme')) 
+        return { from: 'from-emerald-600', to: 'to-teal-600', icon: '🌍', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' };
+    if (s.includes('tech') || s.includes('ict') || s.includes('comp')) 
+        return { from: 'from-violet-600', to: 'to-purple-600', icon: '💻', bg: 'bg-violet-500/10', border: 'border-violet-500/30', text: 'text-violet-400', badge: 'bg-violet-500/20 text-violet-300 border-violet-500/30' };
+    if (s.includes('art') || s.includes('creat')) 
+        return { from: 'from-pink-500', to: 'to-rose-500', icon: '🎨', bg: 'bg-pink-500/10', border: 'border-pink-500/30', text: 'text-pink-400', badge: 'bg-pink-500/20 text-pink-300 border-pink-500/30' };
+    return { from: 'from-slate-600', to: 'to-gray-600', icon: '📚', bg: 'bg-slate-500/10', border: 'border-slate-500/30', text: 'text-slate-400', badge: 'bg-slate-500/20 text-slate-300 border-slate-500/30' };
+};
+
 const TeacherGroupChatView: React.FC<{ group: Group }> = ({ group }) => {
     const [messages, setMessages] = useState<GroupMessage[]>([]);
     const [loading, setLoading] = useState(true);
@@ -548,7 +565,11 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
     const [reportSubject, setReportSubject] = useState('');
     const [marks, setMarks] = useState<Record<string, Partial<TerminalReportMark>>>({});
     const [isSavingMarks, setIsSavingMarks] = useState(false);
-    const [previewStudentReport, setPreviewStudentReport] = useState<UserProfile | null>(null);
+    
+    // New Report View Mode State
+    const [reportViewMode, setReportViewMode] = useState<'entry' | 'print'>('entry');
+    const [reportSelectedStudentIds, setReportSelectedStudentIds] = useState<string[]>([]);
+    const [fullReportData, setFullReportData] = useState<TerminalReport | null>(null);
 
 
     // Filter states
@@ -711,16 +732,13 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
         // Fetch groups
         unsubscribers.push(db.collection('groups').where('teacherId', '==', user.uid).onSnapshot(snap => setGroups(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group)))));
             
-        if (teacherClasses.length > 0 && teacherSubjects.length > 0) {
+        if (teacherClasses.length > 0) {
             unsubscribers.push(
                 db.collection('terminalReports')
                     .where('classId', 'in', teacherClasses)
                     .onSnapshot(snap => {
                         const reports = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TerminalReport));
-                        const relevantReports = reports.filter(report => 
-                             Object.keys(report.subjects || {}).some(subject => teacherSubjects.includes(subject))
-                        );
-                        setTerminalReports(relevantReports);
+                        setTerminalReports(reports);
                     })
             );
         }
@@ -728,7 +746,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
         setLoading(false);
 
         return () => unsubscribers.forEach(unsub => unsub());
-    }, [user, userProfile, teacherClasses, teacherSubjects]);
+    }, [user, userProfile, teacherClasses]);
 
      // Fetch unread messages count
     useEffect(() => {
@@ -796,13 +814,16 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
 
     // Terminal Reports data loader
     useEffect(() => {
-        if (activeTab === 'terminal_reports' && reportClass && reportSubject && schoolSettings) {
+        if (activeTab === 'terminal_reports' && reportClass && schoolSettings) {
             const academicYear = schoolSettings.academicYear?.replace(/\//g, '-') || '';
             const term = schoolSettings.currentTerm || 1;
             const reportId = `${academicYear}_${term}_${reportClass}`;
 
+            // Find from realtime listener or fetch
             const report = terminalReports.find(r => r.id === reportId);
-            if (report && report.subjects && report.subjects[reportSubject]) {
+            setFullReportData(report || null);
+
+            if (report && reportSubject && report.subjects && report.subjects[reportSubject]) {
                 setMarks(report.subjects[reportSubject].marks || {});
             } else {
                 setMarks({});
@@ -967,30 +988,17 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
 
     
     const handleDeleteContent = async () => {
-        if (contentToDelete) {
-            setIsDeletingContent(true);
-            try {
-                const deleteResource = functions.httpsCallable('deleteResource');
-                await deleteResource({ resourceType: 'generatedContent', resourceId: contentToDelete.id });
-                setToast({ message: 'Content deleted successfully.', type: 'success' });
-            } catch(err: any) {
-                setToast({ message: `Failed to delete content: ${err.message}`, type: 'error'});
-            } finally {
-                setIsDeletingContent(false);
-                setContentToDelete(null);
-            }
-        } else if (materialToDelete) {
-            setIsDeletingContent(true);
-            try {
-                const deleteResource = functions.httpsCallable('deleteResource');
-                await deleteResource({ resourceType: 'teachingMaterial', resourceId: materialToDelete.id });
-                setToast({ message: 'Material deleted successfully.', type: 'success' });
-            } catch(err: any) {
-                setToast({ message: `Failed to delete material: ${err.message}`, type: 'error'});
-            } finally {
-                setIsDeletingContent(false);
-                setMaterialToDelete(null);
-            }
+        if (!contentToDelete) return;
+        setIsDeletingContent(true);
+        try {
+            const deleteResource = functions.httpsCallable('deleteResource');
+            await deleteResource({ resourceType: 'generatedContent', resourceId: contentToDelete.id });
+            setToast({ message: 'Content deleted successfully.', type: 'success' });
+        } catch(err: any) {
+            setToast({ message: `Failed to delete content: ${err.message}`, type: 'error'});
+        } finally {
+            setIsDeletingContent(false);
+            setContentToDelete(null);
         }
     };
 
@@ -1285,16 +1293,21 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
 
             setMarks(calculatedMarks);
             setToast({ message: 'Marks saved successfully!', type: 'success' });
+            
+            // Refresh full report state locally
+            setFullReportData(prev => {
+                if (prev) {
+                    const updatedSubjects = { ...prev.subjects, [reportSubject]: { ...prev.subjects[reportSubject], marks: calculatedMarks } };
+                    return { ...prev, subjects: updatedSubjects };
+                }
+                return prev;
+            });
+            
         } catch (err: any) {
             setToast({ message: `Failed to save marks: ${err.message}`, type: 'error' });
         } finally {
             setIsSavingMarks(false);
         }
-    };
-    
-    const openReportPreview = (student: UserProfile) => {
-        // Ensure local edits are used for preview if available
-        setPreviewStudentReport(student);
     };
 
     const handleDeleteGroup = async () => {
@@ -1312,77 +1325,44 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
         }
     };
     
-    const openSnapModal = (role: UserRole) => {
-        setSnapRole(role);
-        setIsSnapModalOpen(true);
+    // Print Logic for Reports
+    const handlePrintReportCards = () => {
+        if (reportSelectedStudentIds.length === 0) {
+            setToast({ message: "Please select at least one student.", type: 'error' });
+            return;
+        }
+        window.print();
     };
 
+    const toggleStudentSelection = (uid: string) => {
+        setReportSelectedStudentIds(prev => 
+            prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
+        );
+    };
+
+    const toggleSelectAllStudents = () => {
+        const studentsInClass = students.filter(s => s.class === reportClass);
+        if (reportSelectedStudentIds.length === studentsInClass.length) {
+            setReportSelectedStudentIds([]);
+        } else {
+            setReportSelectedStudentIds(studentsInClass.map(s => s.uid));
+        }
+    };
+
+
     const navItems = [
-        { 
-            key: 'dashboard', 
-            label: 'Dashboard', 
-            icon: <div className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs shadow-lg">🏠</div> 
-        },
-        { 
-            key: 'my_students', 
-            label: 'My Students', 
-            icon: <div className="w-6 h-6 rounded-md bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-xs shadow-lg">🎓</div> 
-        },
-        { 
-            key: 'assignments', 
-            label: 'Assignments', 
-            icon: <div className="w-6 h-6 rounded-md bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center text-white text-xs shadow-lg">📝</div> 
-        },
-        { 
-            key: 'live_lesson', 
-            label: <span className="flex items-center">Live Lesson {activeLiveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, 
-            icon: <div className="w-6 h-6 rounded-md bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center text-white text-xs shadow-lg">📡</div> 
-        },
-        { 
-            key: 'group_work', 
-            label: 'Group Work', 
-            icon: <div className="w-6 h-6 rounded-md bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white text-xs shadow-lg">🤝</div> 
-        },
-        { 
-            key: 'messages', 
-            label: <span className="flex items-center justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, 
-            icon: <div className="w-6 h-6 rounded-md bg-gradient-to-br from-cyan-500 to-sky-600 flex items-center justify-center text-white text-xs shadow-lg">💬</div> 
-        },
-        { 
-            key: 'my_library', 
-            label: 'My Library', 
-            icon: <div className="w-6 h-6 rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-xs shadow-lg">📚</div> 
-        },
-        { 
-            key: 'attendance', 
-            label: 'Attendance', 
-            icon: <div className="w-6 h-6 rounded-md bg-gradient-to-br from-green-500 to-lime-600 flex items-center justify-center text-white text-xs shadow-lg">📅</div> 
-        },
-        { 
-            key: 'terminal_reports', 
-            label: 'Terminal Reports', 
-            icon: <div className="w-6 h-6 rounded-md bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center text-white text-xs shadow-lg">📊</div> 
-        },
-        { 
-            key: 'past_questions', 
-            label: 'BECE Questions', 
-            icon: <div className="w-6 h-6 rounded-md bg-gradient-to-br from-fuchsia-500 to-purple-600 flex items-center justify-center text-white text-xs shadow-lg">🧠</div> 
-        },
-        { 
-            key: 'timetable', 
-            label: 'My Timetable', 
-            icon: <div className="w-6 h-6 rounded-md bg-gradient-to-br from-pink-500 to-rose-500 flex items-center justify-center text-white text-xs shadow-lg">🗓️</div> 
-        },
-        { 
-            key: 'my_voice', 
-            label: 'My Voice', 
-            icon: <div className="w-6 h-6 rounded-md bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center text-white text-xs shadow-lg">🎙️</div> 
-        },
-        { 
-            key: 'ai_tools', 
-            label: 'AI Tools', 
-            icon: <div className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-400 to-cyan-400 flex items-center justify-center text-white text-xs shadow-lg">🤖</div> 
-        },
+        { key: 'dashboard', label: 'Dashboard', icon: '🚀' },
+        { key: 'my_students', label: 'My Students', icon: '👨‍🎓' },
+        { key: 'assignments', label: 'Assignments', icon: '📝' },
+        { key: 'live_lesson', label: <span className="flex items-center">Live Lesson {activeLiveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: '📡' },
+        { key: 'group_work', label: 'Group Work', icon: '🤝' },
+        { key: 'messages', label: <span className="flex items-center justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: '💬' },
+        { key: 'my_library', label: 'My Library', icon: '🗄️' },
+        { key: 'attendance', label: 'Attendance', icon: '📅' },
+        { key: 'terminal_reports', label: 'Terminal Reports', icon: '📊' },
+        { key: 'past_questions', label: 'BECE Questions', icon: '🧠' },
+        { key: 'ai_tools', label: 'AI Tools', icon: '🤖' },
+        { key: 'my_voice', label: 'My Voice', icon: '🎙️' },
     ];
     
     if (!user || !userProfile) {
@@ -1396,14 +1376,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
 
         switch (activeTab) {
             case 'dashboard':
-                return <TeacherDashboard 
-                    userProfile={userProfile} 
-                    students={students} 
-                    assignments={assignments} 
-                    submissions={submissions} 
-                    teacherClasses={teacherClasses}
-                    onReviewSubmission={handleReviewDirectly}
-                />;
+                return <TeacherDashboard userProfile={userProfile} students={students} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} onReviewSubmission={handleReviewDirectly} />;
             case 'my_students':
                 const studentsByClass = students.reduce((acc: Record<string, UserProfile[]>, student) => {
                     const classKey = student.class || 'Unassigned';
@@ -1414,30 +1387,53 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                     return acc;
                 }, {});
                  return (
-                    <div className="space-y-6">
-                         <div className="flex justify-between items-center">
-                             <h2 className="text-3xl font-bold">My Students</h2>
-                             <div className="flex gap-2">
-                                <Button onClick={() => openSnapModal('student')} variant="secondary">Scan List</Button>
-                                <Button onClick={() => setShowCreateParentModal(true)}>Create Parent Account</Button>
+                    <div className="space-y-8 animate-fade-in-up">
+                         <div className="flex justify-between items-center bg-slate-900/50 p-6 rounded-2xl border border-slate-800">
+                             <div>
+                                <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">My Students</h2>
+                                <p className="text-slate-400 mt-1">Manage profiles and track progress across all your classes.</p>
                              </div>
+                             <Button onClick={() => setShowCreateParentModal(true)} className="shadow-lg shadow-purple-900/20">Create Parent Account</Button>
                          </div>
-                         {Object.keys(studentsByClass).map((classId) => {
+                         
+                         {Object.keys(studentsByClass).length === 0 && (
+                            <div className="text-center py-20 bg-slate-800/30 rounded-2xl border-2 border-dashed border-slate-700">
+                                <span className="text-5xl opacity-30 mb-4 block">👨‍🎓</span>
+                                <p className="text-slate-400 text-lg">No students assigned to your classes yet.</p>
+                            </div>
+                         )}
+
+                         {Object.keys(studentsByClass).sort().map((classId) => {
                             const classStudents = studentsByClass[classId];
                             return (
-                                <Card key={classId}>
-                                    <div className="flex justify-between items-center mb-4">
-                                        <h3 className="text-xl font-semibold">{classId} ({classStudents.length} students)</h3>
-                                        <Button size="sm" onClick={() => { setStudentCreationClass(classId); setShowCreateStudentModal(true); }}>+ Add Student</Button>
+                                <div key={classId} className="space-y-4">
+                                    <div className="flex justify-between items-end border-b border-slate-800 pb-2">
+                                        <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                            <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded">{classId}</span>
+                                            <span className="text-slate-500 font-normal text-sm">({classStudents.length} Students)</span>
+                                        </h3>
+                                        <Button size="sm" variant="secondary" onClick={() => { setStudentCreationClass(classId); setShowCreateStudentModal(true); }}>
+                                            + Add Student
+                                        </Button>
                                     </div>
-                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                         {classStudents.map(student => (
-                                            <button key={student.uid} onClick={() => setViewingStudentProgress(student)} className="p-3 bg-slate-700 rounded-lg text-left hover:bg-slate-600 transition-colors">
-                                                {student.name}
-                                            </button>
+                                            <TeacherStudentCard
+                                                key={student.uid}
+                                                student={student}
+                                                classAssignments={assignments.filter(a => a.classId === classId)}
+                                                studentSubmissions={submissions.filter(s => s.studentId === student.uid)}
+                                                onClick={() => setViewingStudentProgress(student)}
+                                                onMessage={() => {
+                                                    // In a real app, you might want to open a chat modal directly.
+                                                    // For now, let's toast that this feature is linked.
+                                                    setToast({ message: `Go to Messages tab to chat with ${student.name}`, type: 'success' });
+                                                }}
+                                            />
                                         ))}
                                     </div>
-                                </Card>
+                                </div>
                             );
                          })}
                      </div>
@@ -1466,35 +1462,80 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                             </div>
                         </div>
 
-                        {filteredAssignments.map(assignment => (
-                            <Card key={assignment.id}>
-                                <div className="flex justify-between items-start gap-4">
-                                    <div>
-                                        <h3 className="text-xl font-bold">{assignment.title}</h3>
-                                        <p className="text-sm text-gray-400">{assignment.classId} &bull; {assignment.subject}</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {filteredAssignments.map(assignment => {
+                                const submissionCount = submissions.filter(s => s.assignmentId === assignment.id).length;
+                                const isExpired = assignment.dueDate && new Date(assignment.dueDate) < new Date();
+                                const theme = getSubjectTheme(assignment.subject);
+
+                                return (
+                                    <div key={assignment.id} className={`bg-slate-900 border ${theme.border} rounded-2xl overflow-hidden shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group flex flex-col relative`}>
+                                        {/* Colorful Header Background */}
+                                        <div className={`h-24 bg-gradient-to-r ${theme.from} ${theme.to} relative p-4`}>
+                                             <div className="absolute top-2 right-2 text-4xl opacity-20 transform rotate-12">{theme.icon}</div>
+                                             <div className="flex justify-between items-start relative z-10">
+                                                <span className="text-[10px] uppercase font-bold tracking-wider bg-black/30 text-white px-2 py-1 rounded backdrop-blur-md">
+                                                    {assignment.classId}
+                                                </span>
+                                                {assignment.type === 'Objective' && (
+                                                    <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-1 rounded backdrop-blur-md">QUIZ</span>
+                                                )}
+                                             </div>
+                                             <h3 className="text-lg font-bold text-white mt-2 line-clamp-1 drop-shadow-md" title={assignment.title}>{assignment.title}</h3>
+                                        </div>
+                                        
+                                        {/* Content */}
+                                        <div className="p-5 flex-grow bg-slate-800/50 backdrop-blur-sm">
+                                            <p className="text-xs font-mono uppercase text-slate-500 mb-2">{assignment.subject}</p>
+                                            <p className="text-sm text-slate-300 line-clamp-3 leading-relaxed">
+                                                {assignment.description}
+                                            </p>
+                                        </div>
+
+                                        {/* Footer */}
+                                        <div className="p-4 bg-slate-900 border-t border-slate-700/50 space-y-3">
+                                            <div className="flex justify-between items-center text-xs">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${isExpired ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-green-500/10 text-green-400 border-green-500/20'}`}>
+                                                        {isExpired ? 'Closed' : 'Active'}
+                                                    </span>
+                                                </div>
+                                                <span className="text-slate-500 font-medium">
+                                                    {submissionCount} Submissions
+                                                </span>
+                                            </div>
+                                            
+                                            <div className="flex gap-2 pt-1">
+                                                <button 
+                                                    onClick={() => setViewingSubmissionsFor(assignment)} 
+                                                    className={`flex-1 py-2 rounded-lg text-xs font-bold text-white shadow-lg transition-all bg-gradient-to-r ${theme.from} ${theme.to} hover:opacity-90`}
+                                                >
+                                                    View Work
+                                                </button>
+                                                <button onClick={() => handleEditAssignment(assignment)} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 border border-slate-700 transition-colors" title="Edit">
+                                                    ✏️
+                                                </button>
+                                                <button onClick={() => handleDeleteAssignment(assignment.id)} className="p-2 bg-slate-800 hover:bg-red-900/20 rounded-lg text-slate-400 hover:text-red-400 border border-slate-700 hover:border-red-900/30 transition-colors" title="Delete">
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="flex gap-2">
-                                        <Button size="sm" variant="secondary" onClick={() => handleEditAssignment(assignment)}>Edit</Button>
-                                        <Button size="sm" variant="danger" onClick={() => handleDeleteAssignment(assignment.id)}>Delete</Button>
-                                    </div>
-                                </div>
-                                <div className="mt-4 pt-4 border-t border-slate-700">
-                                    <h4 className="font-semibold text-gray-300">Description</h4>
-                                    <p className="text-sm text-gray-400 whitespace-pre-wrap">{assignment.description.substring(0, 150)}{assignment.description.length > 150 && '...'}</p>
-                                </div>
-                                 <div className="mt-4 flex justify-between items-center">
-                                    <p className="text-sm text-yellow-400">Due: {assignment.dueDate || 'Not set'}</p>
-                                    <Button onClick={() => setViewingSubmissionsFor(assignment)}>
-                                        View Submissions ({submissions.filter(s => s.assignmentId === assignment.id).length})
-                                    </Button>
-                                 </div>
-                            </Card>
-                        ))}
+                                );
+                            })}
+                        </div>
+                         {filteredAssignments.length === 0 && (
+                            <div className="text-center py-16 bg-slate-800/30 border-2 border-dashed border-slate-700 rounded-2xl">
+                                <div className="text-4xl mb-4 opacity-50">📂</div>
+                                <p className="text-slate-500 text-lg">No assignments found.</p>
+                                <Button variant="ghost" onClick={handleCreateNewAssignment} className="mt-2 text-blue-400 hover:text-blue-300">Create one now</Button>
+                            </div>
+                        )}
                     </div>
                 );
             case 'live_lesson':
                 return activeLiveLesson ? 
-                        <TeacherLiveClassroom lessonId={activeLiveLesson.id} onClose={() => {}} setToast={setToast} />
+                        <TeacherLiveClassroom lessonId={activeLiveLesson.id} onClose={() => {}} setToast={setToast} userProfile={userProfile} />
                         :
                         <div className="text-center p-8">
                             <h2 className="text-3xl font-bold">Live Lesson</h2>
@@ -1541,226 +1582,28 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                 );
             case 'messages':
                 return <MessagingView userProfile={userProfile} contacts={contactsForMessaging} />;
-            case 'timetable':
-                return (
-                    <div className="space-y-6">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                            <h2 className="text-3xl font-bold">My Timetable</h2>
-                            <select value={timetableClass} onChange={e => setTimetableClass(e.target.value)} className="w-full sm:w-auto p-2 bg-slate-700 rounded-md border border-slate-600">
-                                {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                        </div>
-                        {timetableClass ? (
-                            <TimetableManager classId={timetableClass} readOnly={true} />
-                        ) : (
-                            <p className="text-center text-gray-500 py-10">Please select a class to view its timetable.</p>
-                        )}
-                    </div>
-                );
             case 'my_library':
                 return (
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
                             <h2 className="text-3xl font-bold">My Library</h2>
-                            <div className="flex gap-2">
-                                <Button onClick={() => setShowVideoGenerator(true)} variant="secondary">Create Video</Button>
-                                <div className="flex bg-slate-800 p-1 rounded-lg">
-                                    <button 
-                                        onClick={() => setLibraryTab('files')}
-                                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${libraryTab === 'files' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
-                                    >
-                                        Documents
-                                    </button>
-                                    <button 
-                                        onClick={() => setLibraryTab('ai')}
-                                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${libraryTab === 'ai' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
-                                    >
-                                        AI Lessons
-                                    </button>
-                                </div>
-                            </div>
+                            <Button onClick={() => { setEditingPresentation(null); setShowPresentationGenerator(true); }}>+ Create New</Button>
                         </div>
-
-                        {libraryTab === 'ai' && (
-                            <div className="space-y-6 animate-fade-in-up">
-                                <div className="flex justify-end gap-2">
-                                    <Button onClick={() => { setEditingPresentation(null); setShowPresentationGenerator(true); }}>+ Create Lesson</Button>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {myLibraryContent.map(content => (
-                                        <Card 
-                                            key={content.id} 
-                                            className="flex flex-col group hover:border-purple-500/50 transition-all border-purple-900/30 cursor-pointer select-none relative overflow-hidden"
-                                            onDoubleClick={() => { setEditingPresentation(content); setShowPresentationGenerator(true); }}
-                                        >
-                                            {/* Hover Effect Background */}
-                                            <div className="absolute inset-0 bg-purple-600/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
-
-                                            <div className="flex-grow relative z-10">
-                                                <div className="flex justify-between items-start mb-1">
-                                                     <h3 className="text-xl font-bold truncate pr-2">{content.topic}</h3>
-                                                     <span className="text-[10px] text-slate-300 bg-slate-800/80 backdrop-blur px-2 py-1 rounded border border-slate-700 hidden group-hover:inline-block animate-fade-in-short whitespace-nowrap shadow-sm">Double-click to view</span>
-                                                </div>
-                                                <p className="text-xs text-purple-300 uppercase font-bold tracking-wider mb-3">{content.subject}</p>
-                                                <div className="flex flex-wrap gap-2 mb-4">
-                                                    {content.classes.map(c => <span key={c} className="text-[10px] bg-slate-800 px-2 py-1 rounded text-slate-300 border border-slate-700">{c}</span>)}
-                                                </div>
-                                                <p className="text-xs text-gray-500 font-mono">Created: {content.createdAt?.toDate().toLocaleDateString()}</p>
-                                            </div>
-                                            
-                                            <div className="mt-4 pt-4 border-t border-slate-700/50 grid grid-cols-2 gap-2 relative z-10" onDoubleClick={e => e.stopPropagation()}>
-                                                <Button size="sm" onClick={() => handleStartLiveLesson(content)} className="col-span-2 bg-purple-600 hover:bg-purple-500 shadow-lg shadow-purple-900/20">🚀 Launch Live</Button>
-                                                <Button size="sm" variant="secondary" onClick={() => { setEditingPresentation(content); setShowPresentationGenerator(true); }}>Edit</Button>
-                                                <Button size="sm" variant="danger" onClick={() => setContentToDelete(content)}>Delete</Button>
-                                            </div>
-                                        </Card>
-                                    ))}
-                                    {myLibraryContent.length === 0 && (
-                                        <div className="col-span-full text-center py-16 border-2 border-dashed border-slate-800 rounded-2xl">
-                                            <span className="text-4xl opacity-30 grayscale mb-2 block">✨</span>
-                                            <p className="text-gray-500">Your AI lesson library is empty.</p>
-                                            <p className="text-xs text-gray-600 mt-1">Click "+ Create Lesson" to generate one instantly.</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        {libraryTab === 'files' && (
-                            <div className="space-y-6 animate-fade-in-up">
-                                {/* Upload Zone */}
-                                <div 
-                                    className="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center bg-slate-900/50 hover:bg-slate-800/50 transition-colors cursor-pointer group relative overflow-hidden"
-                                    onClick={() => resourceFileInputRef.current?.click()}
-                                >
-                                    <div className="absolute inset-0 bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
-                                    <input 
-                                        type="file" 
-                                        multiple 
-                                        className="hidden" 
-                                        ref={resourceFileInputRef}
-                                        onChange={(e) => handleResourceUpload(e.target.files)}
-                                    />
-                                    <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center text-3xl mx-auto mb-4 text-blue-400 group-hover:scale-110 transition-transform border border-blue-500/20">
-                                        ☁️
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {myLibraryContent.map(content => (
+                                <Card key={content.id}>
+                                    <h3 className="text-xl font-bold truncate">{content.topic}</h3>
+                                    <p className="text-sm text-gray-400">{content.classes.join(', ')} - {content.subject}</p>
+                                    <p className="text-xs text-gray-500 mt-2">Created on {content.createdAt.toDate().toLocaleDateString()}</p>
+                                    <div className="mt-4 flex flex-wrap gap-2">
+                                        <Button size="sm" onClick={() => handleStartLiveLesson(content)}>Start Live Lesson</Button>
+                                        <Button size="sm" variant="secondary" onClick={() => { setEditingPresentation(content); setShowPresentationGenerator(true); }}>Edit</Button>
+                                        <Button size="sm" variant="danger" onClick={() => setContentToDelete(content)}>Delete</Button>
+                                        <Button size="sm" variant="secondary" onClick={() => setShowVideoGenerator(true)}>Create a Video</Button>
                                     </div>
-                                    <h3 className="text-lg font-bold text-white mb-2">Upload Study Material</h3>
-                                    <p className="text-sm text-slate-400">Click to upload PDFs, Docs, or Images.</p>
-                                    
-                                    <div className="mt-6 inline-flex flex-col sm:flex-row items-center gap-3" onClick={e => e.stopPropagation()}>
-                                        <div className="flex items-center gap-2 bg-slate-800 p-1.5 rounded-lg border border-slate-700">
-                                            <span className="text-xs text-slate-400 pl-2 font-bold">Target:</span>
-                                            <select 
-                                                value={uploadTargetClass}
-                                                onChange={e => setUploadTargetClass(e.target.value)}
-                                                className="bg-transparent text-sm text-white font-bold outline-none cursor-pointer hover:text-blue-400 p-1"
-                                            >
-                                                <option value="All">All My Classes</option>
-                                                {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="flex items-center gap-2 bg-slate-800 p-1.5 rounded-lg border border-slate-700">
-                                            <span className="text-xs text-slate-400 pl-2 font-bold">Subject:</span>
-                                            <select 
-                                                value={uploadSubject}
-                                                onChange={e => setUploadSubject(e.target.value)}
-                                                className="bg-transparent text-sm text-white font-bold outline-none cursor-pointer hover:text-blue-400 p-1 max-w-[150px]"
-                                            >
-                                                {teacherSubjects.length > 0 ? (
-                                                    teacherSubjects.map(s => <option key={s} value={s}>{s}</option>)
-                                                ) : (
-                                                    GES_SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Upload Progress */}
-                                {resourceUploadQueue.length > 0 && (
-                                    <div className="space-y-2">
-                                        {resourceUploadQueue.map((item, idx) => (
-                                            <div key={idx} className="bg-slate-800 p-3 rounded-lg flex items-center gap-4 border border-slate-700 shadow-sm">
-                                                <span className="text-sm text-white truncate flex-grow">{item.file.name}</span>
-                                                <div className="w-32 bg-slate-700 rounded-full h-1.5 overflow-hidden">
-                                                    <div 
-                                                        className={`h-full transition-all duration-300 ${item.status === 'error' ? 'bg-red-500' : item.status === 'completed' ? 'bg-green-500' : 'bg-blue-500'}`} 
-                                                        style={{ width: `${item.progress}%` }}
-                                                    ></div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {/* Files Grid */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {teachingMaterials.map(material => (
-                                        <Card 
-                                            key={material.id} 
-                                            className="flex flex-col !p-5 hover:border-blue-500/50 transition-all cursor-pointer group shadow-sm hover:shadow-md hover:bg-slate-800/80"
-                                            onDoubleClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDownloadMaterial(material.aiFormattedContent, material.originalFileName);
-                                            }}
-                                        >
-                                            <div className="flex items-start justify-between mb-3">
-                                                <div className="w-12 h-12 rounded-xl bg-blue-900/20 flex items-center justify-center text-2xl shadow-inner border border-blue-500/10">
-                                                    {material.originalFileName.endsWith('.pdf') ? '📕' : 
-                                                     material.originalFileName.match(/\.(doc|docx)$/) ? '📝' : 
-                                                     material.originalFileName.match(/\.(jpg|png|jpeg)$/) ? '🖼️' : '📄'}
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                     <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-800 hidden group-hover:inline-block animate-fade-in-short shadow-sm">Double-click</span>
-                                                     {material.uploaderId === user.uid && (
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); setMaterialToDelete(material); }} 
-                                                            className="text-slate-500 hover:text-red-400 transition-colors p-1 hover:bg-red-900/20 rounded"
-                                                            title="Delete File"
-                                                        >
-                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" /></svg>
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            
-                                            <h4 className="font-bold text-white truncate mb-1 text-sm" title={material.title}>{material.title}</h4>
-                                            
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <span className="text-xs text-slate-500 truncate max-w-[140px] block" title={material.originalFileName}>{material.originalFileName}</span>
-                                                {material.subject && (
-                                                    <span className="text-[9px] bg-indigo-500/10 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-500/20 whitespace-nowrap">
-                                                        {material.subject}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            
-                                            <div className="mt-auto pt-3 border-t border-slate-700/30">
-                                                <div className="flex flex-wrap gap-1 mb-3">
-                                                    {material.targetClasses.map(c => (
-                                                        <span key={c} className="text-[9px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded border border-slate-600">{c}</span>
-                                                    ))}
-                                                </div>
-                                                <button 
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleDownloadMaterial(material.aiFormattedContent, material.originalFileName);
-                                                    }}
-                                                    className="block w-full py-2 bg-slate-700 hover:bg-blue-600 text-center rounded-lg text-xs font-bold text-white transition-colors shadow-sm"
-                                                >
-                                                    Download
-                                                </button>
-                                            </div>
-                                        </Card>
-                                    ))}
-                                    {teachingMaterials.length === 0 && (
-                                        <div className="col-span-full text-center py-16 border-2 border-dashed border-slate-800 rounded-2xl">
-                                            <span className="text-4xl opacity-30 grayscale mb-2 block">📁</span>
-                                            <p className="text-gray-500">No files uploaded yet.</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
+                                </Card>
+                            ))}
+                        </div>
                     </div>
                 );
             case 'attendance':
@@ -1797,6 +1640,171 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                              ))}
                          </div>
                      </Card>
+                );
+            case 'terminal_reports':
+                const studentsForReport = students.filter(s => s.class === reportClass);
+                
+                // Inject print styles when printing
+                const printStyles = `
+                    @media print {
+                        body * { visibility: hidden; }
+                        #printable-area, #printable-area * { visibility: visible; }
+                        #printable-area { position: absolute; left: 0; top: 0; width: 100%; }
+                        .report-card-page-break { break-after: page; page-break-after: always; }
+                    }
+                `;
+
+                return (
+                    <Card>
+                        <style>{printStyles}</style>
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 print:hidden">
+                             <div>
+                                 <h2 className="text-3xl font-bold">Terminal Reports</h2>
+                                 <p className="text-xs text-slate-400 mt-1">Manage marks and print report cards.</p>
+                             </div>
+                             <div className="flex flex-wrap items-center gap-4">
+                                {/* Mode Toggle */}
+                                <div className="flex bg-slate-800 p-1 rounded-lg">
+                                    <button 
+                                        onClick={() => setReportViewMode('entry')} 
+                                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${reportViewMode === 'entry' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                                    >
+                                        Data Entry
+                                    </button>
+                                    <button 
+                                        onClick={() => setReportViewMode('print')} 
+                                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${reportViewMode === 'print' ? 'bg-green-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                                    >
+                                        Report Cards
+                                    </button>
+                                </div>
+
+                                <div className="h-8 w-px bg-slate-700 hidden md:block"></div>
+
+                                <select value={reportClass} onChange={e => setReportClass(e.target.value)} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm w-full md:w-auto">
+                                    {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                                
+                                {reportViewMode === 'entry' && (
+                                    <select value={reportSubject} onChange={e => setReportSubject(e.target.value)} disabled={subjectsForReport.length === 0} className="p-2 bg-slate-700 rounded-md border border-slate-600 text-sm w-full md:w-auto">
+                                        {subjectsForReport.length > 0 ? subjectsForReport.map(s => <option key={s} value={s}>{s}</option>) : <option>No subjects</option>}
+                                    </select>
+                                )}
+                             </div>
+                        </div>
+
+                        {reportViewMode === 'entry' ? (
+                            <>
+                                <div className="flex gap-2 mb-4">
+                                    <Button onClick={calculateTotalsAndSave} disabled={isSavingMarks} className="bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-900/20">
+                                        {isSavingMarks ? 'Saving...' : '💾 Calculate & Save'}
+                                    </Button>
+                                    <Button variant="secondary" onClick={handleAutoFillScores}>✨ Auto-fill from Assignments</Button>
+                                </div>
+                                <div className="overflow-x-auto border border-slate-700 rounded-lg">
+                                     <table className="min-w-full text-sm text-left text-slate-300">
+                                         <thead className="text-xs uppercase bg-slate-800 text-slate-400">
+                                            <tr>
+                                                <th className="p-3 border-b border-slate-700 min-w-[200px]">Student Name</th>
+                                                <th className="p-3 border-b border-slate-700 w-24 text-center">Assignments (15)</th>
+                                                <th className="p-3 border-b border-slate-700 w-24 text-center">Group Work (15)</th>
+                                                <th className="p-3 border-b border-slate-700 w-24 text-center">Class Test (15)</th>
+                                                <th className="p-3 border-b border-slate-700 w-24 text-center">Project (15)</th>
+                                                <th className="p-3 border-b border-slate-700 w-24 text-center bg-slate-700/50 font-bold text-white">Class Score (50%)</th>
+                                                <th className="p-3 border-b border-slate-700 w-24 text-center border-l border-slate-700">Exam Score (100)</th>
+                                                <th className="p-3 border-b border-slate-700 w-24 text-center bg-slate-700/50 font-bold text-white">Exam (50%)</th>
+                                                <th className="p-3 border-b border-slate-700 w-24 text-center font-bold text-yellow-400 bg-slate-800">Total (100%)</th>
+                                                <th className="p-3 border-b border-slate-700 w-16 text-center">Grade</th>
+                                                <th className="p-3 border-b border-slate-700 w-16 text-center">Pos.</th>
+                                            </tr>
+                                         </thead>
+                                         <tbody className="divide-y divide-slate-700 bg-slate-900/30">
+                                            {studentsForReport.map((student) => {
+                                                const mark = marks[student.uid] || {};
+                                                const totalClassScore = (mark.indivTest || 0) + (mark.groupWork || 0) + (mark.classTest || 0) + (mark.project || 0);
+                                                const scaledClassScore = (totalClassScore / 60) * 50;
+                                                const scaledExamScore = ((mark.endOfTermExams || 0) / 100) * 50;
+                                                const overallTotal = scaledClassScore + scaledExamScore;
+                                                const grade = getGrade(overallTotal);
+
+                                                return (
+                                                    <tr key={student.uid} className="hover:bg-slate-800/50 transition-colors">
+                                                        <td className="p-3 font-medium text-white">{student.name}</td>
+                                                        <td className="p-1"><input type="number" step="0.1" min="0" max="15" value={mark.indivTest ?? ''} onChange={e => handleMarkChange(student.uid, 'indivTest', e.target.value)} className="w-full p-1 bg-slate-800 border border-slate-700 rounded text-center focus:border-blue-500 outline-none transition-colors"/></td>
+                                                        <td className="p-1"><input type="number" step="0.1" min="0" max="15" value={mark.groupWork ?? ''} onChange={e => handleMarkChange(student.uid, 'groupWork', e.target.value)} className="w-full p-1 bg-slate-800 border border-slate-700 rounded text-center focus:border-blue-500 outline-none transition-colors"/></td>
+                                                        <td className="p-1"><input type="number" step="0.1" min="0" max="15" value={mark.classTest ?? ''} onChange={e => handleMarkChange(student.uid, 'classTest', e.target.value)} className="w-full p-1 bg-slate-800 border border-slate-700 rounded text-center focus:border-blue-500 outline-none transition-colors"/></td>
+                                                        <td className="p-1"><input type="number" step="0.1" min="0" max="15" value={mark.project ?? ''} onChange={e => handleMarkChange(student.uid, 'project', e.target.value)} className="w-full p-1 bg-slate-800 border border-slate-700 rounded text-center focus:border-blue-500 outline-none transition-colors"/></td>
+                                                        <td className="p-3 text-center font-bold bg-slate-800/30 text-blue-200">{totalClassScore.toFixed(1)}</td>
+                                                        <td className="p-1 border-l border-slate-700"><input type="number" step="0.1" min="0" max="100" value={mark.endOfTermExams ?? ''} onChange={e => handleMarkChange(student.uid, 'endOfTermExams', e.target.value)} className="w-full p-1 bg-slate-800 border border-slate-700 rounded text-center focus:border-purple-500 outline-none transition-colors"/></td>
+                                                        <td className="p-3 text-center font-bold bg-slate-800/30 text-purple-200">{scaledExamScore.toFixed(1)}</td>
+                                                        <td className="p-3 text-center font-black text-lg bg-slate-800 text-yellow-400">{overallTotal.toFixed(1)}</td>
+                                                        <td className={`p-3 text-center font-bold ${grade === 'F' ? 'text-red-400' : 'text-green-400'}`}>{grade}</td>
+                                                        <td className="p-3 text-center font-mono">{mark.position || '-'}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                         </tbody>
+                                     </table>
+                                 </div>
+                            </>
+                        ) : (
+                            /* REPORT CARD PRINT MODE */
+                            <div className="flex flex-col h-full animate-fade-in-up">
+                                <div className="flex justify-between items-center mb-4 bg-slate-800 p-3 rounded-lg border border-slate-700 print:hidden">
+                                    <div className="flex items-center gap-3">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={reportSelectedStudentIds.length === studentsForReport.length && studentsForReport.length > 0} 
+                                            onChange={() => {
+                                                if (reportSelectedStudentIds.length === studentsForReport.length) setReportSelectedStudentIds([]);
+                                                else setReportSelectedStudentIds(studentsForReport.map(s => s.uid));
+                                            }}
+                                            className="h-5 w-5 rounded border-slate-500 bg-slate-700 text-green-500 focus:ring-green-500 cursor-pointer"
+                                        />
+                                        <span className="text-sm font-semibold text-slate-300">
+                                            Select All ({reportSelectedStudentIds.length}/{studentsForReport.length})
+                                        </span>
+                                    </div>
+                                    <Button onClick={() => window.print()} disabled={reportSelectedStudentIds.length === 0} className="bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20">
+                                        🖨️ Print Selected Reports
+                                    </Button>
+                                </div>
+
+                                <div id="printable-area" className="flex-grow overflow-y-auto bg-slate-100 rounded-xl p-8 custom-scrollbar">
+                                    {studentsForReport.length === 0 ? (
+                                        <p className="text-center text-slate-500 py-10">No students found in this class.</p>
+                                    ) : (
+                                        <div className="space-y-8 print:space-y-0">
+                                            {studentsForReport.map(student => (
+                                                <div key={student.uid} className={`relative transition-all duration-300 ${!reportSelectedStudentIds.includes(student.uid) ? 'opacity-40 grayscale print:hidden' : 'print:block'}`}>
+                                                    {/* Selection Overlay (Screen Only) */}
+                                                    <div className="absolute top-4 right-4 z-20 print:hidden">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={reportSelectedStudentIds.includes(student.uid)} 
+                                                            onChange={() => setReportSelectedStudentIds(prev => prev.includes(student.uid) ? prev.filter(id => id !== student.uid) : [...prev, student.uid])}
+                                                            className="h-6 w-6 rounded border-gray-400 text-blue-600 focus:ring-blue-500 shadow-md cursor-pointer"
+                                                        />
+                                                    </div>
+                                                    
+                                                    {/* Actual Report Component - Always uses saved data (fullReportData) */}
+                                                    <div className="report-card-page-break w-full bg-white shadow-xl">
+                                                        <StudentReportCard 
+                                                            student={student} 
+                                                            report={fullReportData} 
+                                                            schoolSettings={schoolSettings} 
+                                                            ranking={null} // Rankings are calculated on save in Admin view, local calc could be added here if needed
+                                                            classSize={studentsForReport.length}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </Card>
                 );
             case 'past_questions':
                 return <BECEPastQuestionsView />;
@@ -1837,30 +1845,6 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                     teacherSubjectsByClass={userProfile.subjectsByClass || null}
                 />
             )}
-             {previewStudentReport && (
-                 <div className="fixed inset-0 bg-black bg-opacity-90 flex justify-center items-center p-4 z-[60]">
-                     <div className="relative max-w-4xl w-full h-[90vh] flex flex-col bg-white rounded-lg overflow-hidden shadow-2xl">
-                         <div className="p-4 border-b flex justify-between items-center bg-slate-100 text-black shrink-0">
-                             <h3 className="font-bold text-lg">Report Card Preview: {previewStudentReport.name}</h3>
-                             <button onClick={() => setPreviewStudentReport(null)} className="p-2 hover:bg-gray-200 rounded-full">&times;</button>
-                         </div>
-                         <div className="flex-grow overflow-y-auto p-4 bg-gray-100">
-                             <StudentReportCard 
-                                 student={previewStudentReport}
-                                 report={null} // Pass null for full report to use currentMarks
-                                 schoolSettings={schoolSettings}
-                                 ranking={null} // Ranking won't be live in preview of edits
-                                 classSize={students.length}
-                                 currentMarks={marks} // Pass the unsaved marks for preview
-                             />
-                         </div>
-                         <div className="p-4 border-t bg-slate-50 flex justify-end gap-2 shrink-0">
-                             <Button variant="secondary" onClick={() => setPreviewStudentReport(null)}>Close Preview</Button>
-                             <Button onClick={calculateTotalsAndSave}>Save Marks</Button>
-                         </div>
-                     </div>
-                 </div>
-             )}
              {viewingSubmissionsFor && (
                 <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-50">
                     <Card className="w-full max-w-4xl h-[90vh] flex flex-col">
@@ -2007,14 +1991,6 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, set
                 isLoading={isDeletingGroup}
                 confirmButtonText="Yes, Delete Group"
             />
-            {isSnapModalOpen && (
-                <SnapToRegister 
-                    onClose={() => setIsSnapModalOpen(false)} 
-                    roleToRegister={snapRole}
-                    classId={studentCreationClass || undefined}
-                    availableStudents={snapRole === 'parent' ? students : undefined}
-                />
-            )}
         </div>
     );
 };

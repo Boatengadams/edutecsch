@@ -18,7 +18,7 @@ interface StudySlide {
   title: string;
   bullets: string[];
   teacherScript: string;
-  summaryScript: string; // New: For the video recap (different approach)
+  summaryScript: string; // New: For the video recap
   imagePrompt: string;
   imageUrl?: string; // Filled later
   interactionType?: 'continue' | 'question' | 'video_summary';
@@ -63,8 +63,17 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const SeamlessVideoPlayer: React.FC<{ segments: SummarySegment[], onEnded: () => void }> = ({ segments, onEnded }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const audioRef = useRef<HTMLAudioElement>(null);
+    const bgMusicRef = useRef<HTMLAudioElement>(null);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isImageSegment, setIsImageSegment] = useState(false);
+
+    useEffect(() => {
+        // Start background music with low volume
+        if (bgMusicRef.current) {
+            bgMusicRef.current.volume = 0.1; 
+            bgMusicRef.current.play().catch(e => console.log("Bg music auto-play prevented", e));
+        }
+    }, []);
 
     useEffect(() => {
         const videoEl = videoRef.current;
@@ -103,41 +112,39 @@ const SeamlessVideoPlayer: React.FC<{ segments: SummarySegment[], onEnded: () =>
         }
 
         // Preload next segment assets
-        const nextIndex = currentIndex + 1;
-        if (nextIndex < segments.length) {
-            const nextSeg = segments[nextIndex];
-            if (nextSeg.videoUrl) {
-                const preloadVideo = document.createElement('video');
-                preloadVideo.src = nextSeg.videoUrl;
-                preloadVideo.preload = 'auto';
-            }
-            if (nextSeg.audioUrl) {
-                const preloadAudio = document.createElement('audio');
-                preloadAudio.src = nextSeg.audioUrl;
-                preloadAudio.preload = 'auto';
-            }
+        const nextIndex = (currentIndex + 1) % segments.length;
+        const nextSeg = segments[nextIndex];
+        if (nextSeg.videoUrl) {
+            const preloadVideo = document.createElement('video');
+            preloadVideo.src = nextSeg.videoUrl;
+            preloadVideo.preload = 'auto';
+        }
+        if (nextSeg.audioUrl) {
+            const preloadAudio = document.createElement('audio');
+            preloadAudio.src = nextSeg.audioUrl;
+            preloadAudio.preload = 'auto';
         }
 
     }, [currentIndex, segments]);
 
-    // We drive the sequence primarily by AUDIO duration, as that contains the information.
-    // The video loops if it's shorter than the audio.
+    // We drive the sequence primarily by AUDIO duration.
+    // When audio ends, we go to the next segment. If it's the last segment, we loop back to 0.
     const handleAudioEnded = () => {
-        if (currentIndex < segments.length - 1) {
-            setCurrentIndex(prev => prev + 1);
-        } else {
-            onEnded();
-        }
+        setCurrentIndex(prev => (prev + 1) % segments.length);
     };
 
     const segment = segments[currentIndex];
 
     return (
         <div className="w-full h-full bg-black flex items-center justify-center rounded-xl overflow-hidden relative group">
+            {/* Background Music - Relaxing Ambient Loop */}
+            <audio ref={bgMusicRef} src="https://assets.mixkit.co/music/preview/mixkit-dreams-and-imagination-1244.mp3" loop />
+            
             {isImageSegment ? (
                 <div className="w-full h-full relative overflow-hidden">
                     {/* Ken Burns Effect for Static Images */}
                     <img 
+                        key={currentIndex} // Force re-render for animation reset
                         src={segment?.imageUrl} 
                         className="w-full h-full object-cover animate-slow-zoom" 
                         alt="Summary Visual"
@@ -160,9 +167,10 @@ const SeamlessVideoPlayer: React.FC<{ segments: SummarySegment[], onEnded: () =>
                 className="hidden"
             />
             
-            {/* Minimal Overlay for progress */}
-            <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs text-white/80 border border-white/10 z-10 font-mono">
-                Segment {currentIndex + 1} / {segments.length}
+            <div className="absolute bottom-8 left-0 right-0 text-center px-4">
+                <p className="text-white/80 text-sm font-medium drop-shadow-md animate-pulse">
+                    Playing Summary Loop...
+                </p>
             </div>
             
             <style>{`
@@ -535,8 +543,8 @@ const StudentStudyMode: React.FC<StudentStudyModeProps> = ({ onExit, userProfile
       For EACH content slide, provide:
       1. 'title': Engaging slide title.
       2. 'bullets': Array of 3-4 short, clear bullet points.
-      3. 'teacherScript': Friendly script (2-3 sentences) for TTS to read like a teacher during the slide view.
-      4. 'summaryScript': A 1-sentence recap of this specific slide. This will be used for the generated video summary at the end. Make it sound different from the teacher script, perhaps more like a documentary narrator.
+      3. 'teacherScript': A comprehensive, detailed explanation (minimum 80-120 words). Act as an expert teacher breaking down complex concepts into clear, digestible parts with real-world examples. Provide deep insights and context. Do not be brief.
+      4. 'summaryScript': A narrative recap of this specific slide. This will be used for the video summary. Ensure it connects smoothly to the next slide conceptually to form a continuous story.
       5. 'imagePrompt': Highly descriptive prompt for an educational image related to this slide.
       6. 'checkQuestion': Optional multiple-choice question.
       

@@ -1,20 +1,37 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
-# Run and deploy your AI Studio app
+# EDUTECSCH - Secure School Management Platform (v2.2.0)
 
-This contains everything you need to run your app locally.
+Updated with React 19.2.1 and enhanced security protocols.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1x33HBv9BIFlHK_i3pEMbB77nuO-1yA-K
+## 🛡️ Security Upgrades
 
-## Run Locally
+### 1. Hardened Dependencies
+- **React 19.2.1**: Latest secure framework.
+- **Firebase v11**: Updated secure SDK.
+- **Node 20**: Cloud Functions runtime.
 
-**Prerequisites:**  Node.js
+### 2. Strict Access Control (RBAC)
+- **Firestore Rules**: Completely rewritten to enforce strict ownership and schema validation.
+    - Students can only write to their own submissions.
+    - Teachers are restricted to their assigned classes.
+    - Parents only access linked children.
+- **Validation**: Data types and required fields are validated at the database level.
 
+### 3. Storage Protection
+- **Content Security**: Only valid images, videos (max 50MB), and PDFs (max 10MB) allowed.
+- **Isolation**: Users are sandboxed to specific storage paths based on role.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### 4. Build Security
+- **Production Safety**: Source maps disabled, console logs stripped, and strict headers enforced in `vite.config.ts`.
+
+## 🚀 Features (Unchanged)
+- **Live Classroom**: Real-time interaction.
+- **AI Tools**: Gemini-powered planning and grading.
+- **Interactive Labs**: Virtual science experiments.
+
+## 📦 Deploy
+```bash
+npm install
+npm run build
+firebase deploy
+```

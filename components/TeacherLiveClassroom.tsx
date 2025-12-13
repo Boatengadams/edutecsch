@@ -292,7 +292,11 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
     // Automatically trigger question if present in new slide
     if (nextSlide.question) {
         // Determine action type based on question type
-        if (nextSlide.question.type === 'Theory') {
+        // Use type if available (from newer content) or check options for objective (from legacy content)
+        const question = nextSlide.question as any;
+        const isObjective = (question.type === 'Objective') || (nextSlide.question.options && nextSlide.question.options.length > 0);
+
+        if (!isObjective) {
              // For theory, we just want discussion, maybe "Ask for Questions" implicitly, 
              // or a custom "Discuss" action. For now, let's just show it on board.
              // If you want to force a prompt, uncomment below:

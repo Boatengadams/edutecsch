@@ -1,23 +1,42 @@
-import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, '.', '');
-    return {
-      server: {
-        port: 3000,
-        host: '0.0.0.0',
+// https://vitejs.dev/config/
+export default defineConfig(({ mode }) => ({
+  plugins: [react()],
+  build: {
+    // Security: Disable source maps in production to prevent code/logic exposure
+    sourcemap: mode === 'development',
+    // Security: Aggressive minification and obfuscation
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        // Security: Remove console logs to prevent leaking sensitive info or debugging traces
+        drop_console: mode === 'production',
+        drop_debugger: true,
       },
-      plugins: [react()],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+      format: {
+        comments: false, // Remove all comments
       },
-      resolve: {
-        alias: {
-          '@': path.resolve(__dirname, '.'),
-        }
-      }
-    };
-});
+    },
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'firebase/app', 'firebase/auth', 'firebase/firestore'],
+          charts: ['recharts'],
+          utils: ['html2canvas', '@google/genai']
+        },
+      },
+    },
+  },
+  server: {
+    headers: {
+      // Security Headers for Development Server
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'X-XSS-Protection': '1; mode=block',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+    },
+  },
+}));
