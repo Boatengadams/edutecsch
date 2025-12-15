@@ -24,6 +24,7 @@ import SystemActivation from './SystemActivation';
 import ConfirmationModal from './common/ConfirmationModal';
 import SubscriptionCalculator from './SubscriptionCalculator';
 import SnapToRegister from './SnapToRegister';
+import UserEditModal from './UserEditModal';
 
 const SessionLogsTable: React.FC = () => {
     const [logs, setLogs] = useState<UserActivityLog[]>([]);
@@ -76,6 +77,7 @@ const SessionLogsTable: React.FC = () => {
     );
 };
 
+// ... (OnlineUsersMonitor, AdminSettingsEditor, FlyerDesigner components remain unchanged)
 const OnlineUsersMonitor: React.FC = () => {
     const onlineUsers = useAllOnlineUsers();
 
@@ -223,7 +225,9 @@ const AdminSettingsEditor: React.FC<{ settings: SchoolSettings | null }> = ({ se
 };
 
 const FlyerDesigner: React.FC<{ userProfile: UserProfile }> = ({ userProfile }) => {
+    // ... (FlyerDesigner implementation remains unchanged)
     const { showToast } = useToast();
+    const { schoolSettings } = useAuthentication();
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
     const [targetAudience, setTargetAudience] = useState<'all' | 'role' | 'selected'>('all');
@@ -334,6 +338,7 @@ interface AdminViewProps {
 
 const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
     const { user, userProfile, schoolSettings, subscriptionStatus } = useAuthentication();
+    const { showToast } = useToast();
     const [activeTab, setActiveTab] = useState('dashboard');
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
     const [loadingUsers, setLoadingUsers] = useState(true);
@@ -345,6 +350,8 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
     const [userRoleFilter, setUserRoleFilter] = useState<UserRole | 'all'>('all');
     const [userClassFilter, setUserClassFilter] = useState<string>('all');
     const [bulkRoleTarget, setBulkRoleTarget] = useState<UserRole>('student');
+    const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     
     // Snap to Register State
     const [isSnapModalOpen, setIsSnapModalOpen] = useState(false);
@@ -386,7 +393,23 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
         });
     }, [allUsers, userSearchTerm, userRoleFilter, userClassFilter]);
 
-    // ... (bulk delete, role change, select all users logic)
+    const handleEditUser = (user: UserProfile) => {
+        setEditingUser(user);
+        setIsEditModalOpen(true);
+    };
+
+    const handleSaveUser = async (uid: string, data: Partial<UserProfile>) => {
+        try {
+            await db.collection('users').doc(uid).update(data);
+            showToast("User updated successfully", "success");
+            setIsEditModalOpen(false);
+            setEditingUser(null);
+        } catch (err: any) {
+            showToast(`Error updating user: ${err.message}`, "error");
+        }
+    };
+
+    // ... (bulk delete, role change, select all users logic - unchanged)
     const handleBulkDeleteClick = () => {
         setIsDeleteModalOpen(true);
     };
@@ -438,8 +461,8 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
 
     const renderContent = () => {
         switch(activeTab) {
+            // ... (other cases unchanged)
             case 'dashboard':
-                // ... (dashboard content)
                 return (
                     <div className="space-y-6">
                         {/* Header with Gradient */}
@@ -644,9 +667,13 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
                                                                 <td className="p-4">
                                                                     <div className="flex items-center gap-3">
                                                                         <div className="relative">
-                                                                            <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold">
-                                                                                {(user.name || '?').charAt(0)}
-                                                                            </div>
+                                                                            {user.photoURL ? (
+                                                                                <img src={user.photoURL} alt={user.name} className="w-8 h-8 rounded-full object-cover" />
+                                                                            ) : (
+                                                                                <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold">
+                                                                                    {(user.name || '?').charAt(0)}
+                                                                                </div>
+                                                                            )}
                                                                             {isOnline && <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-slate-800 rounded-full"></span>}
                                                                         </div>
                                                                         <div>
@@ -669,7 +696,12 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
                                                                     {user.childUids && user.childUids.length > 0 && <span className="bg-slate-700 px-2 py-1 rounded text-xs">{user.childUids.length} Children</span>}
                                                                 </td>
                                                                 <td className="p-4 text-right">
-                                                                    <button className="text-blue-400 hover:text-white text-xs font-medium px-3 py-1 rounded border border-slate-600 hover:bg-slate-700">Edit</button>
+                                                                    <button 
+                                                                        onClick={() => handleEditUser(user)}
+                                                                        className="text-blue-400 hover:text-white text-xs font-medium px-3 py-1 rounded border border-slate-600 hover:bg-slate-700"
+                                                                    >
+                                                                        Edit
+                                                                    </button>
                                                                 </td>
                                                             </tr>
                                                         );
@@ -776,6 +808,16 @@ const AdminView: React.FC<AdminViewProps> = ({ isSidebarExpanded, setIsSidebarEx
                     onClose={() => setIsSnapModalOpen(false)} 
                     roleToRegister={snapRole}
                     availableStudents={snapRole === 'parent' ? allUsers.filter(u => u.role === 'student') : undefined}
+                />
+            )}
+            {isEditModalOpen && editingUser && (
+                <UserEditModal
+                    isOpen={isEditModalOpen}
+                    onClose={() => setIsEditModalOpen(false)}
+                    user={editingUser}
+                    onSave={handleSaveUser}
+                    allUsers={allUsers}
+                    subjectsByClass={null}
                 />
             )}
         </div>

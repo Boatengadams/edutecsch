@@ -90,6 +90,7 @@ export interface UserProfile {
   role: UserRole;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: firebase.firestore.Timestamp;
+  photoURL?: string; // Added profile picture URL
   
   // Role-specific
   class?: string; // For students
@@ -357,9 +358,10 @@ export interface Assignment {
 }
 
 export interface Correction {
-    answers: Record<string, string>;
-    grade: string;
-    feedback: string;
+    text?: string;
+    attachmentURL?: string;
+    attachmentName?: string;
+    reattemptedAnswers?: Record<string, string>; // { questionIndex: selectedOption }
     submittedAt: firebase.firestore.Timestamp;
 }
 
@@ -372,7 +374,7 @@ export interface Submission {
     attachmentName: string; submittedAt: firebase.firestore.Timestamp;
     status: 'Submitted' | 'Graded' | 'Pending'; grade?: string; feedback?: string;
     parentUids?: string[];
-    correction?: Correction; // Separate object for correction data
+    correction?: Correction; // Updated: Corrections submitted by student after grading
 }
 
 export interface TeachingMaterial {

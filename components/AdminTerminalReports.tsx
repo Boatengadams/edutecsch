@@ -34,6 +34,13 @@ interface RankingData {
     average: number;
 }
 
+// Helper for ordinals (1st, 2nd, 3rd)
+function getOrdinal(n: number) {
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return s[(v - 20) % 10] || s[v] || s[0];
+}
+
 const StudentReportCard: React.FC<{ 
     student: UserProfile; 
     report: TerminalReport | null; 
@@ -73,8 +80,12 @@ const StudentReportCard: React.FC<{
                         Term {report?.term} Report
                     </div>
                 </div>
-                <div className="w-20 h-20 sm:w-24 sm:h-24 border border-gray-300 bg-gray-50 flex items-center justify-center text-gray-400 text-xs text-center p-1 shrink-0">
-                    Student Photo
+                <div className="w-20 h-20 sm:w-24 sm:h-24 border border-gray-300 bg-gray-50 flex items-center justify-center text-gray-400 text-xs text-center p-1 shrink-0 overflow-hidden">
+                    {student.photoURL ? (
+                        <img src={student.photoURL} alt="Student" className="w-full h-full object-cover" />
+                    ) : (
+                        "Student Photo"
+                    )}
                 </div>
             </div>
 
@@ -194,13 +205,6 @@ const StudentReportCard: React.FC<{
         </div>
     );
 };
-
-// Helper for ordinals (1st, 2nd, 3rd)
-function getOrdinal(n: number) {
-    const s = ["th", "st", "nd", "rd"];
-    const v = n % 100;
-    return s[(v - 20) % 10] || s[v] || s[0];
-}
 
 const AdminTerminalReports: React.FC<{ schoolSettings: SchoolSettings | null, user: firebase.User | null }> = ({ schoolSettings, user }) => {
     const { showToast } = useToast();
@@ -333,20 +337,26 @@ const AdminTerminalReports: React.FC<{ schoolSettings: SchoolSettings | null, us
         students.forEach(student => {
             const studentMark = marks[student.uid] || {};
             
-            const totalClassScore = (studentMark.indivTest || 0) + (studentMark.groupWork || 0) + (studentMark.classTest || 0) + (studentMark.project || 0);
-            const examScore = studentMark.endOfTermExams || 0;
+            // FIX: Ensure no undefined values are passed to Firestore by defaulting to 0
+            const indivTest = studentMark.indivTest || 0;
+            const groupWork = studentMark.groupWork || 0;
+            const classTest = studentMark.classTest || 0;
+            const project = studentMark.project || 0;
+            const endOfTermExams = studentMark.endOfTermExams || 0;
 
+            const totalClassScore = indivTest + groupWork + classTest + project;
             const scaledClassScore = (totalClassScore / 60) * 50;
-            const scaledExamScore = (examScore / 100) * 50;
+            const scaledExamScore = (endOfTermExams / 100) * 50;
             const overallTotal = scaledClassScore + scaledExamScore;
             
             calculatedMarks[student.uid] = {
                 studentName: student.name,
-                indivTest: studentMark.indivTest,
-                groupWork: studentMark.groupWork,
-                classTest: studentMark.classTest,
-                project: studentMark.project,
-                endOfTermExams: studentMark.endOfTermExams,
+                // Ensure no undefined values are passed to Firestore
+                indivTest,
+                groupWork,
+                classTest,
+                project,
+                endOfTermExams,
                 totalClassScore: parseFloat(totalClassScore.toFixed(1)),
                 scaledClassScore: parseFloat(scaledClassScore.toFixed(1)),
                 scaledExamScore: parseFloat(scaledExamScore.toFixed(1)),
@@ -609,7 +619,7 @@ const AdminTerminalReports: React.FC<{ schoolSettings: SchoolSettings | null, us
                     ) : (
                         // PRINT SELECTION & PREVIEW MODE
                         <div className="flex flex-col h-full">
-                            {/* Selection Bar */}
+                            {/* ... Selection Bar ... */}
                             <div className="bg-white border-b border-gray-200 p-4 flex items-center justify-between sticky top-0 z-20 print:hidden">
                                 <div className="flex items-center gap-3">
                                     <input 

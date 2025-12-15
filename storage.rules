@@ -60,17 +60,23 @@ service firebase.storage {
     }
 
     // ===========================================================
-    // 2. USER PROFILE FILES (Strict Security)
+    // 2. USER PROFILE FILES (Optimized Security)
     // ===========================================================
     match /users/{userId}/{filename} {
-      allow read: if isCallerApproved()
-        && (userId == request.auth.uid || callerDoc().data.role == 'admin');
+      allow read: if isCallerApproved();
 
-      allow write: if isCallerApproved()
-        && userId == request.auth.uid
+      // OPTIMIZATION: Split rules to avoid DB lookup overhead for self-uploads
+      // 1. Allow owner to upload (No DB lookup required - Fast)
+      allow write: if isSignedIn() 
+        && userId == request.auth.uid 
+        && fileSizeOK() 
+        && mimeTypeOK();
+        
+      // 2. Allow Admins/Teachers to upload for others (DB lookup required)
+      allow write: if isCallerApproved() 
+        && (callerDoc().data.role == 'admin' || callerDoc().data.role == 'teacher')
         && fileSizeOK()
-        && mimeTypeOK()
-        && notOverwriting();
+        && mimeTypeOK();
     }
 
     // ===========================================================
@@ -168,6 +174,17 @@ service firebase.storage {
       allow delete: if isCallerApproved()
         && (callerDoc().data.role == 'admin' ||
             creatorId == request.auth.uid);
+    }
+    
+    // ===========================================================
+    // 9. CORRECTION ATTACHMENTS (Student/Teacher Write)
+    // ===========================================================
+    match /corrections/{submissionId}/{userId}/{fileName} {
+       allow read: if isSignedIn();
+       allow write: if isSignedIn() 
+         && userId == request.auth.uid
+         && fileSizeOK()
+         && mimeTypeOK();
     }
 
     // ===========================================================

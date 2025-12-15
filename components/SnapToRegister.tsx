@@ -9,6 +9,7 @@ import { GES_CLASSES, UserProfile } from '../types';
 import type { ParsedUser, UserRole } from '../types';
 import { useBatchCreateUsers } from '../hooks/useBatchCreateUsers';
 import { useAuthentication } from '../hooks/useAuth';
+import { storage } from '../services/firebase';
 
 // Simple UUID generator since the import is not available
 const simpleUuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -16,6 +17,23 @@ const simpleUuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,
     const v = c === 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
 });
+
+// Helper to convert dataURL to Blob for upload
+const dataURItoBlob = (dataURI: string) => {
+    try {
+        const byteString = atob(dataURI.split(',')[1]);
+        const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+        }
+        return new Blob([ab], { type: mimeString });
+    } catch (e) {
+        console.error("Error converting data URI to blob:", e);
+        return null;
+    }
+};
 
 // Reusable Camera Modal Component
 const CameraModal: React.FC<{ onClose: () => void; onCapture: (dataUrl: string) => void; }> = ({ onClose, onCapture }) => {
@@ -124,7 +142,7 @@ interface SnapToRegisterProps {
 }
 
 const SnapToRegister: React.FC<SnapToRegisterProps> = ({ onClose, roleToRegister, classId: teacherClassId, availableStudents = [] }) => {
-    const { schoolSettings } = useAuthentication();
+    const { schoolSettings, user } = useAuthentication();
     const [step, setStep] = useState<'initial' | 'camera' | 'parsing' | 'review' | 'registering' | 'results'>('initial');
     const [activeTab, setActiveTab] = useState<'camera' | 'upload'>('camera');
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -138,6 +156,26 @@ const SnapToRegister: React.FC<SnapToRegisterProps> = ({ onClose, roleToRegister
     const fileInputRef = useRef<HTMLInputElement>(null);
     
     const schoolIdentifier = (schoolSettings?.schoolName || 'EDUTECSCH').substring(0, 2).toLowerCase();
+
+    // Background upload of the image for records
+    useEffect(() => {
+        if (capturedImage && user) {
+            const uploadEvidence = async () => {
+                const blob = dataURItoBlob(capturedImage);
+                if (blob) {
+                    try {
+                        const fileName = `admin-uploads/class-lists/${Date.now()}_${roleToRegister}.jpg`;
+                        const storageRef = storage.ref(fileName);
+                        await storageRef.put(blob, { contentType: 'image/jpeg' });
+                        console.log("Class list image saved automatically for records.");
+                    } catch (e) {
+                        console.warn("Failed to auto-save class list image", e);
+                    }
+                }
+            };
+            uploadEvidence();
+        }
+    }, [capturedImage, user, roleToRegister]);
 
     const regenerateCredentials = useCallback((users: ParsedUser[]): ParsedUser[] => {
         const targetClass = teacherClassId || classIdForStudents;
@@ -347,6 +385,7 @@ const SnapToRegister: React.FC<SnapToRegisterProps> = ({ onClose, roleToRegister
                     </div>
                 </div>
             );
+            // ... (Other cases remain unchanged)
             case 'parsing': return (
                 <div className="text-center py-10">
                     <div className="relative w-20 h-20 mx-auto mb-6">

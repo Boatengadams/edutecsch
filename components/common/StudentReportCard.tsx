@@ -77,8 +77,12 @@ const StudentReportCard: React.FC<StudentReportCardProps> = ({ student, report, 
                         Term {report?.term || schoolSettings?.currentTerm} Report
                     </div>
                 </div>
-                <div className="w-20 h-20 sm:w-24 sm:h-24 border border-gray-300 bg-gray-50 flex items-center justify-center text-gray-400 text-xs text-center p-1 shrink-0">
-                    Student Photo
+                <div className="w-20 h-20 sm:w-24 sm:h-24 border border-gray-300 bg-gray-50 flex items-center justify-center text-gray-400 text-xs text-center p-1 shrink-0 overflow-hidden">
+                    {student.photoURL ? (
+                        <img src={student.photoURL} alt="Student" className="w-full h-full object-cover" />
+                    ) : (
+                        "Student Photo"
+                    )}
                 </div>
             </div>
 

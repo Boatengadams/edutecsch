@@ -1,8 +1,9 @@
 
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuthentication } from '../hooks/useAuth';
 import { db, firebase, storage } from '../services/firebase';
-import { UserProfile, Assignment, Submission, Notification, SchoolEvent, Timetable, AttendanceRecord, Group, GroupMessage, PublishedFlyer, LiveLesson, UserRole, TeachingMaterial, GES_SUBJECTS } from '../types';
+import { UserProfile, Assignment, Submission, Notification, SchoolEvent, Timetable, AttendanceRecord, Group, GroupMessage, PublishedFlyer, LiveLesson, UserRole, TeachingMaterial, GES_SUBJECTS, GES_STANDARD_CURRICULUM, Correction } from '../types';
 import Card from './common/Card';
 import Spinner from './common/Spinner';
 import Button from './common/Button';
@@ -92,6 +93,13 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
   const [objectiveAnswers, setObjectiveAnswers] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  // Correction State
+  const [correctionText, setCorrectionText] = useState('');
+  const [correctionAnswers, setCorrectionAnswers] = useState<Record<string, string>>({});
+  const [correctionFile, setCorrectionFile] = useState<File | null>(null);
+  const [visibleExplanations, setVisibleExplanations] = useState<Record<string, boolean>>({});
+  const [isSubmittingCorrection, setIsSubmittingCorrection] = useState(false);
+
   // Group Chat State
   const [groupMessages, setGroupMessages] = useState<GroupMessage[]>([]);
   const groupMessagesEndRef = useRef<HTMLDivElement>(null);
@@ -261,11 +269,24 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
       setAiSuggestedPrompts(prompts);
   }, [activeTab, assignments, submissions, studentGroup]);
 
+  // Determine available subjects based on the student's class from curriculum
+  const availableSubjects = useMemo(() => {
+      if (userProfile?.class && GES_STANDARD_CURRICULUM[userProfile.class]) {
+          return GES_STANDARD_CURRICULUM[userProfile.class].sort();
+      }
+      return GES_SUBJECTS; // Fallback if class not found or undefined
+  }, [userProfile?.class]);
+
   const handleAssignmentClick = (assignment: Assignment) => {
       setViewingAssignment(assignment);
       setTextSubmission('');
       setFileSubmission(null);
       setObjectiveAnswers({});
+      // Reset correction inputs
+      setCorrectionText('');
+      setCorrectionAnswers({});
+      setCorrectionFile(null);
+      setVisibleExplanations({});
   };
 
   const handleSubmitAssignment = async () => {
@@ -357,6 +378,58 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
       }
   };
 
+  const handleSubmitCorrection = async (submissionId: string) => {
+      if (!user) return;
+      
+      const isObjective = viewingAssignment?.type === 'Objective';
+      
+      if (!isObjective && !correctionText && !correctionFile) {
+          showToast("Please enter correction details or attach a file.", "error");
+          return;
+      }
+      if (isObjective && Object.keys(correctionAnswers).length === 0) {
+           showToast("Please re-attempt at least one wrong question.", "error");
+           return;
+      }
+
+      setIsSubmittingCorrection(true);
+      try {
+          let attachmentURL: string | undefined;
+          let attachmentName: string | undefined;
+
+          if (correctionFile) {
+              const storagePath = `corrections/${submissionId}/${user.uid}/${Date.now()}_${correctionFile.name}`;
+              const storageRef = storage.ref(storagePath);
+              await storageRef.put(correctionFile);
+              attachmentURL = await storageRef.getDownloadURL();
+              attachmentName = correctionFile.name;
+          }
+
+          const correctionData: Correction = {
+              text: correctionText,
+              reattemptedAnswers: isObjective ? correctionAnswers : undefined,
+              submittedAt: firebase.firestore.Timestamp.now(),
+              attachmentURL,
+              attachmentName
+          };
+
+          await db.collection('submissions').doc(submissionId).update({
+              correction: correctionData
+          });
+
+          showToast("Correction submitted successfully!", "success");
+          // Clear inputs
+          setCorrectionText('');
+          setCorrectionAnswers({});
+          setCorrectionFile(null);
+          // No need to close explicitly if we want them to see the result, but typically we refresh view
+      } catch (err: any) {
+          showToast(`Correction failed: ${err.message}`, "error");
+      } finally {
+          setIsSubmittingCorrection(false);
+      }
+  };
+
   const handleSendGroupMessage = async (messageContent: { text: string; image: File | null; audio: Blob | null }) => {
       if (!studentGroup || !user || !userProfile) return;
       setIsSendingGroupMessage(true);
@@ -394,9 +467,13 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
   };
   
   const filteredMaterials = useMemo(() => {
-      if (materialSubjectFilter === 'All') return teachingMaterials;
+      if (materialSubjectFilter === 'All') {
+          // If 'All' is selected, show materials that match ANY of the student's curriculum subjects
+          // or have no subject specified.
+          return teachingMaterials.filter(m => !m.subject || availableSubjects.includes(m.subject));
+      }
       return teachingMaterials.filter(m => m.subject === materialSubjectFilter);
-  }, [teachingMaterials, materialSubjectFilter]);
+  }, [teachingMaterials, materialSubjectFilter, availableSubjects]);
   
   // Automatic download handler
     const handleDownloadMaterial = async (url: string, filename: string) => {
@@ -420,6 +497,26 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
             window.open(url, '_blank');
         }
     };
+    
+    // Helper to get wrong questions for objective quizzes
+    const getWrongQuestionIndices = () => {
+        if (!viewingAssignment || !viewingAssignment.quiz || !submissions[viewingAssignment.id]) return [];
+        const submission = submissions[viewingAssignment.id];
+        if (!submission.answers) return [];
+        
+        return viewingAssignment.quiz.quiz
+            .map((q, idx) => ({ q, idx }))
+            .filter(({ q, idx }) => submission.answers?.[idx] !== q.correctAnswer)
+            .map(({ idx }) => idx);
+    };
+
+    const toggleExplanation = (index: number) => {
+        setVisibleExplanations(prev => ({
+            ...prev,
+            [index]: !prev[index]
+        }));
+    };
+
 
   if (!user || !userProfile) return <div className="flex h-screen justify-center items-center"><Spinner /></div>;
 
@@ -462,7 +559,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                                <div className="text-right hidden md:block">
                                   <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Current Level</p>
                                   <p className="text-2xl font-black text-white">{userProfile.level || 1}</p>
-                               </div>
+                                </div>
                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-xl shadow-lg shadow-purple-500/20">
                                   {userProfile.level || 1}
                                </div>
@@ -739,7 +836,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                                    className="bg-transparent text-sm text-white font-bold outline-none cursor-pointer hover:text-blue-400 p-1 pr-4"
                                >
                                    <option value="All">All Subjects</option>
-                                   {GES_SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+                                   {availableSubjects.map(s => <option key={s} value={s}>{s}</option>)}
                                </select>
                            </div>
                        </div>
@@ -899,6 +996,122 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                                       <p className="text-lg"><strong className="text-green-300">Score:</strong> {submissions[viewingAssignment.id].grade}</p>
                                       <div className="mt-2 p-3 bg-green-900/30 rounded-lg text-green-200 italic text-sm border border-green-500/20">
                                           "{submissions[viewingAssignment.id].feedback}"
+                                      </div>
+                                      
+                                      {/* CORRECTION SECTION */}
+                                      <div className="mt-6 pt-6 border-t border-green-500/30">
+                                        <h5 className="font-bold text-white mb-3">Corrections</h5>
+                                        {submissions[viewingAssignment.id].correction ? (
+                                            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                                                <p className="text-xs text-slate-400 mb-2">Submitted on {submissions[viewingAssignment.id].correction?.submittedAt.toDate().toLocaleString()}</p>
+                                                {submissions[viewingAssignment.id].correction?.text && (
+                                                    <p className="text-slate-200 whitespace-pre-wrap">{submissions[viewingAssignment.id].correction?.text}</p>
+                                                )}
+                                                {submissions[viewingAssignment.id].correction?.reattemptedAnswers && viewingAssignment.quiz && (
+                                                    <div className="mt-3 space-y-2">
+                                                        <h6 className="text-xs font-bold text-slate-400 uppercase">Re-attempted Questions</h6>
+                                                        {Object.entries(submissions[viewingAssignment.id].correction?.reattemptedAnswers || {}).map(([idx, ans]) => {
+                                                            const i = parseInt(idx);
+                                                            const q = viewingAssignment.quiz?.quiz[i];
+                                                            if (!q) return null;
+                                                            return (
+                                                                <div key={i} className="text-sm border-l-2 border-blue-500 pl-3 py-1">
+                                                                    <p className="text-slate-300 mb-1">{i+1}. {q.question}</p>
+                                                                    <p className="text-blue-300">Selected: {ans}</p>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                                {submissions[viewingAssignment.id].correction?.attachmentURL && (
+                                                    <div className="mt-2">
+                                                        <a href={submissions[viewingAssignment.id].correction?.attachmentURL} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline text-sm flex items-center gap-2">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                                                            {submissions[viewingAssignment.id].correction?.attachmentName || 'View Correction File'}
+                                                        </a>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                {viewingAssignment.type === 'Objective' && viewingAssignment.quiz ? (
+                                                    // OBJECTIVE CORRECTION UI
+                                                    <div className="space-y-6">
+                                                        <p className="text-sm text-slate-300 bg-yellow-900/20 p-3 rounded border border-yellow-500/30">
+                                                            Please correct your wrong answers below. Choose the correct option and check the explanation to understand better.
+                                                        </p>
+                                                        {getWrongQuestionIndices().map((questionIndex) => {
+                                                            const q = viewingAssignment.quiz!.quiz[questionIndex];
+                                                            const isExplanationVisible = visibleExplanations[questionIndex];
+                                                            
+                                                            return (
+                                                                <div key={questionIndex} className="p-4 bg-slate-900 rounded-xl border border-red-500/30">
+                                                                    <div className="flex justify-between items-start mb-3">
+                                                                        <p className="font-medium text-white text-md"><span className="text-red-400 mr-2">Q{questionIndex + 1}.</span> {q.question}</p>
+                                                                    </div>
+                                                                    
+                                                                    <div className="space-y-2 ml-2">
+                                                                        {q.options?.map(opt => (
+                                                                            <label key={opt} className="flex items-center space-x-3 cursor-pointer group">
+                                                                                <div className="relative flex items-center">
+                                                                                    <input 
+                                                                                        type="radio" 
+                                                                                        name={`correction-q-${questionIndex}`} 
+                                                                                        value={opt} 
+                                                                                        checked={correctionAnswers[questionIndex] === opt} 
+                                                                                        onChange={() => setCorrectionAnswers(prev => ({ ...prev, [questionIndex]: opt }))} 
+                                                                                        className="peer sr-only" 
+                                                                                    />
+                                                                                    <div className="w-4 h-4 border-2 border-slate-500 rounded-full peer-checked:border-green-500 peer-checked:bg-green-500 transition-all"></div>
+                                                                                </div>
+                                                                                <span className="text-slate-300 group-hover:text-white transition-colors text-sm">{opt}</span>
+                                                                            </label>
+                                                                        ))}
+                                                                    </div>
+                                                                    
+                                                                    <div className="mt-4 flex flex-col items-start gap-2">
+                                                                        <button 
+                                                                            onClick={() => toggleExplanation(questionIndex)} 
+                                                                            className="text-xs flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors"
+                                                                        >
+                                                                            {isExplanationVisible ? '🙈 Hide Explanation' : '💡 Show Explanation'}
+                                                                        </button>
+                                                                        
+                                                                        {isExplanationVisible && (
+                                                                            <div className="w-full bg-blue-900/20 p-3 rounded-lg border-l-2 border-blue-500 text-xs text-blue-200 animate-fade-in-short">
+                                                                                <strong>Explanation:</strong> {q.explanation || 'No explanation provided.'}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                        {getWrongQuestionIndices().length === 0 && <p className="text-green-400">All answers correct! No corrections needed.</p>}
+                                                    </div>
+                                                ) : (
+                                                    // THEORY CORRECTION UI
+                                                    <>
+                                                        <p className="text-sm text-slate-300">Submit correction for this assignment:</p>
+                                                        <textarea 
+                                                            value={correctionText} 
+                                                            onChange={e => setCorrectionText(e.target.value)} 
+                                                            placeholder="Enter correction details..." 
+                                                            rows={4} 
+                                                            className="w-full p-3 bg-slate-900 rounded-lg border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-green-500"
+                                                        />
+                                                        <input 
+                                                            type="file" 
+                                                            onChange={e => setCorrectionFile(e.target.files?.[0] || null)} 
+                                                            className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-700 file:text-white hover:file:bg-slate-600"
+                                                        />
+                                                    </>
+                                                )}
+                                                
+                                                <Button onClick={() => handleSubmitCorrection(submissions[viewingAssignment.id].id)} disabled={isSubmittingCorrection} size="sm" className="bg-blue-600 hover:bg-blue-500">
+                                                    {isSubmittingCorrection ? 'Submitting...' : 'Submit Correction'}
+                                                </Button>
+                                            </div>
+                                        )}
                                       </div>
                                   </div>
                               )}

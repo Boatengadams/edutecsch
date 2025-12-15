@@ -1,7 +1,3 @@
-
-
-
-
 import React, { useState, useEffect, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useAuthentication, AuthenticationContext } from './hooks/useAuth';
@@ -10,7 +6,7 @@ import type { UserProfile, SchoolSettings, SubscriptionStatus, UserRole } from '
 import 'firebase/compat/auth';
 import AuthForm from './components/AuthForm';
 import RoleSelector from './components/RoleSelector';
-import { TeacherView } from './components/TeacherView';
+import TeacherView from './components/TeacherView';
 import { StudentView } from './components/StudentView';
 // FIX: Changed to default import for AdminView.
 import AdminView from './components/AdminView';

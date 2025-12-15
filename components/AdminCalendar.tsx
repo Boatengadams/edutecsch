@@ -1,4 +1,5 @@
 
+// ... existing imports ...
 import React, { useState, useEffect, useRef } from 'react';
 import { db, storage, functions, firebase } from '../services/firebase';
 import { SchoolEvent, SchoolEventType, SchoolEventAudience, EVENT_TYPES, EVENT_AUDIENCE, PublishedFlyer, UserRole } from '../types';
@@ -11,6 +12,7 @@ import FlyerCard from './common/FlyerCard';
 import { useAuthentication } from '../hooks/useAuth';
 import ConfirmationModal from './common/ConfirmationModal';
 
+// ... existing helper functions (blobToBase64, dataURItoBlob) ...
 interface GeneratedOption {
     id: number;
     imageUrl: string;
@@ -31,7 +33,6 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
     });
 };
 
-// Robust dataURI to Blob converter
 const dataURItoBlob = (dataURI: string) => {
     try {
         const byteString = atob(dataURI.split(',')[1]);
@@ -94,12 +95,23 @@ const AdminCalendar: React.FC = () => {
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
+            
+            // SECURITY: Basic Validation
+            if (file.size > 5 * 1024 * 1024) {
+                showToast("File size too large. Please upload an image under 5MB.", "error");
+                return;
+            }
+            if (!file.type.startsWith('image/')) {
+                showToast("Invalid file type. Please upload a valid image (JPG, PNG).", "error");
+                return;
+            }
+
             setUploadedImage(file);
             setUploadedImagePreview(URL.createObjectURL(file));
         }
     };
-
-    // 1. Search & Ideate Prompts
+    
+    // ... (rest of the component logic remains unchanged: handleGenerateOptions, handleEditImage, handleSaveAll, etc.)
     const handleGenerateOptions = async () => {
         if (!title) {
             showToast("Please enter an event title first.", "error");
@@ -114,7 +126,6 @@ const AdminCalendar: React.FC = () => {
             const schoolName = schoolSettings?.schoolName || "EduTec School";
             const motto = schoolSettings?.schoolMotto || "Excellence";
             
-            // SYSTEM INSTRUCTION INJECTION
             const systemInstruction = `
                 Build an advanced AI Flyer Generator Engine that produces studio-quality, professional, modern, and outstanding school flyers that eliminate the need for any traditional flyer designer.
 
@@ -185,9 +196,7 @@ const AdminCalendar: React.FC = () => {
 
                     const contents: any[] = [{ text: promptText }];
                     if (imagePart) {
-                        // If user uploaded an image, we provide it as context/input for the model to use
                         contents.push(imagePart);
-                        // Enhance prompt to ensure it uses the image
                         contents[0].text += " Use the provided image as the central focal point, blended professionally with the background.";
                     }
 
@@ -226,7 +235,6 @@ const AdminCalendar: React.FC = () => {
         }
     };
 
-    // 2. Edit Selected Image
     const handleEditImage = async () => {
         if (!selectedOption || !editPrompt.trim()) return;
         
@@ -251,13 +259,11 @@ const AdminCalendar: React.FC = () => {
             const part = response?.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
             if (part && part.inlineData) {
                 const newImageUrl = `data:image/png;base64,${part.inlineData.data}`;
-                
-                // Update selected option with new version
                 setSelectedOption({
                     ...selectedOption,
                     imageUrl: newImageUrl
                 });
-                setEditPrompt(''); // Clear prompt
+                setEditPrompt('');
                 showToast("Design refined successfully!", "success");
             } else {
                 throw new Error("No image returned from edit.");
@@ -270,7 +276,6 @@ const AdminCalendar: React.FC = () => {
         }
     };
 
-    // 3. Save Event & Publish Flyer
     const handleSaveAll = async () => {
         if (!title || !date) {
             showToast("Please complete event details.", "error");
@@ -291,28 +296,23 @@ const AdminCalendar: React.FC = () => {
                 createdByName: 'Administrator'
             };
             
-            // Start Event Save
             const eventPromise = db.collection('calendarEvents').add(newEvent);
 
-            // B. Upload & Save Flyer (if selected)
+            // B. Upload & Save Flyer
             let flyerPromise = Promise.resolve(null as any);
             
             if (selectedOption) {
-                // Optimized: Convert Data URL to Blob directly without fetch (prevents hanging)
                 const blob = dataURItoBlob(selectedOption.imageUrl);
                 
                 if (!blob) throw new Error("Failed to process image data.");
                 
-                // Upload logic
                 const fileName = `flyers/${Date.now()}_${title.replace(/\s+/g, '_')}.png`;
                 const storageRef = storage.ref(fileName);
                 
-                // Upload with retry logic handled implicitly by Firebase SDK, but we wrap in a promise chain for UI feedback
                 flyerPromise = storageRef.put(blob)
                     .then(async (snapshot) => {
                          const downloadURL = await snapshot.ref.getDownloadURL();
                          
-                         // Determine target roles
                          let targetRoles: UserRole[] = [];
                          if (audience === 'Students') targetRoles = ['student'];
                          else if (audience === 'Parents') targetRoles = ['parent'];
@@ -331,10 +331,8 @@ const AdminCalendar: React.FC = () => {
 
                          await db.collection('publishedFlyers').add(flyerData);
                          
-                         // C. Dispatch Notifications via Cloud Function (Fire-and-forget / Non-blocking)
                          const broadcastFn = functions.httpsCallable('sendBroadcastNotification');
                          
-                         // We do NOT await this, so the UI unlocks immediately.
                          broadcastFn({
                              title: `New Flyer: ${title}`,
                              message: description || "Check the notice board for details.",
@@ -350,7 +348,6 @@ const AdminCalendar: React.FC = () => {
                     });
             }
 
-            // Wait for critical data writes (Event + Flyer Doc)
             await Promise.all([eventPromise, flyerPromise]);
 
             showToast('Event and Flyer published successfully!', 'success');
@@ -392,10 +389,10 @@ const AdminCalendar: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            {/* UI Content same as before, no changes needed to JSX structure */}
             <h2 className="text-3xl font-bold">School Calendar & Events</h2>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* ... UI structure is mostly unchanged, referencing the updated handlers ... */}
                 <div className="lg:col-span-1">
                     <Card>
                         <h3 className="text-lg font-bold mb-4">Add New Event</h3>
@@ -427,14 +424,12 @@ const AdminCalendar: React.FC = () => {
                                 <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className="w-full p-2 bg-slate-800 rounded border border-slate-700" placeholder="Additional info..." />
                             </div>
                             
-                            {/* Flyer Designer Toggle */}
                             {!showFlyerDesigner && (
                                 <Button variant="secondary" onClick={() => setShowFlyerDesigner(true)} className="w-full bg-gradient-to-r from-purple-900/40 to-blue-900/40 text-white hover:from-purple-900/60 hover:to-blue-900/60 border border-purple-500/30">
                                     ✨ Open Flyer Studio
                                 </Button>
                             )}
 
-                            {/* Embedded Flyer Designer */}
                             {showFlyerDesigner && (
                                 <div className="bg-slate-900 p-4 rounded-xl border border-purple-500/50 animate-fade-in-down shadow-2xl">
                                     <div className="flex justify-between items-center mb-3 border-b border-purple-500/20 pb-2">
@@ -444,7 +439,6 @@ const AdminCalendar: React.FC = () => {
                                         <button onClick={() => setShowFlyerDesigner(false)} className="text-slate-500 hover:text-white">&times;</button>
                                     </div>
                                     
-                                    {/* STEP 1: Initial State */}
                                     {flyerStep === 'idle' && (
                                         <div className="space-y-4">
                                             <div className="bg-slate-800/50 p-3 rounded-lg border border-dashed border-slate-600">
@@ -462,7 +456,7 @@ const AdminCalendar: React.FC = () => {
                                                     </button>
                                                     <div className="flex-1">
                                                         <p className="text-[10px] text-slate-500">
-                                                            Upload a picture to integrate into the design (e.g. school building, logo, or students).
+                                                            Upload a picture to integrate into the design (e.g. school building, logo, or students). Max 5MB.
                                                         </p>
                                                         <input 
                                                             type="file" 
@@ -489,7 +483,6 @@ const AdminCalendar: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {/* STEP 2 & 3: Loading */}
                                     {(flyerStep === 'searching' || flyerStep === 'generating') && (
                                         <div className="text-center py-8">
                                             <Spinner />
@@ -497,7 +490,6 @@ const AdminCalendar: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {/* STEP 4: Selection */}
                                     {flyerStep === 'selecting' && (
                                         <div className="space-y-4">
                                             <p className="text-xs text-slate-400 font-bold uppercase">Select a Design:</p>
@@ -522,7 +514,6 @@ const AdminCalendar: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {/* STEP 5: Editing */}
                                     {flyerStep === 'editing' && selectedOption && (
                                         <div className="space-y-3">
                                             <div className="relative rounded-lg overflow-hidden border border-purple-500/50 shadow-lg group">

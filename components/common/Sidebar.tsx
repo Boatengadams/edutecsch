@@ -83,15 +83,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isExpanded, navItems, activeTab, setA
                     }}
                     className={`group w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-left transition-all duration-200 outline-none
                     ${isActive
-                      ? 'bg-blue-600/10 text-blue-400 font-semibold shadow-sm ring-1 ring-blue-500/20'
+                      ? 'bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-[length:200%_auto] animate-gradient text-white font-bold shadow-lg shadow-blue-500/25 scale-[1.02]'
                       : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'
                     }`}
                   >
-                    <div className={`flex-shrink-0 w-5 h-5 transition-transform group-hover:scale-110 ${isActive ? 'text-blue-400' : 'text-slate-500 group-hover:text-slate-300'}`}>
+                    <div className={`flex-shrink-0 w-5 h-5 transition-transform group-hover:scale-110 ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-slate-300'}`}>
                         {item.icon}
                     </div>
                     <span className="truncate">{item.label}</span>
-                    {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)]"></div>}
+                    {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]"></div>}
                   </button>
                 </li>
               )})}

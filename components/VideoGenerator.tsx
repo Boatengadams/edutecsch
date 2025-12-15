@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 // FIX: Import VideoGenerationReferenceImage and VideoGenerationReferenceType to resolve type errors.
 import { GoogleGenAI, VideoGenerationReferenceImage, VideoGenerationReferenceType } from '@google/genai';
@@ -81,6 +82,16 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({ onClose, userProfile, a
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
+            // SECURITY: Basic Validation
+            if (file.size > 5 * 1024 * 1024) {
+                setError('Image file size must be less than 5MB.');
+                return;
+            }
+            if (!file.type.startsWith('image/')) {
+                setError('Please upload a valid image file (JPG, PNG).');
+                return;
+            }
+
             handleStartOver();
             setImageFile(file);
             setImagePreview(URL.createObjectURL(file));
@@ -194,6 +205,7 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({ onClose, userProfile, a
         }
     };
     
+    // ... (rest of component remains unchanged: handleSaveVideo, handleClassChange, renderGenerator) ...
     const handleSaveVideo = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!generatedVideoBlob || !userProfile || !videoDetails.title.trim()) {
@@ -271,6 +283,7 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({ onClose, userProfile, a
                         <div onClick={() => fileInputRef.current?.click()} className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-600 border-dashed rounded-md cursor-pointer hover:border-blue-500">
                             {imagePreview ? <img src={imagePreview} alt="Preview" className="mx-auto max-h-40 rounded-md" /> : <div className="space-y-1 text-center"><svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg><p className="text-sm text-gray-400">Click to upload a photo</p></div>}
                         </div>
+                        {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
                     </div>
                     
                     <div>

@@ -113,8 +113,14 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ userProfile, assignment
     <div className="animate-fade-in-up space-y-6">
       <Card>
         <div className="flex flex-col sm:flex-row items-center gap-6">
-          <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-4xl font-bold text-white shadow-lg">
-            {(userProfile.name || '?').charAt(0)}
+          <div className="w-24 h-24 rounded-full overflow-hidden shadow-lg border-2 border-slate-700 bg-slate-800 flex-shrink-0">
+             {userProfile.photoURL ? (
+                 <img src={userProfile.photoURL} alt={userProfile.name} className="w-full h-full object-cover" />
+             ) : (
+                <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-4xl font-bold text-white">
+                    {(userProfile.name || '?').charAt(0)}
+                </div>
+             )}
           </div>
           <div className="flex-grow text-center sm:text-left">
             <h2 className="text-3xl font-bold glow-text">{userProfile.name}</h2>

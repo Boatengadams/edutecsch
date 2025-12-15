@@ -75,8 +75,12 @@ const TeacherStudentCard: React.FC<TeacherStudentCardProps> = ({
 
             <div className="relative z-10 flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarColor(displayName)} flex items-center justify-center text-white font-bold text-lg shadow-inner`}>
-                        {displayName.charAt(0)}
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-inner overflow-hidden flex-shrink-0 ${!student.photoURL ? `bg-gradient-to-br ${getAvatarColor(displayName)}` : 'bg-slate-700'}`}>
+                        {student.photoURL ? (
+                            <img src={student.photoURL} alt={displayName} className="w-full h-full object-cover" />
+                        ) : (
+                            <span className="text-white font-bold text-lg">{displayName.charAt(0)}</span>
+                        )}
                     </div>
                     <div>
                         <h4 className="font-bold text-slate-200 group-hover:text-white transition-colors line-clamp-1">{displayName}</h4>

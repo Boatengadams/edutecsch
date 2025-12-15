@@ -29,11 +29,13 @@ interface EComponent {
         resistance?: number;    // Ohms (Load)
         isOpen?: boolean;       // Switch state
         maxResistance?: number; // Rheostat
-        currentValue?: number;  // Live Simulation Value (Amps/Volts)
+        currentValue?: number;  // Live Simulation Value (Amps)
+        voltageDrop?: number;   // Live Simulation Value (Volts across component)
         isGlowing?: boolean;    // Visual State
         brightness?: number;    // 0-1 Visual intensity
         power?: number;         // Watts
         cellCount?: number;     // For holders
+        charge?: number;        // 0.0 to 1.0 (Battery Life)
     };
 }
 
@@ -51,12 +53,12 @@ const COMPONENT_DEFS: Record<ComponentType, { width: number, height: number, ter
     'cell': {
         width: 100, height: 180, // Vertical dimensions
         terminals: [{ id: 'pos', x: 0, y: -80, polarity: 'positive', color: '#ef4444' }, { id: 'neg', x: 0, y: 80, polarity: 'negative', color: '#000000' }],
-        label: 'Cells (Series)', icon: '🔋', defaultR: 0.5
+        label: 'Cell (Series)', icon: '🔋', defaultR: 0.5
     },
     'cell_holder': {
         width: 160, height: 100, // Horizontal dimensions
         terminals: [{ id: 'pos', x: -70, y: 0, polarity: 'positive', color: '#ef4444' }, { id: 'neg', x: 70, y: 0, polarity: 'negative', color: '#000000' }],
-        label: 'Cells (Parallel)', icon: '⚡🔋', defaultR: 0.5
+        label: 'Battery Pack', icon: '⚡🔋', defaultR: 0.5
     },
     'bulb': {
         width: 80, height: 80,
@@ -66,7 +68,7 @@ const COMPONENT_DEFS: Record<ComponentType, { width: number, height: number, ter
     'switch': {
         width: 100, height: 60,
         terminals: [{ id: 'in', x: -40, y: 0, color: '#d4af37' }, { id: 'out', x: 40, y: 0, color: '#d4af37' }],
-        label: 'Tap Key', icon: '🔌', defaultR: 0
+        label: 'Switch', icon: '🔌', defaultR: 0
     },
     'resistor': {
         width: 100, height: 40,
@@ -114,6 +116,8 @@ class UnionFind {
 // Simple Gaussian Elimination Solver
 function solveLinearSystem(A: number[][], b: number[]) {
     const n = A.length;
+    if (n === 0) return [];
+    
     // Pivot and Forward Elimination
     for (let i = 0; i < n; i++) {
         let maxEl = Math.abs(A[i][i]);
@@ -188,6 +192,7 @@ const CellHolderSVG = ({ count, mode }: { count: number, mode: 'series' | 'paral
                 <rect x="-10" y="80" width="20" height="10" fill="#000000" />
                 <circle cx="0" cy="80" r="4" fill="#000000" stroke="#333" />
                 <text x="15" y="82" fontSize="10" fill="white" fontWeight="bold">-</text>
+                
                 <g transform="translate(0, 0)">
                     {Array.from({ length: Math.min(count, 4) }).map((_, i) => {
                         const y = startY + i * (cellHeight + gap);
@@ -196,12 +201,13 @@ const CellHolderSVG = ({ count, mode }: { count: number, mode: 'series' | 'paral
                                 <rect x="-25" y="-14" width="50" height="28" rx="2" fill="url(#batteryGradientV)" stroke="#172554" />
                                 <rect x="-10" y="-17" width="20" height="3" fill="#9ca3af" />
                                 {i > 0 && <path d={`M 0 -22 L 0 -${gap + 8}`} stroke="#fbbf24" strokeWidth="1.5" strokeDasharray="2 1" opacity="0.6" />}
-                                <text x="0" y="4" textAnchor="middle" fontSize="9" fill="white" fontWeight="bold" opacity="0.8">1.5V</text>
                             </g>
                         );
                     })}
                 </g>
-                <text x="45" y="0" textAnchor="middle" transform="rotate(90, 45, 0)" fontSize="9" fill="#94a3b8" fontFamily="monospace">{(count * 1.5).toFixed(1)}V</text>
+                <text x="45" y="0" textAnchor="middle" transform="rotate(90, 45, 0)" fontSize="9" fill="#94a3b8" fontFamily="monospace">
+                    {(count * 1.5).toFixed(1)}V
+                </text>
                  <path d="M -45 -10 V 10 M -45 0 H -55" stroke="#64748b" strokeWidth="2" />
             </g>
         );
@@ -228,37 +234,53 @@ const CellHolderSVG = ({ count, mode }: { count: number, mode: 'series' | 'paral
             <rect x="70" y="-10" width="8" height="20" rx="2" fill="#000000" />
             <circle cx="70" cy="0" r="4" fill="#000000" stroke="#333" />
             <text x="60" y="4" fontSize="10" fill="white" fontWeight="bold">-</text>
-            <path d="M -60 -30 H 60" stroke="#fbbf24" strokeWidth="1" strokeDasharray="3 3" opacity="0.4" />
-            <path d="M -60 30 H 60" stroke="#fbbf24" strokeWidth="1" strokeDasharray="3 3" opacity="0.4" />
+            
             <g transform="translate(0, 0)">
                 {Array.from({ length: Math.min(count, 4) }).map((_, i) => {
                     const startX = -totalWidth / 2 + width/2; 
                     const x = startX + i * (width + gap);
                     return (
                         <g key={i} transform={`translate(${x}, 0)`}>
-                            <line x1="0" y1="-28" x2="0" y2="-30" stroke="#fbbf24" strokeWidth="1" opacity="0.4" />
-                            <line x1="0" y1="28" x2="0" y2="30" stroke="#fbbf24" strokeWidth="1" opacity="0.4" />
                             <rect x="-10" y="-28" width="20" height="56" rx="2" fill="url(#batteryGradientH)" stroke="#172554" />
                             <rect x="-6" y="-32" width="12" height="4" fill="#9ca3af" />
-                            <text x="0" y="0" textAnchor="middle" transform="rotate(-90)" fontSize="6" fill="white" fontWeight="bold" opacity="0.6">PARA</text>
                         </g>
                     );
                 })}
             </g>
-            <text x="0" y="32" textAnchor="middle" fontSize="9" fill="#94a3b8" fontFamily="monospace">1.5V ({count}x)</text>
-             <path d="M -10 38 H 10 M -10 42 H 10" stroke="#64748b" strokeWidth="1.5" />
+            <text x="0" y="-32" textAnchor="middle" fontSize="9" fill="#94a3b8" fontFamily="monospace">
+                {(1.5).toFixed(1)}V ({count}x)
+            </text>
         </g>
     );
 };
 
-const BulbSVG = ({ isGlowing, brightness }: { isGlowing?: boolean, brightness?: number }) => {
-    let glowColor = "#f59e0b"; // Default Orange-Yellow
-    let coreColor = "#fbbf24";
-    if (brightness) {
-        if (brightness > 0.8) { glowColor = "#ffffff"; coreColor = "#fef3c7"; } 
-        else if (brightness < 0.4) { glowColor = "#ef4444"; coreColor = "#7f1d1d"; }
+const BulbSVG = ({ isGlowing, brightness, voltage }: { isGlowing?: boolean, brightness?: number, voltage?: number }) => {
+    // Realistic Color Temperature Simulation
+    let glowColor = "#44403c"; // Dark grey (off)
+    let coreColor = "#57534e";
+    
+    // Filament Voltage Logic (Rated ~6V)
+    const v = Math.abs(voltage || 0);
+    
+    if (v > 0.5) {
+        if (v < 2.0) {
+            glowColor = "#7f1d1d"; // Dim Red
+            coreColor = "#991b1b";
+        } else if (v < 4.0) {
+            glowColor = "#f97316"; // Orange
+            coreColor = "#fdba74";
+        } else if (v < 7.0) {
+            glowColor = "#facc15"; // Yellow (Nominal)
+            coreColor = "#fef08a";
+        } else {
+            glowColor = "#ffffff"; // White Hot (Over driven)
+            coreColor = "#e0f2fe"; // Slight blue tint
+        }
     }
-    const opacity = Math.min(1, Math.max(0.2, (brightness || 0)));
+
+    const opacity = Math.min(1, Math.max(0.1, (brightness || 0)));
+    const haloRadius = 25 + (brightness || 0) * 15;
+
     return (
         <g className="filter drop-shadow-xl">
              <defs>
@@ -269,11 +291,26 @@ const BulbSVG = ({ isGlowing, brightness }: { isGlowing?: boolean, brightness?: 
             </defs>
             <circle cx="0" cy="30" r="28" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="1" />
             <circle cx="0" cy="30" r="20" fill="#1e293b" />
-            <circle cx="0" cy="0" r="25" fill={isGlowing ? coreColor : "rgba(255,255,255,0.2)"} stroke="#94a3b8" strokeWidth="1" fillOpacity={isGlowing ? 0.3 + (opacity * 0.4) : 0.1} />
-            {isGlowing && <circle cx="0" cy="0" r={25 + (brightness || 0)*5} fill={glowColor} fillOpacity={opacity * 0.6} filter="url(#glowBlur)" className="animate-pulse" style={{animationDuration: '0.2s'}} />}
+            
+            {/* Glass Bulb */}
+            <circle cx="0" cy="0" r="25" fill={isGlowing ? coreColor : "rgba(255,255,255,0.1)"} stroke="#94a3b8" strokeWidth="1" fillOpacity={isGlowing ? 0.4 : 0.1} />
+            
+            {/* Glow Halo */}
+            {isGlowing && <circle cx="0" cy="0" r={haloRadius} fill={glowColor} fillOpacity={opacity * 0.8} filter="url(#glowBlur)" />}
+            
+            {/* Filament */}
             <path d="M -8 30 L -5 5 L 0 -5 L 5 5 L 8 30" stroke={isGlowing ? "#fff" : "#525252"} strokeWidth={isGlowing ? 2 : 1} fill="none" />
+            
+            {/* Base Terminals */}
             <circle cx="-30" cy="30" r="6" fill="#000" stroke="#333" />
             <circle cx="30" cy="30" r="6" fill="#000" stroke="#333" />
+            
+            {/* Visual Voltage Readout (Optional, kept subtle) */}
+            {isGlowing && (
+                <text x="0" y="-35" textAnchor="middle" fontSize="8" fill="rgba(255,255,255,0.5)" fontFamily="monospace">
+                    {v.toFixed(1)}V
+                </text>
+            )}
         </g>
     );
 };
@@ -311,12 +348,12 @@ const RheostatSVG = ({ value, max }: { value: number, max: number }) => {
              <rect x="-40" y="5" width="80" height="40" rx="2" fill="#334155" stroke="#1e293b" />
              {Array.from({length: 12}).map((_, i) => <path key={i} d={`M ${-35 + i*6} 5 V 45`} stroke="#64748b" strokeWidth="1" />)}
              <line x1="-40" y1="-30" x2="40" y2="-30" stroke="#94a3b8" strokeWidth="4" strokeLinecap="round" />
-             <g transform={`translate(${pos - 40}, 0)`} className="transition-transform duration-75">
+             <g transform={`translate(${pos - 40}, 0)`} className="transition-transform duration-75 ease-out">
                  <path d="M 0 -30 L 0 15" stroke="#ef4444" strokeWidth="3" />
                  <circle cx="0" cy="-30" r="4" fill="#ef4444" />
                  <path d="M -4 15 L 4 15 L 0 25 Z" fill="#ef4444" />
              </g>
-             <text x="0" y="60" textAnchor="middle" fontSize="10" fontWeight="bold" fill="#fff" style={{textShadow: '0 1px 2px black'}}>{value}Ω</text>
+             <text x="0" y="60" textAnchor="middle" fontSize="10" fontWeight="bold" fill="#fff" style={{textShadow: '0 1px 2px black'}}>{value.toFixed(1)}Ω</text>
         </g>
     );
 };
@@ -366,7 +403,43 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
     const workbenchRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-    // --- MNA (MODIFIED NODAL ANALYSIS) SOLVER WITH MULTI-ISLAND SUPPORT ---
+    // --- BATTERY DRAIN SIMULATION ---
+    useEffect(() => {
+        const drainInterval = setInterval(() => {
+            setComponents(prev => {
+                let hasChanges = false;
+                const next = prev.map(c => {
+                    if ((c.type === 'cell' || c.type === 'cell_holder') && c.properties.charge !== undefined) {
+                        const current = c.properties.currentValue || 0;
+                        // STRICT DRAIN RULE: Only drain if significant current (>1mA) is flowing
+                        // This prevents drain when switch is open (current ~ 0)
+                        if (current > 0.001) { 
+                            // Drain rate logic: Higher current = faster drain
+                            const drainAmount = current * 0.0008; // Tuned for realistic-feeling drain speed
+                            const newCharge = Math.max(0, c.properties.charge - drainAmount);
+                            
+                            if (newCharge !== c.properties.charge) {
+                                hasChanges = true;
+                                return {
+                                    ...c,
+                                    properties: {
+                                        ...c.properties,
+                                        charge: newCharge
+                                    }
+                                };
+                            }
+                        }
+                    }
+                    return c;
+                });
+                return hasChanges ? next : prev;
+            });
+        }, 500); // Check every 500ms
+
+        return () => clearInterval(drainInterval);
+    }, []);
+
+    // --- MNA SOLVER WITH ISLAND DETECTION ---
     useEffect(() => {
         // 1. Identify Nodes using Union-Find
         const allTerminals: string[] = [];
@@ -392,7 +465,6 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
         if (n < 2) return; 
 
         // 2. Identify Disjoint Islands (Separate Circuits)
-        // Group node indices that are connected by components
         const islandParent = new Array(n).fill(0).map((_, i) => i);
         const findIsland = (i: number): number => {
             if (islandParent[i] === i) return i;
@@ -405,10 +477,7 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
         };
 
         components.forEach(c => {
-            // Treat high resistance meters as open for island connectivity to prevent them bridging separate circuits erroneously during setup
-            // However, for voltage measurement they need to be part of the island. 
-            // Better approach: include everything in connectivity check.
-            
+            // Include components in connectivity graph (except open switches to break islands)
             if (c.type === 'switch' && c.properties.isOpen) return;
 
             const terms = COMPONENT_DEFS[c.type].terminals;
@@ -448,7 +517,7 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
                 const negIdx = nodeMap.get(negId)!;
                 fixedPotentials.set(negIdx, 0);
             } else {
-                // Passive island (no batteries). Fix one arbitrary node to 0V to make matrix solvable.
+                // Passive island (no batteries). Fix one arbitrary node to 0V.
                 fixedPotentials.set(islandNodes[0], 0);
             }
         });
@@ -466,7 +535,13 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
                 
                 if (posNode === undefined || negNode === undefined) return;
 
-                const voltage = bat.type === 'cell' ? (bat.properties.cellCount || 2) * 1.5 : 1.5;
+                // REALISTIC VOLTAGE Calculation
+                // Voltage attenuated by charge level (e.g. 1.5V * 0.5 charge = 0.75V)
+                const nominalVoltage = bat.type === 'cell' ? (bat.properties.cellCount || 2) * 1.5 : 1.5;
+                const chargeFactor = bat.properties.charge !== undefined ? bat.properties.charge : 1.0;
+                
+                // If dead (charge <= 0.01), voltage effectively 0
+                const voltage = chargeFactor > 0.01 ? nominalVoltage * chargeFactor : 0;
 
                 if (fixedPotentials.has(negNode) && !fixedPotentials.has(posNode)) {
                     fixedPotentials.set(posNode, fixedPotentials.get(negNode)! + voltage);
@@ -478,7 +553,7 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
             });
         }
 
-        // 5. Build Linear Equations System (Conductance Matrix) for Unknown Nodes
+        // 5. Build Linear Equations System (Conductance Matrix)
         const unknownNodes = nodesList.map((_, i) => i).filter(i => !fixedPotentials.has(i));
         const uCount = unknownNodes.length;
         
@@ -559,10 +634,11 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
             
             // Check if component is fully connected (both terminals mapped to a solved potential)
             if (v1 === undefined || v2 === undefined) {
+                 // Component not connected to a grounded circuit (floating)
                  return { ...c, properties: { ...c.properties, currentValue: 0, isGlowing: false } };
             }
 
-            const voltageDrop = v1 - v2;
+            const voltageDrop = Math.abs(v1 - v2);
             
             let R = c.properties.resistance || 1;
             if (c.type === 'switch') R = c.properties.isOpen ? 1e9 : 0.001;
@@ -575,13 +651,18 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
             const props = { ...c.properties };
             
             if (c.type === 'voltmeter') {
-                props.currentValue = voltageDrop;
+                props.currentValue = v1 - v2; // Can be negative for voltmeter direction
             } else if (c.type === 'ammeter') {
-                props.currentValue = current; 
+                props.currentValue = (v1 - v2) / R; // Can be negative
             } else if (c.type === 'bulb') {
                 props.currentValue = absCurrent;
-                props.isGlowing = absCurrent > 0.02; // Threshold
-                props.brightness = Math.min(1.5, absCurrent / 0.3); // Rated 0.3A
+                props.voltageDrop = voltageDrop; // Store for color calculation
+                // Simplified Glow Logic: Visible if > 1V
+                props.isGlowing = voltageDrop > 0.5;
+                // Brightness scaled: 6V = 1.0 (Full), >6V = Over bright
+                props.brightness = Math.min(2.0, voltageDrop / 6);
+            } else if (c.type === 'cell' || c.type === 'cell_holder') {
+                props.currentValue = absCurrent; // Track current for drain logic
             } else {
                 props.currentValue = absCurrent;
             }
@@ -597,13 +678,11 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
             const v1 = finalPotentials.get(n1);
             const v2 = finalPotentials.get(n2);
 
-            // Animate wire if it's part of a live circuit (potential exists relative to ground)
-            // Simplified check: is there potential at either end?
-            // Better: Is there flow? Hard to know wire flow without mesh analysis, so we guess based on potential.
-            return { ...w, current: (v1 !== undefined && v1 > 0) || (v2 !== undefined && v2 > 0) ? 0.1 : 0 }; 
+            // Animate wire if connected to potential
+            return { ...w, current: (v1 !== undefined && Math.abs(v1) > 0.01) || (v2 !== undefined && Math.abs(v2) > 0.01) ? 0.1 : 0 }; 
         }));
 
-    }, [components.map(c => `${c.x},${c.y},${c.properties.isOpen},${c.properties.resistance},${c.rotation}`).join('|'), wires.length]);
+    }, [components.map(c => `${c.x},${c.y},${c.properties.isOpen},${c.properties.resistance},${c.rotation},${c.properties.charge}`).join('|'), wires.length]);
 
 
     // --- UI INTERACTIONS ---
@@ -627,11 +706,11 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
                 maxResistance: type === 'rheostat' ? 20 : 0,
                 isOpen: type === 'switch' ? true : undefined,
                 cellCount: (type === 'cell_holder' || type === 'cell') ? 2 : undefined,
+                charge: (type === 'cell' || type === 'cell_holder') ? 1.0 : undefined, // Initialize full charge
             }
         };
         setComponents([...components, newComp]);
         setSelectedId(newComp.id);
-        // Automatically open sidebar on spawn if user wants, but request says hide by default
     };
 
     const handleMouseDown = (e: React.MouseEvent, id: string) => {
@@ -668,8 +747,6 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
 
     const handleTerminalClick = (e: React.MouseEvent, compId: string, terminalId: string) => {
         e.stopPropagation();
-        
-        // Remove existingWireIndex check to allow parallel connections (junctions)
         
         if (drawingStart) {
             if (drawingStart.compId !== compId || drawingStart.termId !== terminalId) {
@@ -934,7 +1011,7 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
                                     <svg width="100%" height="100%" viewBox={`-${COMPONENT_DEFS[comp.type].width/2} -${COMPONENT_DEFS[comp.type].height/2} ${COMPONENT_DEFS[comp.type].width} ${COMPONENT_DEFS[comp.type].height}`} style={{overflow: 'visible'}}>
                                         {comp.type === 'cell' && <CellHolderSVG count={comp.properties.cellCount || 2} mode="series" />}
                                         {comp.type === 'cell_holder' && <CellHolderSVG count={comp.properties.cellCount || 2} mode="parallel" />}
-                                        {comp.type === 'bulb' && <BulbSVG isGlowing={comp.properties.isGlowing} brightness={comp.properties.brightness} />}
+                                        {comp.type === 'bulb' && <BulbSVG isGlowing={comp.properties.isGlowing} brightness={comp.properties.brightness} voltage={comp.properties.voltageDrop} />}
                                         {comp.type === 'switch' && <SwitchSVG isOpen={comp.properties.isOpen} />}
                                         {comp.type === 'resistor' && <ResistorSVG value={comp.properties.resistance || 0} />}
                                         {comp.type === 'rheostat' && <RheostatSVG value={comp.properties.resistance || 0} max={comp.properties.maxResistance || 20} />}
@@ -948,6 +1025,7 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
                                     type="range" 
                                     min="0" max={comp.properties.maxResistance} 
                                     value={comp.properties.resistance} 
+                                    step="0.5"
                                     onClick={(e) => e.stopPropagation()}
                                     onChange={(e) => updateRheostat(comp.id, Number(e.target.value))}
                                     onMouseDown={(e) => e.stopPropagation()} 

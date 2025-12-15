@@ -83,8 +83,12 @@ const AdminClassManagement: React.FC<AdminClassManagementProps> = ({ allUsers })
                             <h3 className="text-sm font-bold text-indigo-300 uppercase tracking-wider mb-4">Class Teacher</h3>
                             {selectedClassData.teacher ? (
                                 <div className="flex items-center gap-4">
-                                    <div className="w-16 h-16 rounded-full bg-indigo-500 flex items-center justify-center text-2xl font-bold text-white shadow-lg">
-                                        {selectedClassData.teacher.name.charAt(0)}
+                                    <div className="w-16 h-16 rounded-full bg-indigo-500 flex items-center justify-center text-2xl font-bold text-white shadow-lg overflow-hidden border-2 border-indigo-400/50">
+                                         {selectedClassData.teacher.photoURL ? (
+                                            <img src={selectedClassData.teacher.photoURL} alt={selectedClassData.teacher.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                            selectedClassData.teacher.name.charAt(0)
+                                        )}
                                     </div>
                                     <div>
                                         <p className="text-lg font-bold text-white">{selectedClassData.teacher.name}</p>
@@ -135,8 +139,12 @@ const AdminClassManagement: React.FC<AdminClassManagementProps> = ({ allUsers })
                                             selectedClassData.students.map(student => (
                                                 <tr key={student.uid} className="hover:bg-slate-800/50 transition-colors">
                                                     <td className="px-4 py-3 font-medium text-white flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
-                                                            {student.name.charAt(0)}
+                                                        <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300 overflow-hidden border border-slate-600">
+                                                             {student.photoURL ? (
+                                                                <img src={student.photoURL} alt={student.name} className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                student.name.charAt(0)
+                                                            )}
                                                         </div>
                                                         {student.name}
                                                     </td>
@@ -202,7 +210,13 @@ const AdminClassManagement: React.FC<AdminClassManagementProps> = ({ allUsers })
                                     <p className="text-xs text-slate-500 uppercase font-bold mb-1">Class Teacher</p>
                                     {stat.classTeacher ? (
                                         <div className="flex items-center gap-2 text-blue-300">
-                                            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                                            <div className="w-5 h-5 rounded-full overflow-hidden bg-slate-700 flex-shrink-0 border border-slate-600">
+                                                {stat.classTeacher.photoURL ? (
+                                                    <img src={stat.classTeacher.photoURL} alt={stat.classTeacher.name} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-white">{stat.classTeacher.name.charAt(0)}</div>
+                                                )}
+                                            </div>
                                             <span className="font-medium truncate">{stat.classTeacher.name}</span>
                                         </div>
                                     ) : (
