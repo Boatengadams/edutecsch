@@ -1,24 +1,22 @@
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { LabLevel, UserProfile, LabEquipment } from '../../types';
 import { useToast } from '../common/Toast';
-import Button from '../common/Button';
 
 interface ChemistryLabProps {
     level: LabLevel;
     userProfile: UserProfile;
 }
 
-type ContainerType = 'test_tube' | 'beaker' | 'conical_flask' | 'measuring_cylinder' | 'burette' | 'reagent_bottle' | 'pipette' | 'retort_stand';
+type ContainerType = 'test_tube' | 'beaker' | 'conical_flask' | 'measuring_cylinder' | 'burette' | 'reagent_bottle' | 'pipette' | 'retort_stand' | 'white_tile';
 
 interface Chemical {
     id: string;
     name: string;
-    concentration: number; // Molarity
-    volume: number; // mL
-    color: string; // Hex
+    concentration: number;
+    volume: number;
+    color: string;
     type: 'acid' | 'base' | 'salt' | 'indicator' | 'oxidizer' | 'reducer' | 'solvent';
-    formula?: string;
 }
 
 interface LabContainer {
@@ -30,69 +28,57 @@ interface LabContainer {
     contents: Chemical[]; 
     temperature: number;
     precipitate?: { color: string; name: string; amount: number }; 
+    
+    // Physics State
     x: number;
     y: number;
-    // State for specific tools
-    buretteOpen?: boolean;
-    pipetteState?: 'empty' | 'full'; 
+    rotation: number; // Current visual rotation
+    targetRotation: number; // Where it wants to rotate to
+    
+    // Interaction State
     isHeld?: boolean;
+    isSnapping?: boolean; // Is it magnetically snapped to another container?
+    snapTargetId?: string | null; // ID of the parent (e.g., Stand for Burette, Tile for Flask)
     zIndex?: number;
-    // For mounted items
-    mountedOn?: string; // ID of the stand
+    
+    // Tool Specific
+    buretteOpen?: boolean;
 }
-
-// State for the pouring modal
-interface PourModalState {
-    isOpen: boolean;
-    sourceId: string;
-    targetId: string;
-    maxVolume: number;
-}
-
-// State for the active pouring animation
-interface ActivePourState {
-    isActive: boolean;
-    sourceId: string;
-    targetId: string;
-    totalAmountToPour: number;
-    pouredSoFar: number;
-}
-
-// --- CONFIGURATION ---
 
 const STOCK_CHEMICALS: LabEquipment[] = [
-    { id: 'hcl', name: 'Hydrochloric Acid', type: 'chemical', icon: '🧪', description: '0.1M HCl (Standard)', properties: { color: '#ffffff05', volume: 0.1 } },
-    { id: 'naoh', name: 'Sodium Hydroxide', type: 'chemical', icon: '🧴', description: '0.1M NaOH (Standard)', properties: { color: '#ffffff05', volume: 0.1 } },
-    { id: 'phenolphthalein', name: 'Phenolphthalein', type: 'chemical', icon: '⚪', description: 'Indicator (pH 8.2-10)', properties: { color: '#ffffff00', volume: 0 } },
-    { id: 'methyl_orange', name: 'Methyl Orange', type: 'chemical', icon: '🟠', description: 'Indicator (pH 3.1-4.4)', properties: { color: '#fb923c', volume: 0 } },
+    { id: 'hcl', name: 'Hydrochloric Acid', type: 'chemical', icon: '🧪', description: '0.1M HCl', properties: { color: '#ffffff05', volume: 0.1 } },
+    { id: 'naoh', name: 'Sodium Hydroxide', type: 'chemical', icon: '🧴', description: '0.1M NaOH', properties: { color: '#ffffff05', volume: 0.1 } },
+    { id: 'phenolphthalein', name: 'Phenolphthalein', type: 'chemical', icon: '⚪', description: 'Indicator', properties: { color: '#ffffff00', volume: 0 } },
+    { id: 'methyl_orange', name: 'Methyl Orange', type: 'chemical', icon: '🟠', description: 'Indicator', properties: { color: '#fb923c', volume: 0 } },
     { id: 'cuso4', name: 'Copper(II) Sulfate', type: 'chemical', icon: '🔷', description: '0.5M CuSO4', properties: { color: '#0ea5e9', volume: 0.5 } },
     { id: 'nh3', name: 'Ammonia', type: 'chemical', icon: '💨', description: '2.0M NH3', properties: { color: '#ffffff05', volume: 2.0 } },
-    { id: 'agno3', name: 'Silver Nitrate', type: 'chemical', icon: '⚪', description: '0.1M AgNO3', properties: { color: '#ffffff05', volume: 0.1 } },
     { id: 'ki', name: 'Potassium Iodide', type: 'chemical', icon: '🧂', description: '0.5M KI', properties: { color: '#ffffff05', volume: 0.5 } },
     { id: 'pbno3', name: 'Lead(II) Nitrate', type: 'chemical', icon: '⚪', description: '0.5M Pb(NO3)2', properties: { color: '#ffffff05', volume: 0.5 } },
-    { id: 'kmno4', name: 'Potassium Permanganate', type: 'chemical', icon: '🟣', description: '0.02M KMnO4', properties: { color: '#7e22ce', volume: 0.02 } },
 ];
 
 const GLASSWARE: { type: ContainerType; name: string; capacity: number; icon: string }[] = [
     { type: 'retort_stand', name: 'Retort Stand', capacity: 0, icon: '🏗️' },
     { type: 'burette', name: 'Burette (50ml)', capacity: 50, icon: '📏' },
+    { type: 'white_tile', name: 'White Tile', capacity: 0, icon: '⬜' },
     { type: 'conical_flask', name: 'Conical Flask', capacity: 250, icon: '🏺' },
     { type: 'beaker', name: 'Beaker (250ml)', capacity: 250, icon: '🥃' },
-    { type: 'pipette', name: 'Pipette (25ml)', capacity: 25, icon: '💉' },
     { type: 'test_tube', name: 'Test Tube', capacity: 20, icon: '🧪' },
     { type: 'measuring_cylinder', name: 'Cylinder', capacity: 100, icon: '📐' },
+    { type: 'reagent_bottle', name: 'Reagent Bottle', capacity: 500, icon: '🍾' },
 ];
 
-// --- HELPER FUNCTIONS ---
+// --- PHYSICS HELPERS ---
+
+const LERP_FACTOR = 0.15;
+const FLOW_MULTIPLIER = 1.5; 
+const BURETTE_FLOW_RATE = 0.5; // Slower, precise flow
+
+const lerp = (start: number, end: number, factor: number) => start + (end - start) * factor;
 
 const blendColors = (contents: Chemical[]): string => {
-    if (contents.length === 0) return 'rgba(255,255,255,0.05)'; // Almost clear glass
+    if (contents.length === 0) return 'rgba(255,255,255,0.05)';
     
-    const isMostlyClear = contents.every(c => c.color.endsWith('05') || c.color.endsWith('00'));
-    if (isMostlyClear && contents.length > 0) return 'rgba(200, 230, 255, 0.2)'; 
-
-    let r = 0, g = 0, b = 0, totalVol = 0;
-    let alpha = 0;
+    let r = 0, g = 0, b = 0, totalVol = 0, alpha = 0;
 
     contents.forEach(c => {
         let hex = c.color;
@@ -124,640 +110,355 @@ const blendColors = (contents: Chemical[]): string => {
     });
 
     if (totalVol === 0) return contents[0].color;
-
-    r = Math.round(r / totalVol);
-    g = Math.round(g / totalVol);
-    b = Math.round(b / totalVol);
-    alpha = alpha / totalVol;
-
-    if (alpha < 0.2 && !isMostlyClear) alpha = 0.4;
-    
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    return `rgba(${Math.round(r / totalVol)}, ${Math.round(g / totalVol)}, ${Math.round(b / totalVol)}, ${Math.min(0.9, Math.max(0.1, alpha / totalVol))})`;
 };
 
 const ChemistryLab: React.FC<ChemistryLabProps> = () => {
     const { showToast } = useToast();
     const [containers, setContainers] = useState<LabContainer[]>([]);
-    const [heldContainer, setHeldContainer] = useState<LabContainer | null>(null);
-    const [isSidebarOpen, setSidebarOpen] = useState(false);
-    const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-    
-    const [snapTarget, setSnapTarget] = useState<LabContainer | 'drain' | null>(null);
-    const [isSnappingToStand, setIsSnappingToStand] = useState(false); // New state for magnetic snap
-
+    const [heldId, setHeldId] = useState<string | null>(null);
     const [isPouring, setIsPouring] = useState(false);
-    const [buretteFlow, setBuretteFlow] = useState<number>(0); 
-
-    const [pourModal, setPourModal] = useState<PourModalState | null>(null);
-    const [pourAmountInput, setPourAmountInput] = useState<number>(0);
-    const [activePour, setActivePour] = useState<ActivePourState | null>(null);
-
+    const [isSidebarOpen, setSidebarOpen] = useState(false);
+    
+    const mousePos = useRef({ x: 0, y: 0 });
+    const requestRef = useRef<number | null>(null);
     const workbenchRef = useRef<HTMLDivElement>(null);
-    const pourIntervalRef = useRef<number | null>(null);
-    const lastMousePos = useRef<{x: number, y: number} | null>(null);
 
-    // --- REACTION ENGINE ---
-    const processReaction = (container: LabContainer): LabContainer => {
-        const newContainer = { ...container };
-        const chems = newContainer.contents;
-        const totalVol = newContainer.currentVolume;
-        if (totalVol <= 0) return newContainer;
+    // --- PHYSICS LOOP ---
+    const updatePhysics = () => {
+        setContainers(prevContainers => {
+            const held = prevContainers.find(c => c.id === heldId);
+            const targetMouseX = mousePos.current.x;
+            const targetMouseY = mousePos.current.y;
 
-        const getChem = (idParts: string) => chems.find(c => c.id.includes(idParts));
-        
-        // TITRATION LOGIC
-        const acid = chems.find(c => c.type === 'acid');
-        const base = chems.find(c => c.type === 'base');
-        const indicator = chems.find(c => c.type === 'indicator');
+            // 1. Calculate Movements and Snaps
+            const movingContainers = prevContainers.map(container => {
+                let newX = container.x;
+                let newY = container.y;
+                let newRotation = container.rotation;
+                let newTargetRotation = 0;
+                let snapTargetId = null;
 
-        if (acid && base) {
-            const acidMoles = acid.concentration * (acid.volume / 1000);
-            const baseMoles = base.concentration * (base.volume / 1000);
-            const netMoles = baseMoles - acidMoles; 
+                if (container.id === heldId) {
+                    // --- SNAP LOGIC ---
+                    let closestDist = 100;
+                    let closestTarget: LabContainer | null = null;
 
-            if (indicator) {
-                if (indicator.id === 'phenolphthalein') {
-                    if (netMoles > 0) { // Basic
-                        const excessConc = netMoles / (totalVol / 1000);
-                        const intensity = Math.min(1, excessConc * 3000); 
-                        indicator.color = `rgba(236, 72, 153, ${intensity})`; // Pink gradient
-                    } else { // Acidic or Neutral
-                        indicator.color = '#ffffff00'; 
+                    prevContainers.forEach(other => {
+                        if (other.id !== container.id) {
+                            const dist = Math.hypot(other.x - container.x, other.y - container.y);
+                            
+                            // A. Burette snaps to Retort Stand
+                            if (container.type === 'burette' && other.type === 'retort_stand') {
+                                // Specific check for stand height/position
+                                if (dist < 100 && container.y < other.y) {
+                                     closestTarget = other;
+                                }
+                            }
+                            // B. Flask/Beaker snaps to White Tile
+                            else if ((container.type === 'conical_flask' || container.type === 'beaker') && other.type === 'white_tile') {
+                                if (dist < 60) {
+                                    closestTarget = other;
+                                }
+                            }
+                            // C. Standard Pouring Snap (Flask to Beaker etc)
+                            else if (container.type !== 'burette' && container.type !== 'retort_stand' && container.type !== 'white_tile' && 
+                                     other.type !== 'burette' && other.type !== 'white_tile' && other.type !== 'retort_stand') {
+                                if (dist < closestDist && container.y < other.y) {
+                                    closestDist = dist;
+                                    closestTarget = other;
+                                }
+                            }
+                        }
+                    });
+
+                    if (closestTarget) {
+                        snapTargetId = (closestTarget as LabContainer).id;
+                        
+                        if (container.type === 'burette' && closestTarget.type === 'retort_stand') {
+                            // Snap Burette to Clamp Position
+                            const snapX = closestTarget.x + 20; // Offset from rod
+                            const snapY = closestTarget.y - 180; // High up
+                            newX = lerp(container.x, snapX, 0.3);
+                            newY = lerp(container.y, snapY, 0.3);
+                            newTargetRotation = 0; // Lock vertical
+                        } else if ((container.type === 'conical_flask' || container.type === 'beaker') && closestTarget.type === 'white_tile') {
+                            // Snap Flask to Tile Center
+                            const snapX = closestTarget.x;
+                            const snapY = closestTarget.y - 10; // Sit on top
+                            newX = lerp(container.x, snapX, 0.3);
+                            newY = lerp(container.y, snapY, 0.3);
+                            newTargetRotation = 0; // Upright
+                        } else {
+                            // Standard Pouring Snap
+                            const snapX = (closestTarget as LabContainer).x - 60; 
+                            const snapY = (closestTarget as LabContainer).y - 80;
+                            newX = lerp(container.x, snapX, 0.2);
+                            newY = lerp(container.y, snapY, 0.2);
+                            
+                            if (isPouring) newTargetRotation = -80;
+                            else newTargetRotation = -45;
+                        }
+
+                    } else {
+                        // Free Drag
+                        newX = lerp(container.x, targetMouseX, LERP_FACTOR);
+                        newY = lerp(container.y, targetMouseY, LERP_FACTOR);
+                        
+                        // Vertical dragging for burette/stand, slight tilt for others
+                        if (container.type !== 'burette' && container.type !== 'retort_stand' && container.type !== 'white_tile') {
+                            newTargetRotation = (newX - container.x) * 2; 
+                        } else {
+                            newTargetRotation = 0;
+                        }
                     }
-                } else if (indicator.id === 'methyl_orange') {
-                     if (netMoles > 0) indicator.color = '#eab308'; // Yellow (Base)
-                     else indicator.color = '#ef4444'; // Red (Acid)
+                } else {
+                    // Not Held
+                    // If snapped to a stand or tile, maintain position relative to parent?
+                    // For this simple sim, we just stop moving.
+                    newTargetRotation = 0;
                 }
-            }
-        } else if (base && indicator?.id === 'phenolphthalein') {
-             indicator.color = '#ec4899'; // Deep pink for base only
-        }
 
-        // PRECIPITATION LOGIC
-        const pb = getChem('pbno3');
-        const ki = getChem('ki');
-        if (pb && ki && !newContainer.precipitate) {
-            newContainer.precipitate = { name: 'Lead(II) Iodide', color: '#facc15', amount: 1 };
-        }
+                newRotation = lerp(container.rotation, newTargetRotation, 0.1);
+
+                return {
+                    ...container,
+                    x: newX,
+                    y: newY,
+                    rotation: newRotation,
+                    isSnapping: !!snapTargetId,
+                    snapTargetId
+                };
+            });
+
+            // 2. Liquid Transfer Logic
+            // Need to handle both Pouring (Rotation) and Burette Drip (Valve)
+            
+            // Map to allow updates
+            const containerMap = new Map<string, LabContainer>();
+            movingContainers.forEach(c => containerMap.set(c.id, c));
+
+            movingContainers.forEach(source => {
+                // A. Standard Pouring
+                if (source.id === heldId && isPouring && source.snapTargetId && source.currentVolume > 0 && source.type !== 'burette') {
+                    const target = containerMap.get(source.snapTargetId);
+                    if (target && target.type !== 'retort_stand' && target.type !== 'white_tile') {
+                        const flowRate = (Math.abs(source.rotation) - 40) * 0.1 * FLOW_MULTIPLIER;
+                        if (flowRate > 0) {
+                            transferLiquid(source, target, flowRate, containerMap);
+                        }
+                    }
+                }
+
+                // B. Burette Drip (Depends on Open State, not Tilt)
+                if (source.type === 'burette' && source.buretteOpen && source.currentVolume > 0) {
+                    // Find target below
+                    const target = movingContainers.find(c => 
+                        c.id !== source.id && 
+                        c.type !== 'retort_stand' && 
+                        c.type !== 'white_tile' &&
+                        Math.abs(c.x - source.x) < 30 && // Horizontally aligned
+                        c.y > source.y && // Below
+                        c.y < source.y + 400 // Within reasonable distance
+                    );
+                    
+                    if (target) {
+                        const tContainer = containerMap.get(target.id);
+                        if (tContainer) transferLiquid(source, tContainer, BURETTE_FLOW_RATE, containerMap);
+                    }
+                }
+            });
+
+            return Array.from(containerMap.values());
+        });
+
+        requestRef.current = requestAnimationFrame(updatePhysics);
+    };
+    
+    const transferLiquid = (source: LabContainer, target: LabContainer, amount: number, map: Map<string, LabContainer>) => {
+        const actualTransfer = Math.min(amount, source.currentVolume, target.capacity - target.currentVolume);
+        if (actualTransfer <= 0) return;
+
+        // Source Update
+        const sRatio = actualTransfer / source.currentVolume;
+        const s = map.get(source.id)!;
+        s.currentVolume -= actualTransfer;
+        s.contents = s.contents.map(c => ({...c, volume: c.volume * (1-sRatio)})).filter(c => c.volume > 0.001);
         
-        const cu = getChem('cuso4');
-        const nh3 = getChem('nh3');
-        if (cu && nh3) {
-             if (nh3.volume > cu.volume * 2) {
-                newContainer.precipitate = undefined;
-                cu.color = '#1e3a8a'; 
-            } else {
-                newContainer.precipitate = { name: 'Copper(II) Hydroxide', color: '#93c5fd', amount: 1 };
-            }
-        }
+        // Target Update
+        const t = map.get(target.id)!;
+        const tRatio = actualTransfer / (s.currentVolume + actualTransfer); // Approx for mixing calculation
+        
+        source.contents.forEach(sc => {
+            const transferVol = sc.volume * sRatio; // This isn't perfect math for concentration but visually works
+            // Better: transferVol is proportional to total volume moved
+            // Let's just create new chem object
+            const movedChem = { ...sc, volume: (sc.volume / (source.currentVolume + actualTransfer)) * actualTransfer };
+            
+            const existing = t.contents.find(tc => tc.id === sc.id);
+            if (existing) existing.volume += movedChem.volume;
+            else t.contents.push(movedChem);
+        });
 
-        return newContainer;
+        t.currentVolume += actualTransfer;
+        
+        // React immediately
+        const reacted = processReaction(t);
+        map.set(target.id, reacted);
+        map.set(source.id, s);
     };
 
-    // --- INTERACTION HANDLERS ---
+    // Reacting Logic
+    const processReaction = (container: LabContainer): LabContainer => {
+        const c = { ...container };
+        const chems = c.contents;
+        
+        // Titration Logic: Acid + Base + Indicator
+        const acid = chems.find(x => x.type === 'acid');
+        const base = chems.find(x => x.type === 'base');
+        const ind = chems.find(x => x.type === 'indicator');
+        
+        if (acid && base && ind) {
+             const netMoles = (base.concentration * base.volume) - (acid.concentration * acid.volume);
+             // Sensitivity threshold for endpoint
+             if (Math.abs(netMoles) < 0.05) {
+                 ind.color = '#ffc0cb'; // Faint pink (End point)
+             } else if (ind.name === 'Phenolphthalein') {
+                 ind.color = netMoles > 0 ? '#ec4899' : '#ffffff00'; // Pink if base excess
+             } else if (ind.name === 'Methyl Orange') {
+                 ind.color = netMoles > 0 ? '#eab308' : '#ef4444'; // Yellow base, Red acid
+             }
+        }
+        
+        // Precipitation
+        const pb = chems.find(x => x.id === 'pbno3');
+        const ki = chems.find(x => x.id === 'ki');
+        if (pb && ki) {
+            c.precipitate = { name: 'Lead(II) Iodide', color: '#facc15', amount: 1 };
+        }
 
+        return c;
+    };
+
+    useEffect(() => {
+        requestRef.current = requestAnimationFrame(updatePhysics);
+        return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
+    }, [heldId, isPouring]); 
+
+    // --- EVENT HANDLERS ---
+
+    const handleMouseMove = (e: React.MouseEvent) => {
+        const rect = workbenchRef.current?.getBoundingClientRect();
+        if (rect) {
+            mousePos.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        }
+    };
+
+    const handleMouseDown = (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        const container = containers.find(c => c.id === id);
+        
+        // Special Case: Clicking Burette Tap (don't drag)
+        // We handle this inside the component usually, but here for global logic:
+        // Actually passed via callback on Glassware component now.
+        
+        if (container && container.isSnapping && heldId === id && container.type !== 'burette') {
+             setIsPouring(true);
+        } else {
+             setHeldId(id);
+             setContainers(prev => prev.map(c => ({...c, zIndex: c.id === id ? 100 : 10})));
+        }
+    };
+
+    const handleMouseUp = () => {
+        setIsPouring(false);
+        setHeldId(null);
+    };
+    
+    const handleTapClick = (id: string) => {
+        setContainers(prev => prev.map(c => 
+            c.id === id ? { ...c, buretteOpen: !c.buretteOpen } : c
+        ));
+    };
+    
     const spawnGlassware = (type: ContainerType) => {
         const template = GLASSWARE.find(g => g.type === type);
         if (!template) return;
         
-        const scrollX = workbenchRef.current?.scrollLeft || 0;
-        const scrollY = workbenchRef.current?.scrollTop || 0;
+        const rect = workbenchRef.current?.getBoundingClientRect();
+        const centerX = rect ? rect.width / 2 : 300;
+        const centerY = rect ? rect.height / 2 : 300;
         
-        // Custom spawn Y for stand
-        const y = (type === 'retort_stand' ? 450 : type === 'burette' ? 200 : 350) + scrollY; 
-        const x = 300 + scrollX + (containers.length * 40) % 300;
+        // Auto-fill burette for convenience
+        let initialContents: Chemical[] = [];
+        let initialVol = 0;
+        if (type === 'burette') {
+            initialContents = [{ ...STOCK_CHEMICALS[1].properties, id: 'naoh', name: 'Sodium Hydroxide', type: 'base', concentration: 0.1, volume: 50, color: '#ffffff05' } as Chemical];
+            initialVol = 50;
+        }
 
-        const newContainer: LabContainer = {
+        const newC: LabContainer = {
             id: Math.random().toString(36).substr(2, 9),
             type,
             name: template.name,
             capacity: template.capacity,
-            currentVolume: 0,
-            contents: [],
+            currentVolume: initialVol,
+            contents: initialContents,
             temperature: 25,
-            x, y,
-            zIndex: type === 'retort_stand' ? 5 : 10,
-            pipetteState: type === 'pipette' ? 'empty' : undefined
+            x: centerX + (Math.random() * 100 - 50),
+            y: centerY + (Math.random() * 100 - 50),
+            rotation: 0,
+            targetRotation: 0,
+            zIndex: 20
         };
-        setContainers(prev => [...prev, newContainer]);
+        setContainers(prev => [...prev, newC]);
     };
 
     const spawnReagent = (chem: LabEquipment) => {
-        const scrollX = workbenchRef.current?.scrollLeft || 0;
-        const scrollY = workbenchRef.current?.scrollTop || 0;
-
-        const newContainer: LabContainer = {
+        const rect = workbenchRef.current?.getBoundingClientRect();
+        const newC: LabContainer = {
             id: 'stock_' + Math.random().toString(36).substr(2, 5),
             type: 'reagent_bottle',
             name: chem.name,
             capacity: 500,
             currentVolume: 500,
-            contents: [{ 
-                id: chem.id, 
-                name: chem.name, 
-                concentration: chem.properties?.volume || 1, 
-                volume: 500,
-                color: chem.properties?.color || '#fff',
-                type: (chem.id === 'hcl' ? 'acid' : chem.id === 'naoh' || chem.id === 'nh3' ? 'base' : chem.id.includes('ph') || chem.id.includes('methyl') ? 'indicator' : 'salt')
-            }],
+            contents: [{ ...chem.properties, id: chem.id, name: chem.name, concentration: chem.properties?.volume || 1, volume: 500, type: 'solvent' } as Chemical], 
             temperature: 25,
-            x: 200 + scrollX, y: 350 + scrollY,
-            zIndex: 10
+            x: 100, y: 300,
+            rotation: 0,
+            targetRotation: 0,
+            zIndex: 20
         };
-        setContainers(prev => [...prev, newContainer]);
-    };
-
-    useEffect(() => {
-        const handleGlobalMouseMove = (e: MouseEvent) => {
-            if (activePour?.isActive) return;
-
-            const rect = workbenchRef.current?.getBoundingClientRect();
-            if (!rect) return;
-            
-            let x = e.clientX - rect.left;
-            let y = e.clientY - rect.top;
-            
-            // Calculate delta
-            const dx = lastMousePos.current ? x - lastMousePos.current.x : 0;
-            const dy = lastMousePos.current ? y - lastMousePos.current.y : 0;
-            lastMousePos.current = { x, y };
-
-            // MAGNETIC SNAP LOGIC
-            let snapped = false;
-            let snapStand: LabContainer | null = null;
-            
-            if (heldContainer && heldContainer.type === 'burette') {
-                const stand = containers.find(c => c.type === 'retort_stand');
-                if (stand) {
-                    const clampX = stand.x + 60;
-                    const clampY = stand.y - 180;
-                    const dist = Math.hypot(x - clampX, y - clampY);
-                    
-                    if (dist < 60) { // 60px magnetic radius
-                        x = clampX;
-                        y = clampY;
-                        snapped = true;
-                        snapStand = stand;
-                    }
-                }
-            }
-            
-            setMousePos({ x, y });
-            setIsSnappingToStand(snapped);
-
-            if (heldContainer) {
-                // MOVE ATTACHED OBJECTS (Logic for Retort Stand carrying Burette)
-                if (heldContainer.type === 'retort_stand' && (dx !== 0 || dy !== 0)) {
-                    setContainers(prev => prev.map(c => {
-                        if (c.mountedOn === heldContainer.id) {
-                            return { ...c, x: c.x + dx, y: c.y + dy };
-                        }
-                        return c;
-                    }));
-                }
-
-                // Pouring/Snap targets
-                // If we are magnetically snapped, we don't look for other targets
-                if (snapped) {
-                    setSnapTarget(snapStand); // Use stand as target for visual feedback
-                    return;
-                }
-
-                let closest: LabContainer | 'drain' | null = null;
-                let minDist = 120; 
-
-                const drainX = rect.width - 60;
-                const drainY = rect.height - 60;
-                const distToDrain = Math.hypot(x - drainX, y - drainY);
-                if (distToDrain < 80) {
-                    closest = 'drain';
-                    minDist = distToDrain;
-                }
-
-                containers.forEach(c => {
-                    if (c.id === heldContainer.id) return;
-                    if (heldContainer.type === 'retort_stand') return; // Cannot pour a stand
-                    if (heldContainer.type === 'reagent_bottle' && c.type === 'reagent_bottle') return;
-                    
-                    // Standard Pouring Snap
-                    const targetX = c.x;
-                    const targetY = c.y - (c.type === 'burette' ? 200 : 120); 
-                    const dist = Math.hypot(x - targetX, y - targetY);
-                    
-                    if (dist < minDist) {
-                        minDist = dist;
-                        closest = c;
-                    }
-                });
-
-                setSnapTarget(closest);
-            }
-        };
-
-        const handleGlobalMouseUp = () => {
-            if (isPouring) stopPouring();
-            // Dont clear lastMousePos here to ensure smooth subsequent drags, 
-            // but effectively the drag ends in handleWorkbenchClick
-        };
-        
-        window.addEventListener('mousemove', handleGlobalMouseMove);
-        window.addEventListener('mouseup', handleGlobalMouseUp);
-        return () => {
-            window.removeEventListener('mousemove', handleGlobalMouseMove);
-            window.removeEventListener('mouseup', handleGlobalMouseUp);
-        };
-    }, [heldContainer, containers, isPouring, activePour]);
-
-    const handleContainerClick = (e: React.MouseEvent, container: LabContainer) => {
-        e.stopPropagation();
-        if (activePour?.isActive) return;
-        
-        // Reset last mouse pos to prevent jumps
-        const rect = workbenchRef.current?.getBoundingClientRect();
-        if(rect) {
-            lastMousePos.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-        }
-
-        // Pipette interaction
-        if (heldContainer && heldContainer.type === 'pipette') {
-             if (container.id !== heldContainer.id) {
-                 if (heldContainer.pipetteState === 'empty' && container.currentVolume > 0) {
-                     transferLiquid(container, heldContainer, 25);
-                     setHeldContainer({...heldContainer, pipetteState: 'full', currentVolume: 25, contents: [...container.contents]});
-                     showToast("Pipette filled (25ml)", "success");
-                 } else if (heldContainer.pipetteState === 'full') {
-                     transferLiquid(heldContainer, container, 25);
-                     setHeldContainer({...heldContainer, pipetteState: 'empty', currentVolume: 0, contents: []});
-                     showToast("Pipette dispensed", "success");
-                 }
-                 return;
-             }
-        }
-        
-        if (container.type === 'burette') return; // Handled by Double Click for consistency
-        if (container.type === 'retort_stand') {
-             setHeldContainer({...container, isHeld: true});
-             setContainers(prev => prev.filter(c => c.id !== container.id));
-             return;
-        }
-
-        if (heldContainer) return;
-
-        setHeldContainer({...container, isHeld: true, zIndex: 100});
-        setContainers(prev => prev.filter(c => c.id !== container.id));
-        setSnapTarget(null);
-    };
-
-    const handleContainerDoubleClick = (e: React.MouseEvent, targetContainer: LabContainer) => {
-        e.stopPropagation();
-        
-        if (targetContainer.type === 'burette') {
-             if (targetContainer.mountedOn) {
-                 // Double click to DETACH
-                 const newContainerState = { 
-                     ...targetContainer, 
-                     isHeld: true, 
-                     mountedOn: undefined,
-                     zIndex: 100 
-                 };
-                 setHeldContainer(newContainerState);
-                 setContainers(prev => prev.filter(c => c.id !== targetContainer.id));
-                 showToast("Burette detached", "info");
-                 return;
-             } else {
-                 // Double click to PICK UP if not mounted
-                 setHeldContainer({...targetContainer, isHeld: true, zIndex: 100});
-                 setContainers(prev => prev.filter(c => c.id !== targetContainer.id));
-             }
-             return;
-        }
-
-        if (heldContainer && heldContainer.id !== targetContainer.id) {
-            // Normal Pouring Logic
-            if (heldContainer.currentVolume <= 0) {
-                showToast("Your container is empty!", "error");
-                return;
-            }
-            if (targetContainer.currentVolume >= targetContainer.capacity) {
-                showToast("Target container is full!", "error");
-                return;
-            }
-
-            const maxTransfer = Math.min(heldContainer.currentVolume, targetContainer.capacity - targetContainer.currentVolume);
-            setPourAmountInput(Math.min(50, maxTransfer)); 
-            setPourModal({
-                isOpen: true,
-                sourceId: heldContainer.id,
-                targetId: targetContainer.id,
-                maxVolume: maxTransfer
-            });
-        }
-    };
-
-    const handleConfirmPour = () => {
-        if (!pourModal || !heldContainer) return;
-        setPourModal(null);
-        setActivePour({
-            isActive: true,
-            sourceId: pourModal.sourceId,
-            targetId: pourModal.targetId,
-            totalAmountToPour: pourAmountInput,
-            pouredSoFar: 0
-        });
-    };
-
-    // --- ANIMATED POURING ENGINE ---
-    useEffect(() => {
-        if (activePour && activePour.isActive) {
-            const targetContainer = containers.find(c => c.id === activePour.targetId);
-            if (!heldContainer || !targetContainer) {
-                setActivePour(null);
-                return;
-            }
-
-            let animationId: number;
-            const flowRate = 2; 
-
-            const animate = () => {
-                setActivePour(current => {
-                    if (!current) return null;
-                    if (current.pouredSoFar >= current.totalAmountToPour || !heldContainer || heldContainer.currentVolume <= 0) {
-                        return null; 
-                    }
-
-                    const remaining = current.totalAmountToPour - current.pouredSoFar;
-                    const delta = Math.min(flowRate, remaining, heldContainer.currentVolume);
-                    
-                    if (delta <= 0) return null;
-
-                    setContainers(prevConts => {
-                        const tIdx = prevConts.findIndex(c => c.id === current.targetId);
-                        if (tIdx === -1) return prevConts;
-                        const t = prevConts[tIdx];
-
-                        const ratio = delta / heldContainer.currentVolume;
-                        const tContents = [...t.contents];
-                        const transferChems = heldContainer.contents.map(c => ({...c, volume: c.volume * ratio}));
-                        
-                        transferChems.forEach(tc => {
-                            const ex = tContents.find(x => x.id === tc.id);
-                            if(ex) ex.volume += tc.volume; else tContents.push(tc);
-                        });
-
-                        let newT = { ...t, currentVolume: t.currentVolume + delta, contents: tContents };
-                        newT = processReaction(newT);
-
-                        const newConts = [...prevConts];
-                        newConts[tIdx] = newT;
-                        return newConts;
-                    });
-
-                    setHeldContainer(currHeld => {
-                        if (!currHeld) return null;
-                        const newHeldContents = currHeld.contents.map(c => ({
-                            ...c, 
-                            volume: Math.max(0, c.volume - (c.volume * (delta/currHeld.currentVolume)))
-                        })).filter(c => c.volume > 0.001);
-                        
-                        return { 
-                            ...currHeld, 
-                            currentVolume: currHeld.currentVolume - delta, 
-                            contents: newHeldContents 
-                        };
-                    });
-
-                    return {
-                        ...current,
-                        pouredSoFar: current.pouredSoFar + delta
-                    };
-                });
-
-                animationId = requestAnimationFrame(animate);
-            };
-            
-            animationId = requestAnimationFrame(animate);
-            return () => cancelAnimationFrame(animationId);
-        }
-    }, [activePour?.isActive]);
-
-
-    const handleWorkbenchClick = (e: React.MouseEvent) => {
-        if (heldContainer && !activePour?.isActive) {
-            
-            // MAGNETIC MOUNT ON DROP
-            if (isSnappingToStand && heldContainer.type === 'burette') {
-                 const stand = containers.find(c => c.type === 'retort_stand');
-                 if (stand) {
-                     const mountedBurette = {
-                         ...heldContainer,
-                         isHeld: false,
-                         x: stand.x + 60, 
-                         y: stand.y - 180, 
-                         zIndex: 20,
-                         mountedOn: stand.id
-                     };
-                     setContainers(prev => [...prev, mountedBurette]);
-                     setHeldContainer(null);
-                     setIsSnappingToStand(false);
-                     showToast("Burette clamped securely", "success");
-                     return;
-                 }
-            }
-
-            // Normal Drop
-            const rect = workbenchRef.current?.getBoundingClientRect();
-            if (rect) {
-                const scrollX = workbenchRef.current?.scrollLeft || 0;
-                const scrollY = workbenchRef.current?.scrollTop || 0;
-                const x = e.clientX - rect.left + scrollX;
-                const y = e.clientY - rect.top + scrollY;
-                
-                setContainers(prev => [...prev, { ...heldContainer, x, y, isHeld: false, zIndex: heldContainer.type === 'retort_stand' ? 5 : 10 }]);
-                setHeldContainer(null);
-            }
-        }
-    };
-
-    const transferLiquid = (source: LabContainer, target: LabContainer, amount: number) => {
-        const actualPour = Math.min(amount, source.currentVolume, target.capacity - target.currentVolume);
-        if (actualPour <= 0) return { newSource: source, newTarget: target };
-
-        const ratio = actualPour / source.currentVolume;
-        const transferredContents = source.contents.map(c => ({...c, volume: c.volume * ratio}));
-
-        const newTargetContents = [...target.contents];
-        transferredContents.forEach(tc => {
-            const existing = newTargetContents.find(x => x.id === tc.id);
-            if (existing) existing.volume += tc.volume;
-            else newTargetContents.push(tc);
-        });
-
-        const newSourceContents = source.contents.map(c => ({...c, volume: c.volume * (1 - ratio)})).filter(c => c.volume > 0.001);
-
-        let updatedTarget = { ...target, currentVolume: target.currentVolume + actualPour, contents: newTargetContents };
-        updatedTarget = processReaction(updatedTarget);
-
-        const updatedSource = { ...source, currentVolume: source.currentVolume - actualPour, contents: newSourceContents };
-
-        if (source.id === heldContainer?.id) setHeldContainer(updatedSource);
-        else updateContainerState(updatedSource);
-
-        if (target.id === heldContainer?.id) setHeldContainer(updatedTarget);
-        else updateContainerState(updatedTarget);
-
-        return { newSource: updatedSource, newTarget: updatedTarget };
-    };
-
-    const updateContainerState = (updated: LabContainer) => {
-        setContainers(prev => prev.map(c => c.id === updated.id ? updated : c));
-    };
-
-    // Continuous Pouring (Manual Drag)
-    const startPouring = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!heldContainer || !snapTarget || activePour?.isActive) return;
-        setIsPouring(true);
-        
-        const flowRate = heldContainer.type === 'beaker' ? 5 : 2; 
-
-        pourIntervalRef.current = window.setInterval(() => {
-            if (snapTarget === 'drain') {
-                setHeldContainer(curr => {
-                    if(!curr || curr.currentVolume <= 0) { stopPouring(); return curr; }
-                    return {...curr, currentVolume: Math.max(0, curr.currentVolume - flowRate)};
-                });
-            } else {
-                setHeldContainer(currHeld => {
-                    if (!currHeld || currHeld.currentVolume <= 0) { stopPouring(); return currHeld; }
-                    
-                    setContainers(prevConts => {
-                        const tIdx = prevConts.findIndex(c => c.id === (snapTarget as LabContainer).id);
-                        if (tIdx === -1) return prevConts;
-                        const t = prevConts[tIdx];
-                        
-                        const actualPour = Math.min(flowRate, currHeld.currentVolume, t.capacity - t.currentVolume);
-                        if(actualPour <= 0) return prevConts;
-
-                        const ratio = actualPour / currHeld.currentVolume;
-                        const tContents = [...t.contents];
-                        const transferChems = currHeld.contents.map(c => ({...c, volume: c.volume * ratio}));
-                        
-                        transferChems.forEach(tc => {
-                            const ex = tContents.find(x => x.id === tc.id);
-                            if(ex) ex.volume += tc.volume; else tContents.push(tc);
-                        });
-
-                        let newT = { ...t, currentVolume: t.currentVolume + actualPour, contents: tContents };
-                        newT = processReaction(newT);
-
-                        const newConts = [...prevConts];
-                        newConts[tIdx] = newT;
-                        return newConts;
-                    });
-
-                    const newHeldContents = currHeld.contents.map(c => ({...c, volume: Math.max(0, c.volume - (c.volume * (flowRate/currHeld.currentVolume)))})).filter(c=>c.volume>0.001);
-                    return { ...currHeld, currentVolume: currHeld.currentVolume - flowRate, contents: newHeldContents };
-                });
-            }
-        }, 50);
-    };
-
-    const stopPouring = () => {
-        setIsPouring(false);
-        if (pourIntervalRef.current) {
-            clearInterval(pourIntervalRef.current);
-            pourIntervalRef.current = null;
-        }
-    };
-
-    // Burette Drip Logic
-    useEffect(() => {
-        if (buretteFlow === 0) return;
-        
-        const interval = setInterval(() => {
-            setContainers(prev => {
-                const newContainers = [...prev];
-                let changed = false;
-
-                newContainers.forEach((c, idx) => {
-                    if (c.type === 'burette' && c.currentVolume > 0 && c.buretteOpen) {
-                         // Find target EXACTLY under the burette tip
-                         // The burette tip is at x (center), and y + ~height/2.
-                         // Flask mouth needs to be roughly there.
-                         
-                         const targetIdx = newContainers.findIndex(t => 
-                             t.id !== c.id && 
-                             t.type !== 'retort_stand' &&
-                             t.type !== 'burette' &&
-                             // X Alignment: Close to burette X
-                             Math.abs(t.x - c.x) < 25 && 
-                             // Y Alignment: Below the burette but not too far
-                             t.y > c.y + 150 && t.y < c.y + 250
-                         );
-                         
-                         if (targetIdx !== -1) {
-                             const target = newContainers[targetIdx];
-                             const dropVol = buretteFlow === 1 ? 0.1 : 1.0;
-                             
-                             const actualTransfer = Math.min(dropVol, c.currentVolume, target.capacity - target.currentVolume);
-                             
-                             if (actualTransfer > 0) {
-                                 const ratio = actualTransfer / c.currentVolume;
-                                 const transferChems = c.contents.map(x => ({...x, volume: x.volume * ratio}));
-                                 transferChems.forEach(tc => {
-                                     const ex = target.contents.find(x => x.id === tc.id);
-                                     if(ex) ex.volume += tc.volume; else target.contents.push(tc);
-                                 });
-                                 target.currentVolume += actualTransfer;
-                                 newContainers[targetIdx] = processReaction(target);
-
-                                 c.contents.forEach(x => x.volume -= x.volume * ratio);
-                                 c.currentVolume -= actualTransfer;
-                                 changed = true;
-                             }
-                         }
-                    }
-                });
-                return changed ? newContainers : prev;
-            });
-        }, 100);
-        return () => clearInterval(interval);
-    }, [buretteFlow]);
-
-    const toggleBurette = (id: string) => {
-        setContainers(prev => prev.map(c => {
-            if (c.id === id) {
-                const isOpen = !c.buretteOpen;
-                setBuretteFlow(isOpen ? 1 : 0);
-                return { ...c, buretteOpen: isOpen };
-            }
-            return c;
-        }));
+        setContainers(prev => [...prev, newC]);
     };
 
     return (
-        <div className="h-full flex flex-col-reverse md:flex-row bg-[#111827] overflow-hidden select-none relative">
+        <div className="h-full flex flex-col md:flex-row bg-[#111827] overflow-hidden select-none relative" onMouseUp={handleMouseUp} onMouseMove={handleMouseMove}>
             
-            {/* Sidebar */}
+            {/* Sidebar Toggle */}
+            <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="absolute top-4 left-4 z-50 p-3 bg-slate-800 rounded-full text-white shadow-lg border border-slate-600 hover:bg-slate-700 transition-all">
+                {isSidebarOpen ? '✖️' : '🧪'}
+            </button>
+
+            {/* Tools Panel */}
             <div className={`absolute top-0 left-0 h-full w-72 bg-[#1e293b] border-r border-slate-700 z-40 shadow-2xl transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                 <div className="p-4 pt-16 flex flex-col gap-4 h-full overflow-y-auto custom-scrollbar">
                     <div>
-                        <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2">Glassware & Equipment</h4>
+                        <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2">Apparatus</h4>
                         <div className="grid grid-cols-2 gap-2">
                             {GLASSWARE.map(glass => (
-                                <button key={glass.type} onClick={() => spawnGlassware(glass.type)} className="flex flex-col items-center p-3 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg transition-all">
+                                <button key={glass.type} onClick={() => spawnGlassware(glass.type)} className="flex flex-col items-center p-3 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg transition-all active:scale-95">
                                     <span className="text-2xl mb-1">{glass.icon}</span>
                                     <span className="text-[10px] font-bold text-slate-300">{glass.name}</span>
                                 </button>
                             ))}
                         </div>
                     </div>
-
                     <div>
-                        <h4 className="text-xs font-bold text-green-400 uppercase tracking-wider mb-2">Reagents</h4>
+                        <h4 className="text-xs font-bold text-green-400 uppercase tracking-wider mb-2">Chemicals</h4>
                         <div className="space-y-1">
                             {STOCK_CHEMICALS.map(chem => (
-                                <button key={chem.id} onClick={() => spawnReagent(chem)} className="w-full flex items-center gap-3 p-2 bg-slate-800/50 hover:bg-slate-700 border border-slate-700 rounded-lg transition-all text-left">
+                                <button key={chem.id} onClick={() => spawnReagent(chem)} className="w-full flex items-center gap-3 p-2 bg-slate-800/50 hover:bg-slate-700 border border-slate-700 rounded-lg transition-all text-left active:scale-95">
                                     <div className="w-8 h-8 bg-amber-900/50 rounded flex items-center justify-center text-xs border border-amber-700">Rx</div>
                                     <div>
                                         <div className="text-xs font-bold text-slate-200">{chem.name}</div>
@@ -767,394 +468,230 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
                             ))}
                         </div>
                     </div>
+                     <button onClick={() => setContainers([])} className="mt-auto w-full py-3 bg-red-900/50 text-red-400 border border-red-500/30 rounded-lg text-xs font-bold hover:bg-red-500/20">
+                        Clear Bench
+                    </button>
                 </div>
             </div>
 
-            <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="absolute top-4 left-4 z-50 p-3 bg-slate-800 rounded-full text-white shadow-lg border border-slate-600 hover:bg-slate-700">
-                {isSidebarOpen ? '✖️' : '🧪'}
-            </button>
-
-            <div className="flex-grow relative bg-[#0f172a] overflow-hidden cursor-default" onClick={handleWorkbenchClick} ref={workbenchRef}>
+            {/* Workbench */}
+            <div className="flex-grow relative bg-[#0f172a] overflow-hidden cursor-default" ref={workbenchRef}>
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(30,41,59,0.3)_0%,rgba(15,23,42,1)_100%)]"></div>
-                
-                <div className="absolute bottom-4 right-4 w-24 h-24 bg-slate-800/50 rounded-2xl border-4 border-slate-700 flex items-center justify-center shadow-inner z-0">
-                    <div className="text-4xl opacity-30">🚰</div>
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 text-slate-500 text-xs font-mono pointer-events-none bg-black/20 px-2 py-1 rounded">
+                    Drag items to move • Snap Flask to Tile • Snap Burette to Stand
                 </div>
 
                 {containers.map(container => (
-                    <div 
+                    <Glassware 
                         key={container.id} 
-                        style={{ left: container.x, top: container.y, zIndex: container.zIndex || 10 }} 
-                        className={`absolute transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 cursor-grab hover:scale-[1.02] group`} 
-                        onMouseDown={(e) => handleContainerClick(e, container)}
-                        onDoubleClick={(e) => handleContainerDoubleClick(e, container)}
-                    >
-                         <GlasswareVisual container={container} />
-                         
-                         {/* Pour Hint / Snap Hint */}
-                         {heldContainer && heldContainer.id !== container.id && (
-                             <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-12 bg-black/80 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
-                                 {heldContainer.type === 'burette' && container.type === 'retort_stand' ? 'Release to Mount' : 'Double-click to pour here'}
-                             </div>
-                         )}
-                         
-                         {/* Mounted State Detach Hint */}
-                         {container.mountedOn && (
-                            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-12 bg-black/80 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
-                                Double-click to Detach
-                            </div>
-                         )}
-
-                         {container.type === 'burette' && (
-                             <div className="absolute top-[280px] -right-12 bg-slate-800 p-2 rounded-lg shadow-xl border border-slate-600 flex flex-col gap-1 z-50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-auto" onClick={e=>e.stopPropagation()}>
-                                 <button onClick={() => {toggleBurette(container.id); setBuretteFlow(1)}} className={`px-2 py-1 text-[10px] rounded ${container.buretteOpen && buretteFlow===1 ? 'bg-green-600' : 'bg-slate-700'}`}>💧 Drop</button>
-                                 <button onClick={() => {toggleBurette(container.id); setBuretteFlow(5)}} className={`px-2 py-1 text-[10px] rounded ${container.buretteOpen && buretteFlow===5 ? 'bg-green-600' : 'bg-slate-700'}`}>🌊 Stream</button>
-                                 <button onClick={() => {toggleBurette(container.id); setBuretteFlow(0)}} className={`px-2 py-1 text-[10px] rounded ${!container.buretteOpen ? 'bg-red-600' : 'bg-slate-700'}`}>🛑 Stop</button>
-                             </div>
-                         )}
-                    </div>
+                        container={container} 
+                        onMouseDown={(e) => handleMouseDown(e, container.id)}
+                        onTapToggle={() => handleTapClick(container.id)}
+                    />
                 ))}
-
-                {heldContainer && (
-                    <div 
-                        className="fixed z-[200] pointer-events-none"
-                        style={{ 
-                            left: activePour?.isActive 
-                                ? (containers.find(c => c.id === activePour.targetId)?.x || 0) + (workbenchRef.current?.getBoundingClientRect().left || 0) - (workbenchRef.current?.scrollLeft||0) - 50
-                                : isSnappingToStand && heldContainer.type === 'burette' && snapTarget
-                                    ? (snapTarget as LabContainer).x + 60 + (workbenchRef.current?.getBoundingClientRect().left || 0) - (workbenchRef.current?.scrollLeft||0)
-                                    : snapTarget && snapTarget !== 'drain' && (snapTarget as LabContainer).type !== 'retort_stand'
-                                        ? (snapTarget as LabContainer).x + (workbenchRef.current?.getBoundingClientRect().left || 0) - (workbenchRef.current?.scrollLeft||0) - 50
-                                        : mousePos.x, 
-                            top: activePour?.isActive
-                                ? (containers.find(c => c.id === activePour.targetId)?.y || 0) + (workbenchRef.current?.getBoundingClientRect().top || 0) - (workbenchRef.current?.scrollTop||0) - 140
-                                : isSnappingToStand && heldContainer.type === 'burette' && snapTarget
-                                     ? (snapTarget as LabContainer).y - 180 + (workbenchRef.current?.getBoundingClientRect().top || 0) - (workbenchRef.current?.scrollTop||0)
-                                     : snapTarget && snapTarget !== 'drain' && (snapTarget as LabContainer).type !== 'retort_stand'
-                                        ? (snapTarget as LabContainer).y + (workbenchRef.current?.getBoundingClientRect().top || 0) - (workbenchRef.current?.scrollTop||0) - 120
-                                        : mousePos.y,
-                            transition: activePour?.isActive || isSnappingToStand ? 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' : 'none'
-                        }}
-                    >
-                        {/* Magnetic Snap Ghost Effect */}
-                        {isSnappingToStand && heldContainer.type === 'burette' && (
-                             <div className="absolute inset-0 z-[-1] animate-ping opacity-30">
-                                 <GlasswareVisual container={heldContainer} />
-                             </div>
-                        )}
-
-                        <div className={`transform transition-all duration-300 ${isPouring || activePour?.isActive ? 'rotate-[-45deg] translate-y-4' : 'rotate-0'}`}>
-                             <div 
-                                className="pointer-events-auto cursor-grabbing relative"
-                                onMouseDown={startPouring}
-                                onMouseUp={stopPouring}
-                             >
-                                <GlasswareVisual container={heldContainer} isHeld isPouring={isPouring || activePour?.isActive} />
-                             </div>
-                        </div>
-
-                        {snapTarget && !isPouring && !activePour?.isActive && heldContainer.type !== 'pipette' && (
-                            <div className={`absolute top-full left-1/2 -translate-x-1/2 mt-4 text-white text-xs px-3 py-1 rounded-full whitespace-nowrap animate-bounce ${isSnappingToStand ? 'bg-green-600' : 'bg-black/80'}`}>
-                                {isSnappingToStand ? 'Release to Mount' : snapTarget !== 'drain' ? 'Double-click to Pour' : 'Release to Drain'}
-                            </div>
-                        )}
-                    </div>
-                )}
             </div>
-
-            {/* Pour Volume Dialog */}
-            {pourModal && (
-                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[200] flex justify-center items-center p-4" onClick={(e) => e.stopPropagation()}>
-                    <div className="bg-slate-800 rounded-xl p-6 border border-slate-600 shadow-2xl w-full max-w-sm animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
-                        <h3 className="text-lg font-bold text-white mb-2">Measure & Pour</h3>
-                        <p className="text-sm text-slate-400 mb-6">How much liquid would you like to transfer?</p>
-                        
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center text-xs font-mono text-slate-300">
-                                <span>0 mL</span>
-                                <span className="text-blue-400 font-bold text-lg">{pourAmountInput} mL</span>
-                                <span>{Math.floor(pourModal.maxVolume)} mL</span>
-                            </div>
-                            
-                            <input 
-                                type="range" 
-                                min="1" 
-                                max={pourModal.maxVolume} 
-                                value={pourAmountInput} 
-                                onChange={(e) => setPourAmountInput(Number(e.target.value))}
-                                className="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                            />
-                            
-                            <div className="flex gap-2 justify-center">
-                                <button onClick={() => setPourAmountInput(Math.max(1, pourAmountInput - 10))} className="px-3 py-1 bg-slate-700 rounded text-xs">-10</button>
-                                <button onClick={() => setPourAmountInput(Math.min(pourModal.maxVolume, pourAmountInput + 10))} className="px-3 py-1 bg-slate-700 rounded text-xs">+10</button>
-                                <button onClick={() => setPourAmountInput(pourModal.maxVolume)} className="px-3 py-1 bg-slate-700 rounded text-xs">Max</button>
-                            </div>
-                        </div>
-
-                        <div className="mt-8 flex gap-3">
-                            <Button variant="secondary" onClick={() => setPourModal(null)} className="flex-1">Cancel</Button>
-                            <Button onClick={handleConfirmPour} className="flex-1 bg-blue-600 hover:bg-blue-500">Pour Liquid</Button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
 
+// --- VISUAL COMPONENT ---
 
-// --- REALISTIC GLASSWARE RENDERING ---
+interface GlasswareProps { 
+    container: LabContainer; 
+    onMouseDown: (e: React.MouseEvent) => void;
+    onTapToggle?: () => void;
+}
 
-const GlasswareVisual: React.FC<{ container: LabContainer; isHeld?: boolean; isPouring?: boolean }> = ({ container, isHeld, isPouring }) => {
-    const fillHeight = (container.currentVolume / (container.capacity || 1)) * 100;
+const Glassware: React.FC<GlasswareProps> = ({ container, onMouseDown, onTapToggle }) => {
     const liquidColor = blendColors(container.contents);
-    const isPrecipitate = !!container.precipitate;
-    const pptColor = container.precipitate?.color;
-
-    // Helper to calculate stream position based on container type
-    const getSpoutOffset = (type: ContainerType) => {
-        // Adjust these to align with the transformed lip position when rotated -45deg
-        switch(type) {
-            case 'beaker': return { x: -35, y: -20 };
-            case 'conical_flask': return { x: -35, y: -45 };
-            case 'reagent_bottle': return { x: -35, y: -45 };
-            case 'test_tube': return { x: -15, y: -30 };
-            case 'measuring_cylinder': return { x: -15, y: -30 };
-            default: return { x: -30, y: -30 };
-        }
-    };
-
-    const spout = getSpoutOffset(container.type);
-
-    // --- REALISTIC STREAM VISUAL ---
-    const Stream = () => (
-        <svg className="absolute top-0 left-0 overflow-visible z-0 pointer-events-none" style={{ transform: `translate(${spout.x}px, ${spout.y}px) rotate(45deg)` }}>
-            <defs>
-                <linearGradient id="streamGrad" x1="0" x2="0" y1="0" y2="1">
-                     <stop offset="0%" stopColor={liquidColor} stopOpacity="0.8" />
-                     <stop offset="80%" stopColor={liquidColor} stopOpacity="0.6" />
-                     <stop offset="100%" stopColor={liquidColor} stopOpacity="0.1" />
-                </linearGradient>
-            </defs>
-            {/* Tapered curve simulating fluid dynamics */}
-            <path d={`M 0 0 C 0 20, -5 100, -2 250`} stroke="url(#streamGrad)" strokeWidth="6" strokeLinecap="round" fill="none" className="animate-flow" />
-            <path d={`M 0 0 C 0 20, -5 100, -2 250`} stroke="white" strokeWidth="2" strokeOpacity="0.3" fill="none" className="blur-[1px]" />
-            
-            {/* Splash Effect at bottom */}
-            <circle cx="-2" cy="250" r="10" fill={liquidColor} opacity="0.6" className="animate-splash" />
-            <circle cx="-2" cy="250" r="6" fill="white" opacity="0.4" className="animate-splash delay-75" />
-        </svg>
-    );
-
-    // --- LIQUID COMPONENT (Reusable) ---
-    const Liquid = ({ height, color }: { height: number, color: string }) => (
-        <div 
-            className={`absolute bottom-0 w-full transition-all duration-300 ease-linear overflow-hidden`}
-            style={{ 
-                height: `${Math.max(height, 0)}%`,
-                background: `linear-gradient(to right, 
-                    ${color}, 
-                    rgba(255,255,255,0.1) 40%, 
-                    ${color} 60%, 
-                    rgba(0,0,0,0.2) 100%)`
-            }}
-        >
-            {/* Meniscus / Surface */}
-            <div className="absolute top-0 left-0 w-full h-[6px] bg-white/30 rounded-[100%] scale-x-110 transform -translate-y-1/2 blur-[1px]"></div>
-            
-            {/* Bubbles / Texture */}
-            <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]"></div>
-            
-            {isPrecipitate && (
-                 <div className="absolute inset-0 w-full h-full opacity-80 animate-pulse bg-repeat" 
-                      style={{ 
-                          backgroundImage: `radial-gradient(${pptColor} 30%, transparent 30%)`,
-                          backgroundSize: '6px 6px',
-                          backgroundPosition: '0 0'
-                      }}>
-                 </div>
-            )}
-        </div>
-    );
-
-    // --- RETORT STAND ---
+    const fillPercent = container.capacity > 0 ? (container.currentVolume / container.capacity) * 100 : 0;
+    
+    // -- RENDERERS --
+    
     if (container.type === 'retort_stand') {
         return (
-            <div className="relative flex flex-col items-center select-none pointer-events-none group z-[5]">
-                {/* Rod */}
-                <div className="w-3 h-96 bg-gradient-to-r from-gray-400 via-gray-200 to-gray-500 rounded-t-sm shadow-md border-x border-gray-500 z-10 relative"></div>
-                
-                {/* Bosshead (Connector) */}
-                <div className="absolute top-20 left-1/2 -translate-x-1/2 w-8 h-8 bg-gray-600 rounded shadow-md z-20 flex items-center justify-center border border-gray-500">
-                    <div className="w-2 h-2 bg-black/50 rounded-full"></div>
-                </div>
-
-                {/* Clamp Arm */}
-                <div className="absolute top-[88px] left-1/2 w-[60px] h-3 bg-gray-500 z-10 shadow-sm border-y border-gray-600"></div>
-                
-                {/* Clamp Jaws - The Grip */}
-                <div className="absolute top-[80px] left-[calc(50%+56px)] w-8 h-8 z-30 flex flex-col justify-between py-1">
-                    {/* Back Grip */}
-                    <div className="w-full h-1.5 bg-amber-900/80 rounded-full"></div>
-                    {/* Front Grip (Cork lined) */}
-                    <div className="w-full h-1.5 bg-amber-800 rounded-full shadow-sm"></div>
-                </div>
-                {/* Vertical screw for clamp */}
-                <div className="absolute top-[82px] left-[calc(50%+50px)] w-1 h-8 bg-gray-400 z-20"></div>
-
+            <div 
+                className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing select-none"
+                style={{ left: container.x, top: container.y, zIndex: container.zIndex }}
+                onMouseDown={onMouseDown}
+            >
                 {/* Base */}
-                <div className="w-48 h-6 bg-gray-700 rounded-md shadow-2xl relative border-t border-gray-600 z-10 mt-[-2px] flex items-center justify-center overflow-hidden">
-                    {/* White Tile - Positioned under the clamp area on the right */}
-                    <div className="absolute right-4 top-1 w-20 h-16 bg-white shadow-inner rounded-sm opacity-95 transform perspective-[600px] rotateX(60deg)"></div>
-                </div>
-
-                {!isHeld && (
-                     <div className="absolute -bottom-8 bg-black/80 px-2 py-1 rounded text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity z-50">Retort Stand & White Tile</div>
-                )}
+                <div className="w-32 h-6 bg-slate-700 rounded border-t border-slate-500 shadow-xl relative top-[280px]"></div>
+                {/* Rod */}
+                <div className="w-2 h-[300px] bg-slate-400 mx-auto rounded-t relative -top-4 border-l border-white/20"></div>
+                {/* Clamp */}
+                <div className="absolute top-[80px] left-1/2 w-16 h-2 bg-slate-500 -translate-x-full rounded-l shadow-md"></div>
+                <div className="absolute top-[75px] left-1/2 -translate-x-[60px] w-6 h-4 bg-slate-600 rounded border border-slate-400"></div>
             </div>
         );
     }
-
-    // --- REAGENT BOTTLE ---
-    if (container.type === 'reagent_bottle') {
+    
+    if (container.type === 'white_tile') {
         return (
-            <div className="relative group w-20 h-32 flex flex-col items-center">
-                {isPouring && <Stream />}
-                {!isHeld && <div className="w-8 h-6 bg-amber-900 rounded-t-md mb-[-2px] z-20 shadow-md border border-amber-950 flex items-center justify-center"><div className="w-full h-1 bg-white/20"></div></div>}
-                <div className="w-8 h-6 bg-amber-800/80 border-x-2 border-amber-900/50 backdrop-blur-sm z-10"></div>
-                <div className="w-20 h-24 bg-amber-800/90 rounded-xl border-2 border-amber-900/50 backdrop-blur-md shadow-lg relative overflow-hidden">
-                    {/* Label */}
-                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-16 h-14 bg-white rounded shadow-sm flex items-center justify-center text-center p-1 z-20 border border-gray-300">
-                        <div>
-                            <div className="text-[10px] font-bold text-black leading-tight font-serif">{container.contents[0]?.name}</div>
-                            <div className="text-[8px] text-gray-600 mt-1">{container.contents[0]?.concentration}M</div>
-                            {container.contents[0]?.type === 'acid' && <div className="text-[7px] font-bold text-white bg-red-600 px-1 mt-1 rounded inline-block">DANGER</div>}
-                        </div>
-                    </div>
-                    <Liquid height={fillHeight} color="rgba(60, 30, 10, 0.8)" />
-                </div>
+            <div 
+                className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing select-none"
+                style={{ left: container.x, top: container.y, zIndex: 1 }} // Low Z to be under flasks
+                onMouseDown={onMouseDown}
+            >
+                {/* 3D Perspective Tile */}
+                <div className="w-24 h-16 bg-[#f8fafc] border border-slate-300 shadow-md transform skew-x-12 rounded-sm"></div>
             </div>
         );
     }
 
-    // --- BURETTE ---
     if (container.type === 'burette') {
         return (
-            <div className="relative flex flex-col items-center group">
-                {/* Main Tube */}
-                <div className="w-4 h-96 bg-blue-50/10 border-x border-white/50 backdrop-blur-sm relative overflow-hidden rounded-sm shadow-[inset_2px_0_5px_rgba(255,255,255,0.2)]">
-                    {/* Graduations */}
-                    <div className="absolute right-0 top-0 bottom-0 w-full flex flex-col justify-between py-2 pr-0.5 opacity-80 pointer-events-none z-20">
-                         {[...Array(26)].map((_,i) => (
-                             <div key={i} className="flex justify-end items-center gap-1">
-                                {i % 5 === 0 && <span className="text-[7px] font-mono text-black">{i * 2}</span>}
-                                <div className={`h-px bg-black ${i % 5 === 0 ? 'w-2.5' : 'w-1.5'}`}></div>
-                             </div>
-                         ))}
+             <div 
+                className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing group select-none"
+                style={{ left: container.x, top: container.y, zIndex: container.zIndex }}
+                onMouseDown={onMouseDown}
+            >
+                {/* Drip Stream */}
+                {container.buretteOpen && container.currentVolume > 0 && (
+                    <div className="absolute top-[310px] left-1/2 -translate-x-1/2 w-0.5 h-48 bg-blue-400/50 animate-pulse pointer-events-none z-0"></div>
+                )}
+                
+                {/* Tube */}
+                <div className="w-4 h-[300px] bg-blue-100/10 border border-white/40 rounded-full relative overflow-hidden backdrop-blur-[1px]">
+                     {/* Liquid */}
+                     <div 
+                        className="absolute bottom-0 w-full transition-all duration-300 ease-linear"
+                        style={{ height: `${fillPercent}%`, backgroundColor: liquidColor }}
+                     ></div>
+                     {/* Graduations */}
+                     <div className="absolute inset-0 flex flex-col justify-evenly opacity-50 pointer-events-none">
+                         {[...Array(10)].map((_, i) => <div key={i} className="w-2 h-px bg-black/50 self-end mr-1"></div>)}
+                     </div>
+                </div>
+                
+                {/* Tip & Tap */}
+                <div className="flex flex-col items-center relative -mt-1">
+                    <div className="w-2 h-4 bg-blue-100/10 border-x border-white/40"></div>
+                    {/* Tap Mechanism */}
+                    <div 
+                        className="w-6 h-6 bg-slate-800 rounded-full flex items-center justify-center cursor-pointer hover:bg-slate-700 transition-colors shadow-lg relative z-50"
+                        onMouseDown={(e) => { e.stopPropagation(); onTapToggle && onTapToggle(); }}
+                    >
+                         <div className={`w-1 h-4 bg-slate-400 rounded transition-transform duration-300 ${container.buretteOpen ? 'rotate-0' : 'rotate-90'}`}></div>
                     </div>
-                    
-                    {/* Liquid */}
-                    <Liquid height={fillHeight} color={liquidColor} />
+                    <div className="w-1 h-6 bg-blue-100/10 border-x border-white/40 mb-1"></div>
                 </div>
 
-                {/* Stopcock Area */}
-                <div className="relative z-20 flex flex-col items-center -mt-1">
-                    <div className="w-4 h-6 bg-blue-50/20 border-x border-white/50 backdrop-blur-sm">
-                        <Liquid height={container.currentVolume > 0 ? 100 : 0} color={liquidColor} />
-                    </div>
-                    {/* Tap Body */}
-                    <div className="w-8 h-4 bg-white border border-gray-300 rounded shadow-sm flex items-center justify-center relative cursor-pointer" title="Toggle Tap">
-                         {/* Rotatable Key */}
-                        <div className={`w-10 h-2 bg-blue-600 rounded-full transition-transform duration-300 shadow-sm ${container.buretteOpen ? 'rotate-90' : 'rotate-0'}`}>
-                            <div className="w-1 h-1 bg-white rounded-full absolute left-1 top-0.5"></div>
-                        </div>
-                    </div>
-                    {/* Tip */}
-                    <div className="w-1.5 h-6 bg-blue-50/30 border-x border-white/40 mb-1 relative overflow-hidden">
-                        <Liquid height={container.currentVolume > 0 ? 100 : 0} color={liquidColor} />
-                    </div>
-                    
-                    {/* Drop Animation */}
-                    {container.buretteOpen && container.currentVolume > 0 && (
-                        <div className="absolute -bottom-4 w-2 h-2 rounded-full animate-drip" style={{backgroundColor: liquidColor}}></div>
-                    )}
+                {/* Hover Info */}
+                <div className="opacity-0 group-hover:opacity-100 absolute left-full top-10 ml-2 bg-black/80 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-50">
+                    Burette: {Math.round(container.currentVolume)}ml
+                    <br/>
+                    {container.buretteOpen ? "Tap Open" : "Tap Closed"}
                 </div>
             </div>
         );
     }
+    
+    // STANDARD GLASSWARE (Beaker, Flask, etc)
+    const spoutPos = { x: -35, y: -45 };
 
-    // --- PIPETTE ---
-    if (container.type === 'pipette') {
-        const hasLiquid = container.pipetteState === 'full';
-        return (
-            <div className={`relative flex flex-col items-center transition-transform ${isHeld ? 'rotate-[-45deg] origin-bottom' : ''}`}>
-                 <div className="w-2 h-24 bg-white/20 border border-white/40 rounded-full relative overflow-hidden backdrop-blur-sm shadow-md">
-                     {hasLiquid && <div className="absolute bottom-0 w-full h-full bg-blue-500/30 transition-all"></div>}
-                 </div>
-                 <div className="w-0.5 h-8 bg-white/30 border-x border-white/40"></div>
-            </div>
-        );
-    }
-
-    // --- STANDARD GLASSWARE (Beaker, Flask) ---
     return (
-        <div className="relative flex flex-col items-center group">
-            {isPouring && <Stream />}
-            <div className={`
-                relative overflow-hidden backdrop-blur-sm border border-white/40 shadow-[inset_0_0_20px_rgba(255,255,255,0.1)] transition-all bg-gradient-to-br from-white/10 to-white/5
-                ${container.type === 'test_tube' ? 'w-6 h-28 rounded-b-full border-t-2 border-t-white/50' : ''}
+        <div 
+            className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing group select-none"
+            style={{ 
+                left: container.x, 
+                top: container.y, 
+                zIndex: container.zIndex,
+                transform: `translate(-50%, -50%) rotate(${container.rotation}deg)`,
+                transition: 'transform 0.1s linear' // Smooth visual rotation from physics engine
+            }}
+            onMouseDown={onMouseDown}
+        >
+            {/* POURING STREAM */}
+            {container.rotation < -45 && container.currentVolume > 0 && (
+                <div className="absolute pointer-events-none z-0" style={{ 
+                    left: spoutPos.x, 
+                    top: spoutPos.y,
+                    // Counter-rotate the stream container so gravity acts downwards relative to screen
+                    transform: `rotate(${-container.rotation}deg)` 
+                }}>
+                    <svg width="20" height="300" className="overflow-visible">
+                        {/* Dynamic stream width based on tilt angle */}
+                        <path 
+                            d={`M 0 0 Q 0 50, ${Math.sin(Date.now()/100)*2} 300`} 
+                            stroke={liquidColor} 
+                            strokeWidth={Math.min(10, (Math.abs(container.rotation)-45)/4)} 
+                            fill="none" 
+                            strokeLinecap="round"
+                            className="opacity-80"
+                        />
+                        {/* Splash at the bottom */}
+                         <circle cx="0" cy="300" r={Math.min(8, (Math.abs(container.rotation)-45)/5)} fill={liquidColor} opacity="0.6" className="animate-ping" />
+                    </svg>
+                </div>
+            )}
+
+            {/* CONTAINER BODY */}
+            <div className={`relative overflow-hidden backdrop-blur-sm border border-white/30 shadow-[inset_0_0_20px_rgba(255,255,255,0.1)] bg-gradient-to-br from-white/10 to-white/5
                 ${container.type === 'beaker' ? 'w-24 h-28 rounded-b-xl border-t-0 border-x-2 border-b-4' : ''}
                 ${container.type === 'conical_flask' ? 'w-28 h-36 rounded-b-3xl border-t-0 clip-path-flask' : ''}
+                ${container.type === 'test_tube' ? 'w-6 h-28 rounded-b-full border-t-2 border-t-white/50' : ''}
+                ${container.type === 'reagent_bottle' ? 'w-20 h-24 rounded-xl border-2 border-amber-900/50 bg-amber-900/80' : ''}
                 ${container.type === 'measuring_cylinder' ? 'w-8 h-40 rounded-b-lg border-x-2 border-b-2' : ''}
             `}>
-                {/* Rim Highlight */}
-                {container.type === 'beaker' && <div className="absolute top-0 left-0 w-full h-1.5 bg-white/40 rounded-full shadow-sm"></div>}
-                {container.type === 'conical_flask' && <div className="absolute top-0 left-[35%] w-[30%] h-1 bg-white/40 rounded-full"></div>}
                 
-                {/* Markings */}
-                {(container.type === 'measuring_cylinder' || container.type === 'beaker' || container.type === 'conical_flask') && (
-                    <div className="absolute right-0 top-10 bottom-4 w-full flex flex-col justify-end py-2 pr-2 pointer-events-none opacity-60 z-20">
-                        {[...Array(6)].map((_,i) => (
-                            <div key={i} className="flex justify-end items-center gap-1 mb-3">
-                                <span className="text-[9px] font-bold text-white/70 drop-shadow-md">{(i+1)*50}</span>
-                                <div className="w-2 h-0.5 bg-white/70 shadow-sm"></div>
-                            </div>
+                {/* Reagent Label */}
+                {container.type === 'reagent_bottle' && (
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white px-2 py-1 rounded shadow-sm text-center">
+                        <div className="text-[9px] font-bold font-serif text-black leading-tight">{container.name}</div>
+                        {container.contents[0]?.type === 'acid' && <div className="text-[6px] bg-red-600 text-white px-1 rounded inline-block mt-0.5">DANGER</div>}
+                    </div>
+                )}
+                
+                {/* Measurement Lines */}
+                {container.type !== 'reagent_bottle' && container.type !== 'test_tube' && (
+                    <div className="absolute right-0 bottom-0 top-0 w-full flex flex-col justify-end py-2 pr-1 opacity-50 pointer-events-none">
+                        {[...Array(5)].map((_, i) => (
+                             <div key={i} className="flex justify-end mb-4 border-b border-white/40 w-1/4 self-end"></div>
                         ))}
                     </div>
                 )}
 
-                {/* The Liquid */}
-                <Liquid height={fillHeight} color={liquidColor} />
-
-                {/* Glass Highlights */}
-                <div className="absolute top-0 left-2 w-2 h-full bg-gradient-to-r from-white/20 to-transparent blur-[2px] pointer-events-none"></div>
-                <div className="absolute top-0 right-4 w-1 h-full bg-gradient-to-l from-white/10 to-transparent blur-[1px] pointer-events-none"></div>
-            </div>
-
-            {!isHeld && (
-                <div className="mt-2 bg-black/80 backdrop-blur px-3 py-1.5 rounded-md text-[10px] font-mono text-slate-200 border border-slate-600 flex flex-col items-center min-w-[80px] shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 absolute bottom-full mb-2">
-                    <span className="font-bold text-white uppercase tracking-wider mb-1">{container.name}</span>
-                    <div className="w-full h-px bg-slate-600 mb-1"></div>
-                    <span>{Math.round(container.currentVolume)} / {container.capacity} ml</span>
-                    {container.contents.length > 0 && <span className="text-blue-300 truncate max-w-[100px]">{container.contents[0].name}</span>}
-                    {container.precipitate && <span className="text-yellow-400 font-bold animate-pulse">PPT: {container.precipitate.name}</span>}
+                {/* LIQUID */}
+                <div 
+                    className="absolute -left-[50%] -right-[50%] -bottom-[50%] -top-[50%] pointer-events-none transition-colors duration-300"
+                    style={{ 
+                        transform: `rotate(${-container.rotation}deg)`, // Counter-rotate to keep level
+                        transformOrigin: 'center center'
+                    }}
+                >
+                    <div 
+                        className="absolute bottom-0 left-0 right-0 bg-blue-500 transition-all duration-75 ease-linear"
+                        style={{ 
+                            height: `${fillPercent > 0 ? 50 + (fillPercent/2) : 0}%`, // Offset to center for rotation
+                            background: `linear-gradient(to bottom, ${liquidColor}, rgba(0,0,0,0.3))`,
+                            boxShadow: `0 -2px 5px ${liquidColor}`
+                        }}
+                    >
+                        {/* Surface Bubbles */}
+                        <div className="w-full h-2 bg-white/20 absolute top-0 skew-x-12 blur-[1px]"></div>
+                        {/* Precipitate Particles */}
+                        {container.precipitate && (
+                             <div className="absolute bottom-0 w-full h-1/2 bg-repeat animate-pulse opacity-80"
+                                  style={{ backgroundImage: `radial-gradient(${container.precipitate.color} 2px, transparent 2px)`, backgroundSize: '10px 10px' }}
+                             ></div>
+                        )}
+                    </div>
                 </div>
-            )}
+
+                {/* Glass Highlights (Overlay) */}
+                <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent pointer-events-none rounded-b-xl"></div>
+                <div className="absolute top-0 right-2 w-1 h-full bg-white/20 blur-[1px]"></div>
+            </div>
+            
+            {/* Hover Info */}
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-black/80 text-white text-[10px] px-2 py-1 rounded pointer-events-none whitespace-nowrap z-50">
+                {container.name} ({Math.round(container.currentVolume)}ml)
+                {container.isSnapping && <div className="text-yellow-300 font-bold">Hold Click to Pour</div>}
+            </div>
             
             <style>{`
-                .clip-path-flask { clip-path: polygon(30% 0, 70% 0, 100% 100%, 0% 100%); }
-                @keyframes splash {
-                    0% { transform: scale(0); opacity: 0.8; }
-                    100% { transform: scale(2); opacity: 0; }
-                }
-                .animate-splash { animation: splash 0.6s infinite ease-out; }
-                @keyframes drip {
-                    0% { transform: translateY(0) scale(1); opacity: 1; }
-                    80% { transform: translateY(20px) scale(0.5); opacity: 1; }
-                    100% { transform: translateY(30px) scale(0); opacity: 0; }
-                }
-                .animate-drip { animation: drip 0.5s infinite linear; }
+                .clip-path-flask { clip-path: polygon(25% 0, 75% 0, 100% 100%, 0% 100%); }
             `}</style>
         </div>
     );

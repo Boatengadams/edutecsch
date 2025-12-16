@@ -24,46 +24,80 @@ const dataURLtoFile = (dataurl: string, filename: string): File => {
     return new File([u8arr], filename, { type: mime });
 };
 
-// Image Compression Helper
-const compressImage = (file: File): Promise<File> => {
+/**
+ * Standardizes any image file to a lightweight JPEG suitable for profile pictures.
+ * - Resizes to max 400x400
+ * - Fills transparent backgrounds with white
+ * - Compresses quality to 0.8
+ */
+const standardizeAndCompressImage = (file: File): Promise<Blob> => {
     return new Promise((resolve, reject) => {
+        // 10-second timeout for local processing safety
+        const timer = setTimeout(() => reject(new Error("Image processing timed out locally")), 10000);
+
         const reader = new FileReader();
         reader.readAsDataURL(file);
         reader.onload = (event) => {
             const img = new Image();
             img.src = event.target?.result as string;
+            
             img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 500; // Resize to max 500px width for avatars
-                const scaleSize = MAX_WIDTH / img.width;
-                const width = scaleSize < 1 ? MAX_WIDTH : img.width;
-                const height = scaleSize < 1 ? img.height * scaleSize : img.height;
+                // Determine new dimensions (Max 400px)
+                const MAX_DIMENSION = 400;
+                let width = img.width;
+                let height = img.height;
 
+                if (width > height) {
+                    if (width > MAX_DIMENSION) {
+                        height *= MAX_DIMENSION / width;
+                        width = MAX_DIMENSION;
+                    }
+                } else {
+                    if (height > MAX_DIMENSION) {
+                        width *= MAX_DIMENSION / height;
+                        height = MAX_DIMENSION;
+                    }
+                }
+
+                const canvas = document.createElement('canvas');
                 canvas.width = width;
                 canvas.height = height;
 
                 const ctx = canvas.getContext('2d');
                 if (!ctx) {
-                    reject(new Error("Canvas context unavailable"));
+                    clearTimeout(timer);
+                    reject(new Error("System error: Canvas context unavailable"));
                     return;
                 }
+
+                // Fill background with white (handles PNG transparency turning black)
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, width, height);
+
+                // Draw image
                 ctx.drawImage(img, 0, 0, width, height);
                 
+                // Export as compact JPEG
                 canvas.toBlob((blob) => {
+                    clearTimeout(timer);
                     if (blob) {
-                        const newFile = new File([blob], file.name, {
-                            type: 'image/jpeg',
-                            lastModified: Date.now(),
-                        });
-                        resolve(newFile);
+                        resolve(blob);
                     } else {
-                        reject(new Error("Canvas to Blob failed"));
+                        reject(new Error("Image conversion failed"));
                     }
-                }, 'image/jpeg', 0.8); // 80% quality
+                }, 'image/jpeg', 0.80);
             };
-            img.onerror = (error) => reject(error);
+
+            img.onerror = () => {
+                clearTimeout(timer);
+                reject(new Error("Failed to load image data"));
+            };
         };
-        reader.onerror = (error) => reject(error);
+
+        reader.onerror = () => {
+            clearTimeout(timer);
+            reject(new Error("Failed to read image file"));
+        };
     });
 };
 
@@ -93,10 +127,17 @@ const UserEditModal: React.FC<UserEditModalProps> = ({ isOpen, onClose, onSave, 
   // Profile Picture State
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [uploadedPhotoUrl, setUploadedPhotoUrl] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  
+  // Upload Status
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState('');
+  
   const [showCamera, setShowCamera] = useState(false);
-  const [isCompressing, setIsCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Track active process to prevent race conditions
+  const activeProcessId = useRef<number>(0);
 
   useEffect(() => {
     if (user) {
@@ -110,10 +151,22 @@ const UserEditModal: React.FC<UserEditModalProps> = ({ isOpen, onClose, onSave, 
       setIsAlsoAdmin(user.isAlsoAdmin || false);
       
       setPhotoPreview(user.photoURL || null);
-      setUploadedPhotoUrl(null); // Reset new upload state
+      setUploadedPhotoUrl(null); 
+      setIsProcessing(false);
+      setUploadProgress(0);
+      setStatusMessage('');
       setError('');
     }
   }, [user]);
+
+  // Cleanup object URLs to prevent memory leaks
+  useEffect(() => {
+      return () => {
+          if (photoPreview && photoPreview.startsWith('blob:')) {
+              URL.revokeObjectURL(photoPreview);
+          }
+      };
+  }, [photoPreview]);
 
   const allStudents = useMemo(() => allUsers.filter(u => u?.uid && u.role === 'student' && u.name), [allUsers]);
 
@@ -154,92 +207,133 @@ const UserEditModal: React.FC<UserEditModalProps> = ({ isOpen, onClose, onSave, 
     });
   };
 
-  const uploadPhoto = async (file: File) => {
+  // --- IMAGE PIPELINE ---
+  
+  const processAndUploadImage = async (file: File) => {
       if (!user) return;
-      setIsUploading(true);
+      
+      const processId = Date.now();
+      activeProcessId.current = processId;
+      
+      // 1. Reset State
       setError('');
+      setIsProcessing(true);
+      setUploadProgress(0);
+      setStatusMessage('Optimizing...');
+      
       try {
-        const storagePath = `users/${user.uid}/profile_${Date.now()}.jpg`;
-        const storageRef = storage.ref(storagePath);
-        await storageRef.put(file, { contentType: 'image/jpeg' });
-        const downloadURL = await storageRef.getDownloadURL();
-        setUploadedPhotoUrl(downloadURL);
-      } catch (uploadError: any) {
-          console.error("Upload failed:", uploadError);
-          setError("Failed to upload image. Please check your internet connection.");
-          setPhotoPreview(user.photoURL || null); // Revert preview on failure
-      } finally {
-          setIsUploading(false);
+          // 2. Client-Side Compression & Conversion
+          const processedBlob = await standardizeAndCompressImage(file);
+          
+          if (activeProcessId.current !== processId) return; // Cancelled
+          
+          // Show Local Preview immediately using the processed blob
+          const previewUrl = URL.createObjectURL(processedBlob);
+          setPhotoPreview(previewUrl);
+
+          // 3. Upload to Firebase
+          setStatusMessage('Uploading...');
+          
+          const filename = `profile_${user.uid}_${processId}.jpg`;
+          const storagePath = `users/${user.uid}/${filename}`;
+          const storageRef = storage.ref(storagePath);
+          
+          const uploadTask = storageRef.put(processedBlob, {
+              contentType: 'image/jpeg',
+              cacheControl: 'public,max-age=7200'
+          });
+
+          uploadTask.on('state_changed', 
+              (snapshot) => {
+                  const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                  if (activeProcessId.current === processId) {
+                      setUploadProgress(progress);
+                  }
+              },
+              (err) => {
+                  if (activeProcessId.current === processId) {
+                      console.error("Upload error:", err);
+                      setError("Network error during upload. Please try again.");
+                      setIsProcessing(false);
+                      setPhotoPreview(user.photoURL || null); // Revert
+                  }
+              },
+              async () => {
+                  if (activeProcessId.current === processId) {
+                      const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                      setUploadedPhotoUrl(downloadURL);
+                      setIsProcessing(false);
+                      setStatusMessage('Ready to Save');
+                      setUploadProgress(100);
+                  }
+              }
+          );
+          
+      } catch (err: any) {
+          if (activeProcessId.current === processId) {
+              console.error("Processing error:", err);
+              setError("Failed to process image. Try a different file.");
+              setIsProcessing(false);
+              setPhotoPreview(user.photoURL || null); // Revert
+          }
       }
   };
   
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) {
           const file = e.target.files[0];
+          e.target.value = ''; // Reset input to allow re-selection
           
-          if (!file.type.startsWith('image/')) {
-              setError('Please upload a valid image file.');
-              return;
-          }
-          if (file.size > 10 * 1024 * 1024) { // 10MB Raw limit
-               setError('Image size too large. Please pick a smaller image.');
+          // Basic validation before processing
+          if (file.size > 10 * 1024 * 1024) {
+               setError('File is too large. Please pick an image under 10MB.');
                return;
           }
-
-          setError('');
-          setIsCompressing(true);
           
-          try {
-              const compressedFile = await compressImage(file);
-              setPhotoPreview(URL.createObjectURL(compressedFile));
-              // Trigger upload immediately for faster save
-              await uploadPhoto(compressedFile);
-          } catch (err) {
-              console.error("Compression error", err);
-              setError("Failed to process image. Please try another one.");
-          } finally {
-              setIsCompressing(false);
-          }
+          processAndUploadImage(file);
       }
   };
 
-  const handleCameraCapture = async (dataUrl: string) => {
-      setIsCompressing(true);
-      setError('');
+  const handleCameraCapture = (dataUrl: string) => {
       try {
-        const file = dataURLtoFile(dataUrl, `profile_capture_${Date.now()}.jpg`);
-        const compressedFile = await compressImage(file);
-        setPhotoPreview(URL.createObjectURL(compressedFile));
+        const file = dataURLtoFile(dataUrl, `cam_capture.jpg`);
         setShowCamera(false);
-        // Trigger upload immediately
-        await uploadPhoto(compressedFile);
+        processAndUploadImage(file);
       } catch(err) {
           setError("Failed to process camera image.");
-      } finally {
-          setIsCompressing(false);
       }
+  };
+
+  const handleRemovePhoto = () => {
+      setPhotoPreview(null);
+      setUploadedPhotoUrl(null);
+      activeProcessId.current = 0; // Cancel any active uploads
+      setIsProcessing(false);
+      setStatusMessage('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   if (!isOpen || !user) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isCompressing || isUploading) return; // Prevent save until upload is done
-    
+    if (isProcessing) return; // Prevent saving while uploading
+
     setLoading(true);
     setError('');
     
     try {
       const updateData: Partial<UserProfile> = { name, role };
       
-      // If we have a new uploaded URL, use it.
+      // Determine final photo URL
       if (uploadedPhotoUrl) {
           updateData.photoURL = uploadedPhotoUrl;
-      } else if (user.photoURL && !photoPreview) {
-          // If the user had a photo but cleared it (preview is null), delete the field
+      } else if (!photoPreview && user.photoURL) {
+          // Explicit removal
           updateData.photoURL = firebase.firestore.FieldValue.delete() as any;
       }
       
+      // Role-specific fields
       if (role === 'teacher') {
         updateData.classTeacherOf = classTeacherOf ? classTeacherOf : (firebase.firestore.FieldValue.delete() as any);
         updateData.classesTaught = classesTaught;
@@ -358,98 +452,110 @@ const UserEditModal: React.FC<UserEditModalProps> = ({ isOpen, onClose, onSave, 
 
   return (
     <>
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center p-4 z-[60]">
-        <Card className="w-full max-w-lg h-[90vh] flex flex-col">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex justify-center items-center p-4 z-[60]">
+        <Card className="w-full max-w-lg h-[90vh] flex flex-col !bg-slate-900 !border-slate-700 shadow-2xl">
             <form onSubmit={handleSubmit} className="flex flex-col h-full">
-            <h3 className="text-xl font-bold mb-4 flex-shrink-0">Edit User: {user.name}</h3>
-            <div className="flex-grow overflow-y-auto space-y-4 pr-2 border-y border-slate-700 py-4 custom-scrollbar">
+            
+            <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
+                <h3 className="text-xl font-bold text-white">Edit User Profile</h3>
+                <button type="button" onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+
+            <div className="flex-grow overflow-y-auto space-y-6 pr-2 custom-scrollbar">
                 
-                <div className="flex flex-col items-center mb-6">
-                    <div className="w-32 h-32 rounded-full bg-slate-800 border-4 border-slate-700 overflow-hidden relative group shadow-2xl">
-                        {photoPreview ? (
-                            <img src={photoPreview} alt="Profile" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center text-5xl text-slate-600 font-bold bg-slate-900">
-                                {name ? name.charAt(0) : '?'}
-                            </div>
-                        )}
-                        
-                        {/* Overlay Actions */}
-                        <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 gap-2 backdrop-blur-sm">
-                            <button 
-                                type="button"
-                                onClick={() => fileInputRef.current?.click()}
-                                className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 rounded-full text-[10px] font-bold text-white hover:bg-blue-500 transform hover:scale-105 transition-all shadow-lg w-24 justify-center"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M1 8.25a1.25 1.25 0 1 1 2.5 0v7.5a1.25 1.25 0 1 1-2.5 0v-7.5ZM11 3V1.7c0-.268.14-.526.395-.607A2 2 0 0 1 14 3c0 .995-.182 1.948-.514 2.826-.125.33-.428.525-.78.525H11v-3.25ZM11 7.75v8.5a1.25 1.25 0 1 1-2.5 0v-8.5a1.25 1.25 0 1 1 2.5 0ZM17.75 3a1.25 1.25 0 1 1-2.5 0v1.75a1.25 1.25 0 1 1 2.5 0V3Z" clipRule="evenodd" /><path d="M16.5 6.5a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Z" /></svg>
-                                Upload
-                            </button>
-                            <button 
-                                type="button"
-                                onClick={() => setShowCamera(true)}
-                                className="flex items-center gap-2 px-4 py-1.5 bg-purple-600 rounded-full text-[10px] font-bold text-white hover:bg-purple-500 transform hover:scale-105 transition-all shadow-lg w-24 justify-center"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M1 8a2 2 0 0 1 2-2h.93a2 2 0 0 0 1.664-.89l.812-1.22A2 2 0 0 1 8.07 3h3.86a2 2 0 0 1 1.664.89l.812 1.22A2 2 0 0 0 16.07 6H17a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8Zm13.5 3a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM10 14a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clipRule="evenodd" /></svg>
-                                Camera
-                            </button>
-                            {photoPreview && (
-                                <button 
-                                    type="button"
-                                    onClick={() => { setUploadedPhotoUrl(null); setPhotoPreview(null); }}
-                                    className="flex items-center gap-2 px-4 py-1.5 bg-red-600/80 rounded-full text-[10px] font-bold text-white hover:bg-red-500 transform hover:scale-105 transition-all shadow-lg w-24 justify-center"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" /></svg>
-                                    Remove
-                                </button>
+                {/* Profile Photo Section */}
+                <div className="flex flex-col items-center">
+                    <div className="relative group">
+                        <div className={`w-32 h-32 rounded-full overflow-hidden border-4 ${isProcessing ? 'border-blue-500' : 'border-slate-700'} bg-slate-800 shadow-lg transition-all duration-300`}>
+                            {photoPreview ? (
+                                <img 
+                                    src={photoPreview} 
+                                    alt="Profile" 
+                                    className={`w-full h-full object-cover transition-opacity duration-300 ${isProcessing ? 'opacity-50' : 'opacity-100'}`} 
+                                />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-4xl font-bold text-slate-600 bg-slate-800">
+                                    {name ? name.charAt(0).toUpperCase() : '?'}
+                                </div>
+                            )}
+                            
+                            {/* Processing Overlay */}
+                            {isProcessing && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-20">
+                                    <Spinner />
+                                </div>
                             )}
                         </div>
-                    </div>
-                    
-                    {isCompressing && <div className="flex justify-center my-2"><Spinner/> <span className="ml-2 text-xs text-blue-300">Processing image...</span></div>}
-                    {isUploading && <div className="flex justify-center my-2"><Spinner/> <span className="ml-2 text-xs text-blue-300">Uploading in background...</span></div>}
 
-                    <div className="flex gap-4 mt-2">
-                        <button type="button" onClick={() => fileInputRef.current?.click()} className="text-xs text-blue-400 hover:text-white transition-colors flex items-center gap-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path d="M9.25 13.25a.75.75 0 0 0 1.5 0V4.636l2.955 3.129a.75.75 0 0 0 1.09-1.03l-4.25-4.5a.75.75 0 0 0-1.09 0l-4.25 4.5a.75.75 0 1 0 1.09 1.03L9.25 4.636v8.614Z" /><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" /></svg>
+                        {/* Edit Badge */}
+                        {!isProcessing && (
+                            <div className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full border-4 border-slate-900 shadow-sm cursor-pointer hover:bg-blue-500 transition-colors" onClick={() => fileInputRef.current?.click()}>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" /></svg>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Status Text */}
+                    <div className="h-6 mt-2">
+                        {statusMessage && <p className="text-xs text-blue-400 font-medium animate-pulse">{statusMessage} {uploadProgress > 0 && Math.round(uploadProgress) + '%'}</p>}
+                    </div>
+
+                    {/* Actions Row */}
+                    <div className="flex gap-3 mt-1">
+                        <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isProcessing} className="text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full border border-slate-700 transition-all flex items-center gap-1 disabled:opacity-50">
                             Upload Photo
                         </button>
-                        <span className="text-slate-600">|</span>
-                        <button type="button" onClick={() => setShowCamera(true)} className="text-xs text-purple-400 hover:text-white transition-colors flex items-center gap-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M1 8a2 2 0 0 1 2-2h.93a2 2 0 0 0 1.664-.89l.812-1.22A2 2 0 0 1 8.07 3h3.86a2 2 0 0 1 1.664.89l.812 1.22A2 2 0 0 0 16.07 6H17a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8Zm13.5 3a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM10 14a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clipRule="evenodd" /></svg>
+                        <button type="button" onClick={() => setShowCamera(true)} disabled={isProcessing} className="text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full border border-slate-700 transition-all flex items-center gap-1 disabled:opacity-50">
                             Take Picture
                         </button>
+                        {photoPreview && (
+                            <button type="button" onClick={handleRemovePhoto} disabled={isProcessing} className="text-xs font-medium text-red-400 hover:text-red-300 bg-red-900/20 hover:bg-red-900/40 px-3 py-1.5 rounded-full border border-red-900/30 transition-all disabled:opacity-50">
+                                Remove
+                            </button>
+                        )}
                     </div>
 
                     <input 
                         type="file" 
                         ref={fileInputRef} 
                         className="hidden" 
-                        accept="image/jpeg, image/png, image/webp"
+                        accept="image/png, image/jpeg, image/webp"
                         onChange={handleFileChange}
                     />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label htmlFor="edit-name" className="block text-sm font-medium text-gray-300">Full Name</label>
-                        <input id="edit-name" type="text" value={name} onChange={e => setName(e.target.value)} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md" />
+                {/* Form Fields */}
+                <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label htmlFor="edit-name" className="block text-xs font-bold text-slate-400 uppercase mb-1">Full Name</label>
+                            <input id="edit-name" type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
+                        </div>
+                        <div>
+                            <label htmlFor="edit-role" className="block text-xs font-bold text-slate-400 uppercase mb-1">Role</label>
+                            <select id="edit-role" value={role} onChange={e => setRole(e.target.value as UserRole)} className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all capitalize">
+                                {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                        </div>
                     </div>
-                    <div>
-                        <label htmlFor="edit-role" className="block text-sm font-medium text-gray-300">Role</label>
-                        <select id="edit-role" value={role} onChange={e => setRole(e.target.value as UserRole)} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md capitalize">
-                            {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                        </select>
-                    </div>
+                    {renderRoleSpecificFields()}
                 </div>
-                {renderRoleSpecificFields()}
             </div>
-            <div className="flex-shrink-0 pt-4">
-                {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
-                <div className="flex justify-end gap-2">
-                <Button type="button" variant="secondary" onClick={onClose} disabled={loading || isCompressing || isUploading}>Cancel</Button>
-                <Button type="submit" disabled={loading || isCompressing || isUploading}>
-                    {loading ? 'Saving...' : isUploading ? 'Uploading Image...' : 'Save Changes'}
-                </Button>
+
+            <div className="flex-shrink-0 pt-6 mt-4 border-t border-slate-800">
+                {error && (
+                    <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg flex items-center gap-2 text-red-300 text-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 flex-shrink-0"><path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" /></svg>
+                        {error}
+                    </div>
+                )}
+                <div className="flex justify-end gap-3">
+                    <Button type="button" variant="secondary" onClick={onClose} disabled={loading || isProcessing}>Cancel</Button>
+                    <Button type="submit" disabled={loading || isProcessing}>
+                        {loading ? 'Saving Changes...' : isProcessing ? 'Uploading Image...' : 'Save Profile'}
+                    </Button>
                 </div>
             </div>
             </form>

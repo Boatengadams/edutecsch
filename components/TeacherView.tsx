@@ -25,6 +25,8 @@ import { ProgressDashboard } from './ProgressDashboard';
 import UserEditModal from './UserEditModal';
 import TeacherAITools from './TeacherAITools';
 import TeacherMyVoice from './TeacherMyVoice';
+// Import the shared component
+import AdminTerminalReports from './AdminTerminalReports';
 
 const getGrade = (score: number) => {
     if (isNaN(score)) return '-';
@@ -468,7 +470,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     const [allParents, setAllParents] = useState<UserProfile[]>([]);
     const [allTeachers, setAllTeachers] = useState<UserProfile[]>([]);
     const [groups, setGroups] = useState<Group[]>([]);
-    const [terminalReports, setTerminalReports] = useState<TerminalReport[]>([]);
     
     // UI states
     const [loading, setLoading] = useState(true);
@@ -495,12 +496,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
     const [attendanceData, setAttendanceData] = useState<Record<string, AttendanceStatus>>({});
     const [isSavingAttendance, setIsSavingAttendance] = useState(false);
-
-    // Terminal Reports state
-    const [reportClass, setReportClass] = useState('');
-    const [reportSubject, setReportSubject] = useState('');
-    const [marks, setMarks] = useState<Record<string, Partial<TerminalReportMark>>>({});
-    const [isSavingMarks, setIsSavingMarks] = useState(false);
 
     // Filter states
     const [classFilter, setClassFilter] = useState('all');
@@ -532,25 +527,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         const subjectsMap = userProfile.subjectsByClass;
         return Object.values(subjectsMap).filter(Array.isArray).flat();
     }, [userProfile?.subjectsByClass]);
-
-    const subjectsForReport = useMemo<string[]>(() => {
-        const subs = userProfile?.subjectsByClass?.[reportClass];
-        return Array.isArray(subs) ? subs : [];
-    }, [userProfile?.subjectsByClass, reportClass]);
-    
-    useEffect(() => {
-        if (teacherClasses.length > 0 && !reportClass) {
-            setReportClass(teacherClasses[0]);
-        }
-    }, [teacherClasses, reportClass]);
-
-    useEffect(() => {
-        if (subjectsForReport.length > 0 && !subjectsForReport.includes(reportSubject)) {
-            setReportSubject(subjectsForReport[0]);
-        } else if (subjectsForReport.length === 0) {
-            setReportSubject('');
-        }
-    }, [subjectsForReport, reportSubject]);
 
     const subjectsForFilter = useMemo<string[]>(() => {
         if (!userProfile?.subjectsByClass) return [];
@@ -620,20 +596,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         
         unsubscribers.push(db.collection('groups').where('teacherId', '==', user.uid).onSnapshot(snap => setGroups(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group)))));
             
-        if (teacherClasses.length > 0 && teacherSubjects.length > 0) {
-            unsubscribers.push(
-                db.collection('terminalReports')
-                    .where('classId', 'in', teacherClasses)
-                    .onSnapshot(snap => {
-                        const reports = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TerminalReport));
-                        const relevantReports = reports.filter(report => 
-                             Object.keys(report.subjects || {}).some(subject => teacherSubjects.includes(subject))
-                        );
-                        setTerminalReports(relevantReports);
-                    })
-            );
-        }
-
         setLoading(false);
 
         return () => unsubscribers.forEach(unsub => unsub());
@@ -699,21 +661,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             return () => unsub();
         }
     }, [activeTab, attendanceDate, userProfile?.classTeacherOf]);
-
-    useEffect(() => {
-        if (activeTab === 'terminal_reports' && reportClass && reportSubject && schoolSettings) {
-            const academicYear = schoolSettings.academicYear?.replace(/\//g, '-') || '';
-            const term = schoolSettings.currentTerm || 1;
-            const reportId = `${academicYear}_${term}_${reportClass}`;
-
-            const report = terminalReports.find(r => r.id === reportId);
-            if (report && report.subjects && report.subjects[reportSubject]) {
-                setMarks(report.subjects[reportSubject].marks || {});
-            } else {
-                setMarks({});
-            }
-        }
-    }, [activeTab, reportClass, reportSubject, terminalReports, schoolSettings]);
 
     const handleStartGrading = (submission: Submission) => {
         setIsGrading(submission.id);
@@ -921,161 +868,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             return acc;
         }, {} as Record<string, AttendanceStatus>);
         setAttendanceData(newAttendanceData);
-    };
-
-    const handleMarkChange = (studentId: string, field: keyof TerminalReportMark, value: string) => {
-        const numericValue = value === '' ? undefined : Number(value);
-        setMarks(prev => ({
-            ...prev,
-            [studentId]: {
-                ...prev[studentId],
-                [field]: numericValue
-            }
-        }));
-    };
-    
-    const handleAutoFillScores = () => {
-        const studentsInClass = students.filter(s => s.class === reportClass);
-        const assignmentsForSubject = assignments.filter(a => a.classId === reportClass && a.subject === reportSubject);
-        const submissionsForSubject = submissions.filter(s => s.classId === reportClass && assignmentsForSubject.some(a => a.id === s.assignmentId) && s.grade);
-        const groupsForSubject = groups.filter(g => g.classId === reportClass && g.subject === reportSubject && g.grade);
-
-        const newMarks: Record<string, Partial<TerminalReportMark>> = {};
-
-        studentsInClass.forEach(student => {
-            const studentSubmissions = submissionsForSubject.filter(s => s.studentId === student.uid);
-
-            let totalPercentageSum = 0;
-            const totalAssignmentsCount = assignmentsForSubject.length;
-
-            if (totalAssignmentsCount > 0) {
-                assignmentsForSubject.forEach(assignment => {
-                    const submission = studentSubmissions.find(s => s.assignmentId === assignment.id);
-                    if (submission && submission.grade) {
-                        let score: number | null = null;
-                        let maxScore: number | null = null;
-
-                        if (submission.grade.includes('/')) {
-                            const parts = submission.grade.split('/').map(p => parseFloat(p.trim()));
-                            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && parts[1] > 0) {
-                                score = parts[0];
-                                maxScore = parts[1];
-                            }
-                        } else if (!isNaN(parseFloat(submission.grade))) {
-                            score = parseFloat(submission.grade);
-                            maxScore = 20; 
-                        }
-
-                        if (score !== null && maxScore !== null && maxScore > 0) {
-                            totalPercentageSum += (score / maxScore);
-                        }
-                    }
-                });
-                
-                const averagePercentage = totalPercentageSum / totalAssignmentsCount;
-                const assignmentScore = averagePercentage * 15; 
-
-                newMarks[student.uid] = {
-                    ...marks[student.uid],
-                    studentName: student.name,
-                    indivTest: parseFloat(assignmentScore.toFixed(1)),
-                };
-            }
-
-            const studentGroup = groupsForSubject.find(g => g.memberUids.includes(student.uid));
-            if (studentGroup && studentGroup.grade) {
-                 const groupWorkScore = parseFloat(studentGroup.grade);
-                 if (!isNaN(groupWorkScore)) {
-                     newMarks[student.uid] = {
-                        ...newMarks[student.uid],
-                        studentName: student.name,
-                        groupWork: parseFloat(groupWorkScore.toFixed(1)),
-                    };
-                 }
-            }
-        });
-        setMarks(newMarks);
-        setToast({message: "Scores from assignments and group work have been filled in.", type: "success"});
-    };
-
-    const calculateTotalsAndSave = async () => {
-        if (!reportClass || !reportSubject || !schoolSettings || !user) {
-            setToast({ message: "Missing required report information.", type: 'error' });
-            return;
-        }
-        setIsSavingMarks(true);
-
-        const studentsInClass = students.filter(s => s.class === reportClass);
-        const calculatedMarks: Record<string, TerminalReportMark> = {};
-        const studentTotals: { studentId: string, total: number }[] = [];
-
-        studentsInClass.forEach(student => {
-            const studentMark = marks[student.uid] || {};
-            
-            // FIX: Default undefined values to 0 to prevent Firestore "Unsupported field value: undefined" error
-            const indivTest = studentMark.indivTest || 0;
-            const groupWork = studentMark.groupWork || 0;
-            const classTest = studentMark.classTest || 0;
-            const project = studentMark.project || 0;
-            const endOfTermExams = studentMark.endOfTermExams || 0;
-
-            const totalClassScore = indivTest + groupWork + classTest + project;
-            const scaledClassScore = (totalClassScore / 60) * 50;
-            const scaledExamScore = (endOfTermExams / 100) * 50;
-            const overallTotal = scaledClassScore + scaledExamScore;
-            
-            calculatedMarks[student.uid] = {
-                studentName: student.name,
-                indivTest,
-                groupWork,
-                classTest,
-                project,
-                endOfTermExams,
-                totalClassScore: parseFloat(totalClassScore.toFixed(1)),
-                scaledClassScore: parseFloat(scaledClassScore.toFixed(1)),
-                scaledExamScore: parseFloat(scaledExamScore.toFixed(1)),
-                overallTotal: parseFloat(overallTotal.toFixed(1)),
-                grade: getGrade(overallTotal),
-            };
-            studentTotals.push({ studentId: student.uid, total: overallTotal });
-        });
-        
-        studentTotals.sort((a, b) => b.total - a.total);
-        studentTotals.forEach((item, index) => {
-            let position = index + 1;
-            if (index > 0 && item.total === studentTotals[index - 1].total) {
-                position = calculatedMarks[studentTotals[index - 1].studentId].position || position;
-            }
-            calculatedMarks[item.studentId].position = position;
-        });
-
-        const academicYear = schoolSettings.academicYear.replace(/\//g, '-');
-        const term = schoolSettings.currentTerm || 1;
-        const reportId = `${academicYear}_${term}_${reportClass}`;
-        const reportRef = db.collection('terminalReports').doc(reportId);
-
-        try {
-            await reportRef.set({
-                id: reportId,
-                academicYear: schoolSettings.academicYear,
-                term,
-                classId: reportClass,
-                subjects: {
-                    [reportSubject]: {
-                        teacherId: user.uid,
-                        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        marks: calculatedMarks
-                    }
-                }
-            }, { merge: true });
-
-            setMarks(calculatedMarks);
-            setToast({ message: 'Marks saved successfully!', type: 'success' });
-        } catch (err: any) {
-            setToast({ message: `Failed to save marks: ${err.message}`, type: 'error' });
-        } finally {
-            setIsSavingMarks(false);
-        }
     };
 
     const handleDeleteGroup = async () => {
@@ -1344,88 +1136,17 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                      </Card>
                 );
             case 'terminal_reports':
-                const studentsForReport = students.filter(s => s.class === reportClass);
                 return (
-                    <Card>
-                        <div className="flex justify-between items-center mb-6">
-                             <h2 className="text-3xl font-bold">Terminal Reports</h2>
-                             <div className="flex items-center gap-4">
-                                <select value={reportClass} onChange={e => setReportClass(e.target.value)} className="p-2 bg-slate-700 rounded-md">
-                                    {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
-                                <select value={reportSubject} onChange={e => setReportSubject(e.target.value)} disabled={subjectsForReport.length === 0} className="p-2 bg-slate-700 rounded-md">
-                                    {subjectsForReport.length > 0 ? subjectsForReport.map(s => <option key={s} value={s}>{s}</option>) : <option>No subjects for class</option>}
-                                </select>
-                             </div>
-                        </div>
-                        <div className="flex gap-2 mb-4">
-                            <Button onClick={calculateTotalsAndSave} disabled={isSavingMarks}>{isSavingMarks ? 'Saving...' : 'Calculate & Save'}</Button>
-                            <Button variant="secondary" onClick={handleAutoFillScores}>Auto-fill Scores</Button>
-                        </div>
-                         <div className="overflow-x-auto">
-                             <table className="min-w-full text-sm">
-                                 <thead className="bg-slate-700">
-                                    <tr className="text-center">
-                                        <th rowSpan={2} className="p-2 text-left border-r border-slate-600">Student Name</th>
-                                        <th colSpan={5} className="p-2 border-b border-slate-600">Class Score (Weight 50%)</th>
-                                        <th rowSpan={2} className="p-2 border-x border-slate-600">End of Term Exam (100)</th>
-                                        <th colSpan={5} className="p-2 border-b border-slate-600">Final Marks</th>
-                                    </tr>
-                                    <tr className="text-xs">
-                                        <th className="p-2 font-normal border-r border-slate-600">Assignments (15)</th>
-                                        <th className="p-2 font-normal border-r border-slate-600">Group Work (15)</th>
-                                        <th className="p-2 font-normal border-r border-slate-600">Class Test (15)</th>
-                                        <th className="p-2 font-normal border-r border-slate-600">Project (15)</th>
-                                        <th className="p-2 font-bold border-r border-slate-600">Total (60)</th>
-                                        <th className="p-2 font-bold border-r border-slate-600">Scaled Class (50)</th>
-                                        <th className="p-2 font-bold border-r border-slate-600">Scaled Exam (50)</th>
-                                        <th className="p-2 font-bold border-r border-slate-600">Overall (100)</th>
-                                        <th className="p-2 font-bold border-r border-slate-600">Grade</th>
-                                        <th className="p-2 font-bold">Position</th>
-                                    </tr>
-                                 </thead>
-                                 <tbody className="divide-y divide-slate-800">
-                                    {studentsForReport.map(student => {
-                                        const mark = marks[student.uid] || {};
-                                        // FIX: Default undefined values to 0 to prevent Firestore errors
-                                        const indivTest = mark.indivTest || 0;
-                                        const groupWork = mark.groupWork || 0;
-                                        const classTest = mark.classTest || 0;
-                                        const project = mark.project || 0;
-                                        const endOfTermExams = mark.endOfTermExams || 0;
-
-                                        const totalClassScore = indivTest + groupWork + classTest + project;
-                                        const scaledClassScore = (totalClassScore / 60) * 50;
-                                        const scaledExamScore = (endOfTermExams / 100) * 50;
-                                        const overallTotal = scaledClassScore + scaledExamScore;
-                                        const grade = getGrade(overallTotal);
-
-                                        let gradeColor = 'text-gray-200';
-                                        if (grade === 'A' || grade === 'B+') gradeColor = 'text-green-400';
-                                        else if (grade === 'F') gradeColor = 'text-red-400';
-                                        else if (grade === 'D' || grade === 'D+') gradeColor = 'text-yellow-400';
-
-                                        return (
-                                            <tr key={student.uid} className="even:bg-slate-800/50">
-                                                <td className="p-2 font-semibold text-left">{student.name}</td>
-                                                <td><input type="number" step="0.1" min="0" max="15" value={mark.indivTest ?? ''} onChange={e => handleMarkChange(student.uid, 'indivTest', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td><input type="number" step="0.1" min="0" max="15" value={mark.groupWork ?? ''} onChange={e => handleMarkChange(student.uid, 'groupWork', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td><input type="number" step="0.1" min="0" max="15" value={mark.classTest ?? ''} onChange={e => handleMarkChange(student.uid, 'classTest', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td><input type="number" step="0.1" min="0" max="15" value={mark.project ?? ''} onChange={e => handleMarkChange(student.uid, 'project', e.target.value)} className="w-20 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td className="p-2 text-center font-semibold bg-slate-900/30">{totalClassScore.toFixed(1)}</td>
-                                                <td><input type="number" step="0.1" min="0" max="100" value={mark.endOfTermExams ?? ''} onChange={e => handleMarkChange(student.uid, 'endOfTermExams', e.target.value)} className="w-24 p-1 bg-slate-800 rounded text-center"/></td>
-                                                <td className="p-2 text-center font-bold bg-slate-900/30">{scaledClassScore.toFixed(1)}</td>
-                                                <td className="p-2 text-center font-bold bg-slate-900/30">{scaledExamScore.toFixed(1)}</td>
-                                                <td className="p-2 text-center font-bold text-lg bg-slate-900/30">{overallTotal.toFixed(1)}</td>
-                                                <td className={`p-2 text-center font-bold text-lg bg-slate-900/30 ${gradeColor}`}>{grade}</td>
-                                                <td className="p-2 text-center font-bold text-lg bg-slate-900/30">{mark.position}</td>
-                                            </tr>
-                                        );
-                                    })}
-                                 </tbody>
-                             </table>
-                         </div>
-                    </Card>
+                    <AdminTerminalReports 
+                        schoolSettings={schoolSettings} 
+                        user={user} 
+                        teacherMode={true}
+                        allowedClasses={teacherClasses}
+                        allStudents={students} // Pass already fetched students to optimize
+                        assignments={assignments}
+                        submissions={submissions}
+                        groups={groups}
+                    />
                 );
             case 'past_questions':
                 return <BECEPastQuestionsView />;

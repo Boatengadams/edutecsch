@@ -107,7 +107,18 @@ service cloud.firestore {
         ||
         (
           isSignedIn()
-          && request.auth.uid == userId
+          && (
+            (request.auth.uid == userId) || 
+            (
+                // Allow Teachers to update Students in their classes
+                getCaller().data.role == 'teacher' &&
+                resource.data.role == 'student' &&
+                (
+                    resource.data.class in getCaller().data.classesTaught ||
+                    resource.data.class == getCaller().data.classTeacherOf
+                )
+            )
+          )
           && isSafeUserUpdate()
         );
 
@@ -521,6 +532,13 @@ service cloud.firestore {
     match /publishedFlyers/{flyerId} {
       allow read: if true; // Visible to everyone
       allow create, update, delete: if isCallerAdmin();
+    }
+    
+    // ---------------------
+    // CORRECTION UPLOADS
+    // ---------------------
+    match /corrections/{correctionId} {
+        allow read, write: if isSignedIn();
     }
 
 
