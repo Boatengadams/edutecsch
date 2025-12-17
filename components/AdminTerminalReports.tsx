@@ -69,6 +69,9 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
     const [loading, setLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [pdfGeneratingProgress, setPdfGeneratingProgress] = useState<string | null>(null);
+    
+    // Feature Toggle
+    const [showPosition, setShowPosition] = useState(true);
 
     // Sorting & Ordering
     const [orderedUids, setOrderedUids] = useState<string[]>([]);
@@ -336,14 +339,16 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
     }, [fullReport]);
 
     const handleMarkChange = (studentId: string, field: keyof TerminalReportMark, value: string) => {
-        if (!canEditSubject) return; // double check
+        if (!canEditSubject) return; 
 
-        const numericValue = value === '' ? undefined : Number(value);
+        // Handle string for remarks, number for others
+        const val = field === 'remarks' ? value : (value === '' ? undefined : Number(value));
+        
         setMarks(prev => ({
             ...prev,
             [studentId]: {
                 ...prev[studentId],
-                [field]: numericValue
+                [field]: val
             }
         }));
     };
@@ -371,6 +376,7 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
             const classTest = studentMark.classTest || 0;
             const project = studentMark.project || 0;
             const endOfTermExams = studentMark.endOfTermExams || 0;
+            const remarks = studentMark.remarks || '';
 
             const totalClassScore = indivTest + groupWork + classTest + project;
             const scaledClassScore = (totalClassScore / 60) * 50;
@@ -389,11 +395,12 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
                 scaledExamScore: parseFloat(scaledExamScore.toFixed(1)),
                 overallTotal: parseFloat(overallTotal.toFixed(1)),
                 grade: getGrade(overallTotal),
+                remarks, // Save remarks
             };
             studentTotals.push({ studentId: student.uid, total: overallTotal });
         });
         
-        // Subject Position Calculation (Not Overall Class Position)
+        // Subject Position Calculation
         studentTotals.sort((a, b) => b.total - a.total);
         studentTotals.forEach((item, index) => {
             let position = index + 1;
@@ -502,8 +509,6 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
 
                 const imgData = canvas.toDataURL('image/png');
                 
-                // Calculate dimensions to fit A4 width, maintaining aspect ratio
-                // Add margins (e.g. 10mm)
                 const margin = 10;
                 const imgWidth = width - (margin * 2); 
                 const imgHeight = (canvas.height * imgWidth) / canvas.width;
@@ -568,6 +573,12 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
                     </div>
                     
                     <div className="hidden lg:block h-8 w-px bg-slate-700 mx-2"></div>
+                    
+                    {/* Position Toggle */}
+                    <div className="flex items-center gap-2 px-3 py-2 bg-slate-800 rounded-lg border border-slate-700">
+                        <input type="checkbox" id="togglePos" checked={showPosition} onChange={(e) => setShowPosition(e.target.checked)} className="h-4 w-4 rounded border-gray-600 bg-slate-700 text-blue-500 focus:ring-blue-600"/>
+                        <label htmlFor="togglePos" className="text-sm text-gray-300 font-medium cursor-pointer">Show Overall Pos.</label>
+                    </div>
 
                     <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="w-full sm:w-auto flex-grow p-2 bg-slate-800 rounded-lg border border-slate-600 text-sm outline-none">
                         {classesToDisplay.map(c => <option key={c} value={c}>{c}</option>)}
@@ -636,7 +647,7 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
                             </div>
 
                             <div className="overflow-auto custom-scrollbar flex-grow relative h-[calc(100dvh-340px)] md:h-auto">
-                                <div className="min-w-[1000px]">
+                                <div className="min-w-[1200px]">
                                     <table className="w-full text-sm border-collapse">
                                         <thead className="bg-gray-100 sticky top-0 z-20 shadow-sm">
                                             <tr>
@@ -646,8 +657,8 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
                                                 <th rowSpan={2} className="p-2 border-b border-r border-gray-300 text-center w-20 font-bold bg-gray-50 text-gray-800">CLASS (50%)</th>
                                                 <th rowSpan={2} className="p-2 border-b border-r border-gray-300 text-center w-24 font-bold bg-purple-50 text-purple-800">EXAM (100)</th>
                                                 <th rowSpan={2} className="p-2 border-b border-r border-gray-300 text-center w-20 font-bold bg-gray-50 text-gray-800">EXAM (50%)</th>
-                                                <th colSpan={3} className="p-2 border-b border-gray-300 text-center bg-green-50 text-green-800 font-bold">FINAL GRADING</th>
-                                                {(isClassTeacher || !teacherMode) && (
+                                                <th colSpan={showPosition ? 4 : 3} className="p-2 border-b border-gray-300 text-center bg-green-50 text-green-800 font-bold">FINAL GRADING</th>
+                                                {(showPosition && (isClassTeacher || !teacherMode)) && (
                                                     <th rowSpan={2} className="p-2 border-b border-l-2 border-gray-300 text-center w-24 font-black bg-indigo-50 text-indigo-800">OVERALL POS.</th>
                                                 )}
                                             </tr>
@@ -658,7 +669,8 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
                                                 <th className="p-2 border-b border-r border-gray-300 font-medium text-center w-20">PROJECT</th>
                                                 <th className="p-2 border-b border-r border-gray-300 font-bold text-black bg-white">TOTAL (100)</th>
                                                 <th className="p-2 border-b border-r border-gray-300 font-bold text-black bg-white">GRADE</th>
-                                                <th className="p-2 border-b border-gray-300 font-bold text-black bg-white">POS.</th>
+                                                <th className="p-2 border-b border-r border-gray-300 font-bold text-black bg-white">REMARKS</th>
+                                                {showPosition && <th className="p-2 border-b border-gray-300 font-bold text-black bg-white">POS.</th>}
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-200 bg-white">
@@ -696,8 +708,18 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
                                                         <td className="p-2 text-center font-medium border-r border-gray-300 text-gray-700 bg-gray-100 text-sm">{scaledExam.toFixed(1)}</td>
                                                         <td className="p-2 text-center font-black border-r border-gray-300 text-black text-base bg-gray-50">{overallTotal.toFixed(1)}</td>
                                                         <td className={`p-2 text-center text-base border-r border-gray-300 bg-gray-50 ${gradeColor}`}>{grade}</td>
-                                                        <td className="p-2 text-center font-bold text-black bg-gray-50 text-sm">{mark.position || '-'}</td>
-                                                        {(isClassTeacher || !teacherMode) && (
+                                                        <td className="p-1 border-r border-gray-300">
+                                                            <input 
+                                                                type="text" 
+                                                                disabled={!canEditSubject} 
+                                                                value={mark.remarks || ''} 
+                                                                onChange={e => handleMarkChange(student.uid, 'remarks', e.target.value)}
+                                                                className="w-full h-10 bg-transparent text-xs px-2 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none rounded text-black border border-transparent hover:border-gray-300 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed" 
+                                                                placeholder={getGrade(overallTotal) === 'A' ? 'Excellent' : '-'} 
+                                                            />
+                                                        </td>
+                                                        {showPosition && <td className="p-2 text-center font-bold text-black bg-gray-50 text-sm">{mark.position || '-'}</td>}
+                                                        {(showPosition && (isClassTeacher || !teacherMode)) && (
                                                             <td className="p-2 text-center font-black text-indigo-700 bg-indigo-50 border-l-2 border-gray-300">
                                                                 {overallRankData ? overallRankData.position : '-'}
                                                             </td>
@@ -741,6 +763,7 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
                                                         ranking={classRanking[student.uid] || null} 
                                                         classSize={students.length} 
                                                         attendance={attendanceSummary[student.uid]}
+                                                        showPosition={showPosition}
                                                     />
                                                 </div>
                                             </div>

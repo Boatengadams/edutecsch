@@ -26,6 +26,11 @@ const gradeToNumeric = (grade?: string): number | null => {
     return null;
 };
 
+const normalizeSubject = (subject: string) => {
+    if (subject === 'Science') return 'Integrated Science';
+    return subject;
+};
+
 const TeacherProgressDashboard: React.FC<TeacherProgressDashboardProps> = ({ students, assignments, submissions, teacherClasses }) => {
     const [selectedClass, setSelectedClass] = useState(teacherClasses[0] || 'all');
 
@@ -51,14 +56,16 @@ const TeacherProgressDashboard: React.FC<TeacherProgressDashboardProps> = ({ stu
             : 0;
 
         const performanceBySubject = relevantAssignments.reduce((acc, assignment) => {
-            if (!acc[assignment.subject]) {
-                acc[assignment.subject] = { grades: [] };
+            const subject = normalizeSubject(assignment.subject);
+            
+            if (!acc[subject]) {
+                acc[subject] = { grades: [] };
             }
             const subjectSubmissions = gradedSubmissions.filter(s => s.assignmentId === assignment.id);
             subjectSubmissions.forEach(sub => {
                 const grade = gradeToNumeric(sub.grade);
                 if (grade !== null) {
-                    acc[assignment.subject].grades.push(grade);
+                    acc[subject].grades.push(grade);
                 }
             });
             return acc;

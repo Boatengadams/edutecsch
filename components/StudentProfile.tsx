@@ -27,6 +27,12 @@ const gradeToNumeric = (grade?: string): number | null => {
     return null;
 };
 
+// Helper for normalizing subject names
+const normalizeSubject = (subject: string) => {
+    if (subject === 'Science') return 'Integrated Science';
+    return subject;
+};
+
 interface StudentProfileProps {
     userProfile: UserProfile;
     assignments: Assignment[];
@@ -95,7 +101,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ userProfile, assignment
         .filter((item): item is { sub: Submission; assign: Assignment } => !!item.assign)
         .sort((a, b) => a.assign.createdAt.toMillis() - b.assign.createdAt.toMillis())
         .map(item => ({
-            label: item.assign.title,
+            label: item.assign.title, // Keep title for specific assignment history
             value: gradeToNumeric(item.sub.grade)!,
         }));
 

@@ -18,7 +18,7 @@ const getOrdinal = (n: number) => {
     return s[(v - 20) % 10] || s[v] || s[0];
 };
 
-const CORE_SUBJECTS = ['English Language', 'Mathematics', 'Integrated Science', 'Science', 'Social Studies', 'ICT', 'Computing', 'RME', 'Our World Our People'];
+const CORE_SUBJECTS = ['English Language', 'Mathematics', 'Integrated Science', 'Social Studies', 'ICT', 'Computing', 'RME', 'Our World Our People'];
 
 interface RankingData {
     position: number;
@@ -34,9 +34,10 @@ interface StudentReportCardProps {
     classSize: number;
     currentMarks?: Record<string, Partial<TerminalReportMark>>; 
     attendance?: { present: number; total: number };
+    showPosition?: boolean;
 }
 
-const StudentReportCard: React.FC<StudentReportCardProps> = ({ student, report, schoolSettings, ranking, classSize, currentMarks, attendance }) => {
+const StudentReportCard: React.FC<StudentReportCardProps> = ({ student, report, schoolSettings, ranking, classSize, currentMarks, attendance, showPosition = true }) => {
     
     const studentSubjects = useMemo(() => {
         let subs: ({ subject: string } & Partial<TerminalReportMark>)[] = [];
@@ -55,21 +56,30 @@ const StudentReportCard: React.FC<StudentReportCardProps> = ({ student, report, 
             }).filter((s): s is { subject: string } & TerminalReportMark => s !== null && s.overallTotal !== undefined);
         }
 
-        // Normalize subject names
-        const normalizedSubs: typeof subs = [];
-        const seenSubjects = new Set<string>();
-        const isJHS = student.class && student.class.toUpperCase().includes('JHS');
+        // Normalize subject names (Merge 'Science' into 'Integrated Science')
+        const subMap = new Map<string, typeof subs[0]>();
 
         subs.forEach(s => {
             let subjectName = s.subject;
-            if (subjectName === 'Science' || subjectName === 'Integrated Science') {
-                subjectName = isJHS ? 'Integrated Science' : 'Science';
+            // Force legacy Science to Integrated Science
+            if (subjectName === 'Science') {
+                subjectName = 'Integrated Science';
             }
-            if (!seenSubjects.has(subjectName)) {
-                normalizedSubs.push({ ...s, subject: subjectName });
-                seenSubjects.add(subjectName);
+
+            if (subMap.has(subjectName)) {
+                // If we already have an entry for this subject, prioritize the one with more complete data (e.g. standard name)
+                const existing = subMap.get(subjectName)!;
+                // If the existing one is just a placeholder or the new one looks newer/better, overwrite. 
+                // For now, assume if the current iteration is the actual "Integrated Science" key, it takes precedence.
+                if (s.subject === 'Integrated Science' || (!existing.grade && s.grade)) {
+                    subMap.set(subjectName, { ...s, subject: subjectName });
+                }
+            } else {
+                subMap.set(subjectName, { ...s, subject: subjectName });
             }
         });
+
+        const normalizedSubs = Array.from(subMap.values());
 
         // Sort: Core subjects first, then alphabetical
         return normalizedSubs.sort((a, b) => {
@@ -146,12 +156,14 @@ const StudentReportCard: React.FC<StudentReportCardProps> = ({ student, report, 
                         <span className="text-[10px] uppercase text-slate-400 print:text-black font-bold tracking-wider">No. on Roll</span>
                         <span className="font-semibold text-slate-700 print:text-black">{classSize}</span>
                     </div>
-                    <div className="flex flex-col border-b border-slate-200 print:border-black pb-1">
-                        <span className="text-[10px] uppercase text-slate-400 print:text-black font-bold tracking-wider">Position</span>
-                        <span className="font-black text-blue-600 print:text-black text-lg">
-                            {ranking ? `${ranking.position}${getOrdinal(ranking.position)}` : '-'}
-                        </span>
-                    </div>
+                    {showPosition && (
+                        <div className="flex flex-col border-b border-slate-200 print:border-black pb-1">
+                            <span className="text-[10px] uppercase text-slate-400 print:text-black font-bold tracking-wider">Position</span>
+                            <span className="font-black text-blue-600 print:text-black text-lg">
+                                {ranking ? `${ranking.position}${getOrdinal(ranking.position)}` : '-'}
+                            </span>
+                        </div>
+                    )}
                     <div className="flex flex-col border-b border-slate-200 print:border-black pb-1">
                         <span className="text-[10px] uppercase text-slate-400 print:text-black font-bold tracking-wider">Next Term</span>
                         <span className="font-semibold italic text-slate-700 print:text-black">....................</span>
