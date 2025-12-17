@@ -1,9 +1,9 @@
 
-
+// ... (imports remain same)
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuthentication } from '../hooks/useAuth';
 import { db, firebase, storage } from '../services/firebase';
-import { UserProfile, Assignment, Submission, Notification, SchoolEvent, Timetable, AttendanceRecord, Group, GroupMessage, PublishedFlyer, LiveLesson, UserRole, TeachingMaterial, GES_SUBJECTS, GES_STANDARD_CURRICULUM, Correction } from '../types';
+import { UserProfile, Assignment, Submission, Notification, SchoolEvent, Timetable, AttendanceRecord, Group, GroupMessage, PublishedFlyer, LiveLesson, UserRole, TeachingMaterial, GES_SUBJECTS, GES_STANDARD_CURRICULUM, Correction, TerminalReport } from '../types';
 import Card from './common/Card';
 import Spinner from './common/Spinner';
 import Button from './common/Button';
@@ -19,7 +19,9 @@ import StudentStudyMode from './StudentStudyMode';
 import ChatInput from './common/ChatInput';
 import ScienceLab from './ScienceLab/ScienceLab';
 import FlyerCard from './common/FlyerCard';
+import StudentReportCard from './common/StudentReportCard';
 
+// ... (helpers QUOTES, getGreeting, gradeToNumeric, FeedItem types remain same)
 interface StudentViewProps {
   isSidebarExpanded: boolean;
   setIsSidebarExpanded: (isExpanded: boolean) => void;
@@ -81,6 +83,11 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [publishedFlyers, setPublishedFlyers] = useState<PublishedFlyer[]>([]);
   const [selectedFlyer, setSelectedFlyer] = useState<PublishedFlyer | null>(null);
+  const [terminalReports, setTerminalReports] = useState<TerminalReport[]>([]);
+  const [viewingReport, setViewingReport] = useState<TerminalReport | null>(null);
+  const [calculatedRanking, setCalculatedRanking] = useState<any>(null);
+  const [reportClassSize, setReportClassSize] = useState(0);
+  const [reportAttendance, setReportAttendance] = useState<{ present: number, total: number } | undefined>(undefined);
   
   // New State for Teaching Materials
   const [teachingMaterials, setTeachingMaterials] = useState<TeachingMaterial[]>([]);
@@ -209,8 +216,19 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
         });
     }));
     unsubscribers.push(...unsubFlyers);
+    
+    // 9. Terminal Reports
+    if (userProfile.class) {
+        const reportsQuery = db.collection('terminalReports')
+            .where('classId', '==', userProfile.class)
+            .where('published', '==', true);
+            
+        unsubscribers.push(reportsQuery.onSnapshot(snap => {
+             setTerminalReports(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TerminalReport)));
+        }));
+    }
 
-    // 9. Teachers (for messaging)
+    // 10. Teachers (for messaging)
     if (userProfile.class) {
         const teacherQuery = db.collection('users').where('role', '==', 'teacher')
             .where('classesTaught', 'array-contains', userProfile.class);
@@ -219,7 +237,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
         }));
     }
     
-    // 10. Teaching Materials (Fetch where target contains class OR 'All')
+    // 11. Teaching Materials (Fetch where target contains class OR 'All')
     // Since firestore can't do OR on array-contains easily, we fetch with one array-contains-any query
     if (userProfile.class) {
         const materialsQuery = db.collection('teachingMaterials')
@@ -235,6 +253,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
     return () => unsubscribers.forEach(unsub => unsub());
   }, [user, userProfile]);
 
+  // ... (existing effects for chat scrolling and AI context)
   useEffect(() => {
       groupMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [groupMessages]);
@@ -277,6 +296,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
       return GES_SUBJECTS; // Fallback if class not found or undefined
   }, [userProfile?.class]);
 
+  // ... (existing handlers handleAssignmentClick, handleSubmitAssignment, handleSubmitCorrection, handleSendGroupMessage) ...
   const handleAssignmentClick = (assignment: Assignment) => {
       setViewingAssignment(assignment);
       setTextSubmission('');
@@ -466,6 +486,46 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
       }
   };
   
+  const handleViewReport = (report: TerminalReport) => {
+      if (!user) return;
+      // Calculate ranking client-side based on the full report
+      const studentTotals: Record<string, { total: number, count: number }> = {};
+      
+      Object.values(report.subjects).forEach((subjectData: any) => {
+          if (subjectData.marks) {
+              Object.entries(subjectData.marks).forEach(([uid, mark]: [string, any]) => {
+                  if (mark.overallTotal !== undefined) {
+                      if (!studentTotals[uid]) studentTotals[uid] = { total: 0, count: 0 };
+                      studentTotals[uid].total += (mark.overallTotal || 0);
+                      studentTotals[uid].count += 1;
+                  }
+              });
+          }
+      });
+
+      const sortedUids = Object.keys(studentTotals).sort((a, b) => studentTotals[b].total - studentTotals[a].total);
+      const index = sortedUids.indexOf(user.uid);
+      
+      const myTotal = studentTotals[user.uid];
+      if (myTotal) {
+          setCalculatedRanking({
+              position: index + 1,
+              totalScore: myTotal.total,
+              average: myTotal.count > 0 ? myTotal.total / myTotal.count : 0
+          });
+      } else {
+          setCalculatedRanking(null);
+      }
+      
+      setReportClassSize(sortedUids.length);
+      
+      // Calculate attendance for this student up to now (simple count)
+      const present = attendanceRecords.filter(r => r.records[user.uid] === 'Present' || r.records[user.uid] === 'Late').length;
+      setReportAttendance({ present, total: attendanceRecords.length });
+
+      setViewingReport(report);
+  };
+  
   const filteredMaterials = useMemo(() => {
       if (materialSubjectFilter === 'All') {
           // If 'All' is selected, show materials that match ANY of the student's curriculum subjects
@@ -529,6 +589,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
       { key: 'study_mode', label: 'Study Mode', icon: '🧠' },
       { key: 'resources', label: 'Study Materials', icon: '📂' },
       { key: 'messages', label: <span className="flex justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: '💬' },
+      { key: 'terminal_reports', label: 'Reports', icon: '📊' },
       { key: 'profile', label: 'Profile', icon: '👤' },
       { key: 'timetable', label: 'Timetable', icon: '🗓️' },
       { key: 'attendance', label: 'Attendance', icon: '📅' },
@@ -541,6 +602,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
           case 'dashboard':
               const pendingCount = assignments.filter(a => !submissions[a.id]).length;
               return (
+                  // ... (existing dashboard content unchanged)
                   <div className="space-y-8 animate-fade-in-up pb-10">
                       {/* Welcome Header */}
                       <div className="flex flex-col md:flex-row justify-between items-end gap-6">
@@ -688,6 +750,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                       )}
                   </div>
               );
+          // ... (assignments, live_lesson, science_lab, group_work, study_mode, resources, messages, profile, timetable, attendance remain same)
           case 'assignments':
               return (
                   <div className="space-y-6">
@@ -700,7 +763,6 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                               SYNCING... COMPLETED
                           </div>
                       </div>
-
                       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                           {assignments.map(assignment => {
                               const sub = submissions[assignment.id];
@@ -708,10 +770,8 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                               let statusColor = 'yellow';
                               if (status === 'Submitted') statusColor = 'blue';
                               if (status === 'Graded') statusColor = 'green';
-
                               return (
                                   <div key={assignment.id} className="bg-slate-800/60 backdrop-blur-md border border-slate-700 rounded-2xl p-0 hover:border-blue-500/50 transition-all duration-300 group flex flex-col h-full">
-                                      {/* Card Header */}
                                       <div className="p-5 border-b border-slate-700/50 flex justify-between items-start relative overflow-hidden">
                                           <div className="absolute top-0 left-0 w-1 h-full bg-slate-600 group-hover:bg-blue-500 transition-colors"></div>
                                           <div className="relative z-10 max-w-[75%]">
@@ -726,15 +786,11 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                                               </span>
                                           )}
                                       </div>
-
-                                      {/* Card Body */}
                                       <div className="p-5 flex-grow">
                                           <p className="text-sm text-slate-400 line-clamp-3 leading-relaxed">
                                               {assignment.description}
                                           </p>
                                       </div>
-
-                                      {/* Card Footer */}
                                       <div className="p-4 bg-slate-900/30 border-t border-slate-700/50 flex items-center justify-between">
                                           <div>
                                               <div className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-${statusColor}-400`}>
@@ -763,7 +819,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                   </div>
               );
           case 'live_lesson':
-              return liveLesson ? (
+               return liveLesson ? (
                   <StudentLiveClassroom lessonId={liveLesson.id} userProfile={userProfile} onClose={() => setLiveLesson(null)} />
               ) : (
                   <div className="flex flex-col items-center justify-center h-full text-center p-8">
@@ -910,6 +966,46 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
                       </div>
                   </Card>
               );
+          case 'terminal_reports':
+              if (viewingReport && calculatedRanking) {
+                  return (
+                    <div className="space-y-4">
+                        <Button variant="secondary" onClick={() => setViewingReport(null)}>← Back to List</Button>
+                        <div className="overflow-auto pb-8">
+                             <StudentReportCard 
+                                student={userProfile}
+                                report={viewingReport}
+                                schoolSettings={schoolSettings}
+                                ranking={calculatedRanking}
+                                classSize={reportClassSize}
+                                attendance={reportAttendance}
+                             />
+                        </div>
+                    </div>
+                  );
+              }
+              return (
+                  <Card>
+                      <h3 className="text-xl font-bold mb-4">Terminal Reports</h3>
+                      {terminalReports.length > 0 ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {terminalReports.map(report => (
+                                  <button 
+                                      key={report.id} 
+                                      onClick={() => handleViewReport(report)}
+                                      className="p-6 bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors text-left border border-slate-700 hover:border-blue-500 group"
+                                  >
+                                      <h4 className="text-lg font-bold text-white group-hover:text-blue-400">Term {report.term} - {report.academicYear}</h4>
+                                      <p className="text-sm text-slate-400 mt-2">Class: {report.classId}</p>
+                                      <p className="text-xs text-green-400 mt-4 font-bold uppercase tracking-wider">View Report Card →</p>
+                                  </button>
+                              ))}
+                          </div>
+                      ) : (
+                          <p className="text-center py-10 text-gray-500">No published reports found for your class.</p>
+                      )}
+                  </Card>
+              );
           default:
               return <div>Select a tab</div>;
       }
@@ -931,9 +1027,11 @@ export const StudentView: React.FC<StudentViewProps> = ({ isSidebarExpanded, set
       </main>
       <AIAssistant systemInstruction={aiSystemInstruction} suggestedPrompts={aiSuggestedPrompts} />
       
-      {viewingAssignment && (
+      {/* ... (viewingAssignment modal) ... */}
+       {viewingAssignment && (
           <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex justify-center items-center p-4 z-50">
               <Card className="w-full max-w-3xl h-[90vh] flex flex-col !bg-slate-800 !border-slate-600 shadow-2xl">
+                  {/* ... (assignment modal content) ... */}
                   <div className="flex justify-between items-center mb-6 flex-shrink-0 pb-4 border-b border-slate-700">
                       <div>
                           <h2 className="text-2xl font-bold text-white">{viewingAssignment.title}</h2>

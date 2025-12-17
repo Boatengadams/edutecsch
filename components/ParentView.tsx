@@ -1,9 +1,10 @@
 
+// ... (imports remain same)
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuthentication } from '../hooks/useAuth';
 // FIX: Import firebase for compat services like firestore.FieldValue
 import { db, firebase } from '../services/firebase';
-import { UserProfile, Assignment, Submission, Notification, SchoolEvent, SchoolEventType, Timetable, AttendanceRecord, Group, Conversation, PublishedFlyer } from '../types';
+import { UserProfile, Assignment, Submission, Notification, SchoolEvent, SchoolEventType, Timetable, AttendanceRecord, Group, Conversation, PublishedFlyer, TerminalReport } from '../types';
 import Card from './common/Card';
 import Spinner from './common/Spinner';
 import Button from './common/Button';
@@ -15,7 +16,9 @@ import { useToast } from './common/Toast';
 import MessagingView from './MessagingView';
 import StudentProfile from './StudentProfile';
 import HeatMap from './common/charts/HeatMap';
+import StudentReportCard from './common/StudentReportCard';
 
+// ... (helpers QUOTES, getGreeting, gradeToNumeric, FeedItem types remain same)
 interface ParentViewProps {
   isSidebarExpanded: boolean;
   setIsSidebarExpanded: (isExpanded: boolean) => void;
@@ -58,7 +61,7 @@ type FeedItem =
     | { type: 'flyer', data: PublishedFlyer, date: Date };
 
 export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
-  const { user, userProfile } = useAuthentication();
+  const { user, userProfile, schoolSettings } = useAuthentication();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('overview');
   
@@ -73,6 +76,11 @@ export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIs
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [publishedFlyers, setPublishedFlyers] = useState<PublishedFlyer[]>([]);
   const [selectedFlyer, setSelectedFlyer] = useState<PublishedFlyer | null>(null);
+  const [terminalReports, setTerminalReports] = useState<TerminalReport[]>([]);
+  const [viewingReport, setViewingReport] = useState<TerminalReport | null>(null);
+  const [calculatedRanking, setCalculatedRanking] = useState<any>(null);
+  const [reportClassSize, setReportClassSize] = useState(0);
+  const [reportAttendance, setReportAttendance] = useState<{ present: number, total: number } | undefined>(undefined);
   
   const [loading, setLoading] = useState(true);
   const [loadingTimetable, setLoadingTimetable] = useState(true);
@@ -203,12 +211,61 @@ export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIs
     unsubscribers.push(teacherQuery.onSnapshot(snap => {
         setRelevantTeachers(snap.docs.map(d => ({...d.data(), uid: d.id} as UserProfile)));
     }));
+    
+    // Terminal Reports
+    const reportsQuery = db.collection('terminalReports')
+        .where('classId', '==', selectedChildProfile.class)
+        .where('published', '==', true);
+        
+    unsubscribers.push(reportsQuery.onSnapshot(snap => {
+         setTerminalReports(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TerminalReport)));
+    }));
 
     return () => unsubscribers.forEach(unsub => unsub());
 
   }, [selectedChildProfile, user]);
+  
+  const handleViewReport = (report: TerminalReport) => {
+      if (!selectedChildId) return;
+      // Calculate ranking client-side based on the full report
+      const studentTotals: Record<string, { total: number, count: number }> = {};
+      
+      Object.values(report.subjects).forEach((subjectData: any) => {
+          if (subjectData.marks) {
+              Object.entries(subjectData.marks).forEach(([uid, mark]: [string, any]) => {
+                  if (mark.overallTotal !== undefined) {
+                      if (!studentTotals[uid]) studentTotals[uid] = { total: 0, count: 0 };
+                      studentTotals[uid].total += (mark.overallTotal || 0);
+                      studentTotals[uid].count += 1;
+                  }
+              });
+          }
+      });
 
-    // Effect for AI Assistant context
+      const sortedUids = Object.keys(studentTotals).sort((a, b) => studentTotals[b].total - studentTotals[a].total);
+      const index = sortedUids.indexOf(selectedChildId);
+      
+      const myTotal = studentTotals[selectedChildId];
+      if (myTotal) {
+          setCalculatedRanking({
+              position: index + 1,
+              totalScore: myTotal.total,
+              average: myTotal.count > 0 ? myTotal.total / myTotal.count : 0
+          });
+      } else {
+          setCalculatedRanking(null);
+      }
+      
+      setReportClassSize(sortedUids.length);
+      
+      // Calculate attendance for this student up to now (simple count)
+      const present = attendanceRecords.filter(r => r.records[selectedChildId] === 'Present' || r.records[selectedChildId] === 'Late').length;
+      setReportAttendance({ present, total: attendanceRecords.length });
+
+      setViewingReport(report);
+  };
+
+    // ... (AI context effect remains same)
     useEffect(() => {
         const baseInstruction = "You are Edu, an AI assistant for parents at UTOPIA INTERNATIONAL SCHOOL. Your role is to provide insights into the curriculum, offer learning support strategies, and clarify school policies. Maintain a professional, supportive, and informative tone. You can access the parent's current view data.";
 
@@ -276,6 +333,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIs
     }, [user]);
 
 
+  // ... (dashboardData logic remains same)
   const dashboardData = useMemo(() => {
       const gradedSubs = (Object.values(submissions) as Submission[]).filter(s => s.status === 'Graded' && s.grade);
       const numericGrades = gradedSubs.map(s => gradeToNumeric(s.grade)).filter((g): g is number => g !== null);
@@ -331,6 +389,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIs
   const navItems = [
       { key: 'overview', label: 'Dashboard', icon: '🏠' },
       { key: 'progress', label: 'Academics', icon: '📈' },
+      { key: 'terminal_reports', label: 'Report Cards', icon: '📊' },
       { key: 'attendance', label: 'Attendance', icon: '📅' },
       { key: 'timetable', label: 'Timetable', icon: '🗓️' },
       { key: 'notifications', label: 'My Notifications', icon: '🔔' },
@@ -347,6 +406,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIs
       switch (activeTab) {
           case 'overview':
               return (
+                  // ... (same overview as before)
                   <div className="space-y-8 animate-fade-in-up pb-10">
                       {/* Header with Child Selector */}
                       <div className="flex flex-col md:flex-row justify-between items-end gap-6 bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
@@ -383,10 +443,10 @@ export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIs
                           <Card className="flex flex-col items-center justify-center py-8 relative overflow-hidden group hover:border-blue-500/50 transition-colors">
                               <div className="absolute top-0 right-0 p-4 opacity-10 text-6xl group-hover:scale-110 transition-transform">📊</div>
                               <div className="w-16 h-16 rounded-full bg-blue-500/10 flex items-center justify-center text-2xl mb-3 text-blue-400 border border-blue-500/20">
-                                  GPA
+                                  {dashboardData.averageGrade ? `${dashboardData.averageGrade.toFixed(0)}%` : '-'}
                               </div>
                               <p className="text-4xl font-black text-white">{dashboardData.averageGrade ? `${dashboardData.averageGrade.toFixed(0)}%` : '-'}</p>
-                              <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mt-1">{selectedChildProfile?.name.split(' ')[0]}'s Average</p>
+                              <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">{selectedChildProfile?.name.split(' ')[0]}'s Average</p>
                           </Card>
                           
                           <Card className="flex flex-col items-center justify-center py-8 relative overflow-hidden group hover:border-green-500/50 transition-colors">
@@ -580,6 +640,46 @@ export const ParentView: React.FC<ParentViewProps> = ({ isSidebarExpanded, setIs
               );
           case 'messages':
               return <MessagingView userProfile={userProfile} contacts={relevantTeachers} />;
+          case 'terminal_reports':
+              if (viewingReport && selectedChildProfile && calculatedRanking) {
+                  return (
+                    <div className="space-y-4">
+                        <Button variant="secondary" onClick={() => setViewingReport(null)}>← Back to List</Button>
+                        <div className="overflow-auto pb-8">
+                             <StudentReportCard 
+                                student={selectedChildProfile}
+                                report={viewingReport}
+                                schoolSettings={schoolSettings}
+                                ranking={calculatedRanking}
+                                classSize={reportClassSize}
+                                attendance={reportAttendance}
+                             />
+                        </div>
+                    </div>
+                  );
+              }
+              return (
+                  <Card>
+                      <h3 className="text-xl font-bold mb-4">{selectedChildProfile?.name.split(' ')[0]}'s Reports</h3>
+                      {terminalReports.length > 0 ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {terminalReports.map(report => (
+                                  <button 
+                                      key={report.id} 
+                                      onClick={() => handleViewReport(report)}
+                                      className="p-6 bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors text-left border border-slate-700 hover:border-blue-500 group"
+                                  >
+                                      <h4 className="text-lg font-bold text-white group-hover:text-blue-400">Term {report.term} - {report.academicYear}</h4>
+                                      <p className="text-sm text-slate-400 mt-2">Class: {report.classId}</p>
+                                      <p className="text-xs text-green-400 mt-4 font-bold uppercase tracking-wider">View Report Card →</p>
+                                  </button>
+                              ))}
+                          </div>
+                      ) : (
+                          <p className="text-center py-10 text-gray-500">No published reports found for this child.</p>
+                      )}
+                  </Card>
+              );
           default:
               return <div>Select a tab</div>;
       }

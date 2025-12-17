@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuthentication } from '../hooks/useAuth';
 import { db, storage, functions, firebase } from '../services/firebase';
-import { GES_STANDARD_CURRICULUM } from '../types';
-import type { Assignment, Submission, UserProfile, GeneratedContent, SubjectsByClass, GES_CLASSES, Timetable, Quiz, LiveLesson, LiveLessonStep, Group, GroupMessage, Conversation, TerminalReport, TerminalReportMark, AttendanceStatus, VideoContent } from '../types';
+import type { Assignment, Submission, UserProfile, GeneratedContent, GES_CLASSES, Timetable, TerminalReport, TerminalReportMark, SchoolSettings, LiveLesson, LiveLessonStep, Group, GroupMessage, Conversation, AttendanceStatus } from '../types';
+import { GES_SUBJECTS } from '../types'; // Value import
 import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
@@ -12,9 +12,14 @@ import Sidebar from './common/Sidebar';
 import ConfirmationModal from './common/ConfirmationModal';
 import AIAssistant from './AIAssistant';
 import ChangePasswordModal from './common/ChangePasswordModal';
-import { GoogleGenAI, Type, Modality } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
+import NotebookTimetable from './common/NotebookTimetable';
 import AssignmentModal from './AssignmentModal';
 import Toast from './common/Toast';
+import Histogram from './common/charts/Histogram';
+import BarChart from './common/charts/BarChart';
+import LineChart from './common/charts/LineChart';
+import PieChart from './common/charts/PieChart';
 import VideoGenerator from './VideoGenerator';
 import TeacherCreateStudentForm from './TeacherCreateStudentForm';
 import TeacherCreateParentForm from './TeacherCreateParentForm';
@@ -22,14 +27,14 @@ import { TeacherLiveClassroom } from './TeacherLiveClassroom';
 import BECEPastQuestionsView from './common/BECEPastQuestionsView';
 import MessagingView from './MessagingView';
 import { ProgressDashboard } from './ProgressDashboard';
-import UserEditModal from './UserEditModal';
-import TeacherAITools from './TeacherAITools';
-import TeacherMyVoice from './TeacherMyVoice';
-// Import the shared component
 import AdminTerminalReports from './AdminTerminalReports';
+import TeacherProgressDashboard from './TeacherProgressDashboard';
+import TeacherStudentActivity from './TeacherStudentActivity';
+import TeacherMyVoice from './TeacherMyVoice';
+import TeacherAITools from './TeacherAITools';
 
+// FIX: Added missing getGrade function
 const getGrade = (score: number) => {
-    if (isNaN(score)) return '-';
     if (score >= 80) return 'A';
     if (score >= 70) return 'B+';
     if (score >= 60) return 'B';
@@ -40,6 +45,7 @@ const getGrade = (score: number) => {
     return 'F';
 };
 
+// Helper for image compression
 const compressImage = (file: Blob, quality = 0.85): Promise<Blob> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -70,6 +76,126 @@ const compressImage = (file: Blob, quality = 0.85): Promise<Blob> => {
     });
 };
 
+const TeacherDashboard: React.FC<{
+    userProfile: UserProfile;
+    students: UserProfile[];
+    assignments: Assignment[];
+    submissions: Submission[];
+    teacherClasses: string[];
+}> = ({ userProfile, students, assignments, submissions, teacherClasses }) => {
+    
+    const pendingSubmissions = submissions.filter(s => s.status === 'Submitted').length;
+    
+    const upcomingAssignments = assignments
+        .filter(a => a.dueDate && new Date(a.dueDate) >= new Date())
+        .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime())
+        .slice(0, 5);
+
+    const recentSubmissionsToGrade = submissions
+        .filter(s => s.status === 'Submitted')
+        .sort((a, b) => b.submittedAt.toMillis() - a.submittedAt.toMillis())
+        .slice(0, 5);
+
+    return (
+        <div className="space-y-8 animate-fade-in-up">
+            {/* Header */}
+             <div className="flex flex-col md:flex-row justify-between items-end gap-6 bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
+                <div>
+                     <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">
+                        Teacher <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">Command Center</span>
+                    </h1>
+                    <p className="text-slate-400 mt-2 text-lg">Welcome back, {userProfile.name}. Ready to inspire?</p>
+                </div>
+                <div className="flex items-center gap-3">
+                     <span className="text-sm font-bold text-slate-500 uppercase tracking-wider">Current Term</span>
+                     <span className="px-3 py-1 bg-blue-900/30 text-blue-400 rounded-full border border-blue-500/30 text-xs font-mono">2024/2025</span>
+                </div>
+            </div>
+
+            {/* Colorful Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="!bg-gradient-to-br from-blue-600/20 to-cyan-600/20 !border-blue-500/30 flex items-center justify-between p-6 hover:scale-[1.02] transition-transform">
+                    <div>
+                        <p className="text-blue-300 font-bold text-sm uppercase tracking-wider">Total Students</p>
+                        <p className="text-4xl font-black text-white mt-1">{students.length || 0}</p>
+                    </div>
+                    <div className="text-5xl opacity-80 drop-shadow-lg">👨‍🎓</div>
+                </Card>
+                 <Card className="!bg-gradient-to-br from-purple-600/20 to-pink-600/20 !border-purple-500/30 flex items-center justify-between p-6 hover:scale-[1.02] transition-transform">
+                    <div>
+                        <p className="text-purple-300 font-bold text-sm uppercase tracking-wider">Active Classes</p>
+                        <p className="text-4xl font-black text-white mt-1">{teacherClasses.length || 0}</p>
+                    </div>
+                    <div className="text-5xl opacity-80 drop-shadow-lg">🏫</div>
+                </Card>
+                 <Card className="!bg-gradient-to-br from-yellow-600/20 to-orange-600/20 !border-yellow-500/30 flex items-center justify-between p-6 hover:scale-[1.02] transition-transform">
+                    <div>
+                        <p className="text-yellow-300 font-bold text-sm uppercase tracking-wider">Pending Grading</p>
+                        <p className="text-4xl font-black text-white mt-1">{pendingSubmissions}</p>
+                    </div>
+                    <div className="text-5xl opacity-80 drop-shadow-lg">📝</div>
+                </Card>
+            </div>
+
+            {/* Action & Info Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="h-full">
+                    <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-white">
+                        <span className="text-2xl">⏳</span> Upcoming Deadlines
+                    </h3>
+                    <div className="space-y-3">
+                        {upcomingAssignments.length > 0 ? upcomingAssignments.map(a => (
+                            <div key={a.id} className="flex items-center justify-between p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:bg-slate-800 transition-colors">
+                                <div>
+                                    <p className="font-bold text-white">{a.title}</p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                         <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-700 text-slate-300">{a.classId}</span>
+                                         <span className="text-xs text-slate-400">{a.subject}</span>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-xs text-slate-400 uppercase font-bold">Due</p>
+                                    <p className="text-sm font-mono text-yellow-400">{new Date(a.dueDate!).toLocaleDateString()}</p>
+                                </div>
+                            </div>
+                        )) : <p className="text-center text-slate-500 py-8">No upcoming deadlines.</p>}
+                    </div>
+                </Card>
+
+                <Card className="h-full">
+                    <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-white">
+                         <span className="text-2xl">📥</span> Recent Submissions
+                    </h3>
+                    <div className="space-y-3">
+                         {recentSubmissionsToGrade.length > 0 ? recentSubmissionsToGrade.map(s => {
+                             const assignment = assignments.find(a => a.id === s.assignmentId);
+                             return (
+                                <div key={s.id} className="flex items-center justify-between p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:bg-slate-800 transition-colors">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold shadow-md">
+                                            {s.studentName.charAt(0)}
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-white">{s.studentName}</p>
+                                            <p className="text-xs text-slate-400 truncate max-w-[150px]">{assignment?.title || 'Assignment'}</p>
+                                        </div>
+                                    </div>
+                                    <span className="text-xs font-bold px-2 py-1 rounded bg-green-500/20 text-green-400 border border-green-500/30">
+                                        Ready to Grade
+                                    </span>
+                                </div>
+                             )
+                         }) : <p className="text-center text-slate-500 py-8">All caught up! No pending submissions.</p>}
+                    </div>
+                </Card>
+            </div>
+            
+            <TeacherStudentActivity teacherClasses={teacherClasses} />
+        </div>
+    );
+};
+
+// ... (Group Work Helpers) ...
 const TeacherGroupChatView: React.FC<{ group: Group }> = ({ group }) => {
     const [messages, setMessages] = useState<GroupMessage[]>([]);
     const [loading, setLoading] = useState(true);
@@ -218,6 +344,7 @@ const CreateGroupModal: React.FC<{
             setDueDate(editingGroup.dueDate || '');
             setSelectedStudentUids(editingGroup.memberUids);
         } else {
+            // Reset for create mode
             setGroupName('');
             setSelectedClass(classes[0] || '');
             setAssignmentTitle('');
@@ -328,125 +455,6 @@ const CreateGroupModal: React.FC<{
     );
 };
 
-const TeacherDashboard: React.FC<{
-    userProfile: UserProfile;
-    students: UserProfile[];
-    assignments: Assignment[];
-    submissions: Submission[];
-    teacherClasses: string[];
-}> = ({ userProfile, students, assignments, submissions, teacherClasses }) => {
-    
-    const pendingSubmissions = submissions.filter(s => s.status === 'Submitted').length;
-    
-    const upcomingAssignments = assignments
-        .filter(a => a.dueDate && new Date(a.dueDate) >= new Date())
-        .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime())
-        .slice(0, 5);
-
-    const recentSubmissionsToGrade = submissions
-        .filter(s => s.status === 'Submitted')
-        .sort((a, b) => b.submittedAt.toMillis() - a.submittedAt.toMillis())
-        .slice(0, 5);
-
-    return (
-        <div className="space-y-8 animate-fade-in-up">
-             <div className="flex flex-col md:flex-row justify-between items-end gap-6 bg-gradient-to-r from-slate-900 to-slate-800 p-8 rounded-3xl border border-slate-700 shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
-                <div className="relative z-10">
-                    <h1 className="text-4xl font-black text-white tracking-tight mb-2">
-                        Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">{userProfile.name}</span>
-                    </h1>
-                    <p className="text-slate-400 text-lg">Your command center for today's educational journey.</p>
-                </div>
-                <div className="flex gap-3 relative z-10">
-                    <div className="text-right">
-                         <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Academic Term</p>
-                         <p className="text-xl font-bold text-white">2</p>
-                    </div>
-                     <div className="w-12 h-12 bg-slate-700 rounded-2xl flex items-center justify-center text-2xl shadow-inner">🗓️</div>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                 <Card className="!bg-blue-900/20 !border-blue-500/30 flex items-center justify-between p-6 group hover:!bg-blue-900/30 transition-all">
-                    <div>
-                        <p className="text-sm text-blue-300 font-bold uppercase tracking-wider">Total Students</p>
-                        <p className="text-4xl font-black text-white mt-1">{students.length || 0}</p>
-                    </div>
-                    <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center text-3xl group-hover:scale-110 transition-transform">
-                        🎓
-                    </div>
-                </Card>
-                
-                <Card className="!bg-purple-900/20 !border-purple-500/30 flex items-center justify-between p-6 group hover:!bg-purple-900/30 transition-all">
-                    <div>
-                        <p className="text-sm text-purple-300 font-bold uppercase tracking-wider">Active Classes</p>
-                        <p className="text-4xl font-black text-white mt-1">{teacherClasses.length || 0}</p>
-                    </div>
-                    <div className="w-16 h-16 bg-purple-600/20 rounded-full flex items-center justify-center text-3xl group-hover:scale-110 transition-transform">
-                        🏫
-                    </div>
-                </Card>
-
-                 <Card className="!bg-orange-900/20 !border-orange-500/30 flex items-center justify-between p-6 group hover:!bg-orange-900/30 transition-all">
-                    <div>
-                        <p className="text-sm text-orange-300 font-bold uppercase tracking-wider">To Grade</p>
-                        <p className="text-4xl font-black text-white mt-1">{pendingSubmissions}</p>
-                    </div>
-                    <div className="w-16 h-16 bg-orange-600/20 rounded-full flex items-center justify-center text-3xl group-hover:scale-110 transition-transform">
-                        📝
-                    </div>
-                </Card>
-            </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                    <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                        <span className="text-blue-500">🔥</span> Upcoming Deadlines
-                    </h3>
-                    <div className="space-y-3">
-                        {upcomingAssignments.length > 0 ? upcomingAssignments.map(a => (
-                            <div key={a.id} className="p-4 bg-slate-800/50 rounded-xl flex justify-between items-center border border-slate-700/50 hover:bg-slate-800 transition-colors">
-                                <div>
-                                    <p className="font-bold text-white">{a.title}</p>
-                                    <p className="text-sm text-slate-400">{a.classId} &bull; {a.subject}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-sm font-bold text-yellow-400">{new Date(a.dueDate!).toLocaleDateString()}</p>
-                                    <p className="text-xs text-slate-500 uppercase tracking-wider">Due Date</p>
-                                </div>
-                            </div>
-                        )) : <p className="text-slate-500 text-center py-6">No upcoming deadlines.</p>}
-                    </div>
-                </Card>
-                <Card>
-                    <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                        <span className="text-green-500">📥</span> Recent Submissions
-                    </h3>
-                    <div className="space-y-3">
-                         {recentSubmissionsToGrade.length > 0 ? recentSubmissionsToGrade.map(s => {
-                             const assignment = assignments.find(a => a.id === s.assignmentId);
-                             return (
-                                <div key={s.id} className="p-4 bg-slate-800/50 rounded-xl flex justify-between items-center border border-slate-700/50 hover:bg-slate-800 transition-colors">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center font-bold text-slate-400">
-                                            {s.studentName.charAt(0)}
-                                        </div>
-                                        <div>
-                                            <p className="font-bold text-white">{s.studentName}</p>
-                                            <p className="text-sm text-slate-400 truncate max-w-[200px]">{assignment?.title || 'Unknown Assignment'}</p>
-                                        </div>
-                                    </div>
-                                    <span className="text-xs font-bold bg-blue-900/30 text-blue-300 px-2 py-1 rounded border border-blue-500/20">Needs Grading</span>
-                                </div>
-                             )
-                         }) : <p className="text-slate-500 text-center py-6">All caught up! No new submissions.</p>}
-                    </div>
-                </Card>
-            </div>
-        </div>
-    );
-};
 
 interface TeacherViewProps {
   isSidebarExpanded: boolean;
@@ -470,13 +478,14 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     const [allParents, setAllParents] = useState<UserProfile[]>([]);
     const [allTeachers, setAllTeachers] = useState<UserProfile[]>([]);
     const [groups, setGroups] = useState<Group[]>([]);
+    const [terminalReports, setTerminalReports] = useState<TerminalReport[]>([]);
     
     // UI states
     const [loading, setLoading] = useState(true);
     const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
     const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
     const [viewingSubmissionsFor, setViewingSubmissionsFor] = useState<Assignment | null>(null);
-    const [isGrading, setIsGrading] = useState<string | null>(null);
+    const [isGrading, setIsGrading] = useState<string | null>(null); // holds submission ID
     const [showPresentationGenerator, setShowPresentationGenerator] = useState(false);
     const [editingPresentation, setEditingPresentation] = useState<GeneratedContent | null>(null);
     const [contentToDelete, setContentToDelete] = useState<GeneratedContent | null>(null);
@@ -489,17 +498,24 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     const [studentCreationClass, setStudentCreationClass] = useState<string | null>(null);
     const [showCreateParentModal, setShowCreateParentModal] = useState(false);
     const [viewingStudentProgress, setViewingStudentProgress] = useState<UserProfile | null>(null);
-    const [editingStudent, setEditingStudent] = useState<UserProfile | null>(null);
-    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
     // Attendance state
     const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
     const [attendanceData, setAttendanceData] = useState<Record<string, AttendanceStatus>>({});
     const [isSavingAttendance, setIsSavingAttendance] = useState(false);
 
+    // Terminal Reports state
+    const [reportClass, setReportClass] = useState('');
+    const [reportSubject, setReportSubject] = useState('');
+    const [marks, setMarks] = useState<Record<string, Partial<TerminalReportMark>>>({});
+    const [isSavingMarks, setIsSavingMarks] = useState(false);
+
+
     // Filter states
     const [classFilter, setClassFilter] = useState('all');
     const [subjectFilter, setSubjectFilter] = useState('all');
+
+    // Group Work states
     const [groupClassFilter, setGroupClassFilter] = useState('all');
     const [groupSubjectFilter, setGroupSubjectFilter] = useState('all');
     const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
@@ -508,9 +524,11 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     const [groupToDelete, setGroupToDelete] = useState<Group | null>(null);
     const [isDeletingGroup, setIsDeletingGroup] = useState(false);
     
+    // FIX: Add missing state for AI Assistant
     const [aiSystemInstruction, setAiSystemInstruction] = useState('');
     const [aiSuggestedPrompts, setAiSuggestedPrompts] = useState<string[]>([]);
   
+    // FIX: Add explicit type to useMemo to help with type inference.
     const teacherClasses = useMemo<string[]>(() => {
         if (!userProfile) return [];
         const allClasses = new Set([
@@ -520,13 +538,37 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         return Array.from(allClasses).sort();
     }, [userProfile]);
     
+    // FIX: Add explicit type and more robust checks to prevent errors from malformed Firestore data.
     const teacherSubjects = useMemo<string[]>(() => {
         if (!userProfile || !userProfile.subjectsByClass || typeof userProfile.subjectsByClass !== 'object') {
             return [];
         }
+        // Ensure subjectsByClass is treated as an object, and filter out non-array values before flattening.
         const subjectsMap = userProfile.subjectsByClass;
-        return Object.values(subjectsMap).filter(Array.isArray).flat();
+        return Object.values(subjectsMap)
+                     .filter(Array.isArray)
+                     .flat();
     }, [userProfile?.subjectsByClass]);
+
+    const subjectsForReport = useMemo<string[]>(() => {
+        const subs = userProfile?.subjectsByClass?.[reportClass];
+        return Array.isArray(subs) ? subs : [];
+    }, [userProfile?.subjectsByClass, reportClass]);
+    
+    useEffect(() => {
+        if (teacherClasses.length > 0 && !reportClass) {
+            setReportClass(teacherClasses[0]);
+        }
+    }, [teacherClasses, reportClass]);
+
+    useEffect(() => {
+        if (subjectsForReport.length > 0 && !subjectsForReport.includes(reportSubject)) {
+            setReportSubject(subjectsForReport[0]);
+        } else if (subjectsForReport.length === 0) {
+            setReportSubject('');
+        }
+    }, [subjectsForReport, reportSubject]);
+
 
     const subjectsForFilter = useMemo<string[]>(() => {
         if (!userProfile?.subjectsByClass) return [];
@@ -547,6 +589,12 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         }
         return Array.from(allSubs).sort();
     }, [userProfile, classFilter, teacherClasses]);
+    
+    useEffect(() => {
+        if (subjectFilter !== 'all' && subjectsForFilter.length > 0 && !subjectsForFilter.includes(subjectFilter)) {
+            setSubjectFilter('all');
+        }
+    }, [subjectsForFilter, subjectFilter]);
 
     const filteredAssignments = useMemo(() => {
         return assignments.filter(assignment => {
@@ -573,34 +621,56 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
 
         const unsubscribers: (() => void)[] = [];
 
+        // Fetch assignments for all classes taught by the teacher
         unsubscribers.push(db.collection('assignments').where('teacherId', '==', user.uid)
             .orderBy('createdAt', 'desc')
             .onSnapshot(snap => setAssignments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Assignment)))));
 
+        // Fetch submissions for all those classes
         unsubscribers.push(db.collection('submissions').where('teacherId', '==', user.uid)
             .onSnapshot(snap => setSubmissions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Submission)))));
 
+        // Fetch students in those classes
         unsubscribers.push(db.collection('users').where('class', 'in', teacherClasses)
             .where('role', '==', 'student')
             .onSnapshot(snap => setStudents(snap.docs.map(doc => doc.data() as UserProfile).filter(u => u && u.uid))));
         
+        // Fetch generated content
         unsubscribers.push(db.collection('generatedContent').where('collaboratorUids', 'array-contains', user.uid)
             .orderBy('createdAt', 'desc')
             .onSnapshot(snap => setMyLibraryContent(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as GeneratedContent)))));
 
+        // Fetch active live lesson
         unsubscribers.push(db.collection('liveLessons').where('teacherId', '==', user.uid).where('status', '==', 'active')
             .onSnapshot(snap => setActiveLiveLesson(snap.empty ? null : {id: snap.docs[0].id, ...snap.docs[0].data()} as LiveLesson)));
         
+        // Fetch all parents and other teachers for messaging
         unsubscribers.push(db.collection('users').where('role', '==', 'parent').onSnapshot(snap => setAllParents(snap.docs.map(d => d.data() as UserProfile).filter(u => u && u.uid))));
         unsubscribers.push(db.collection('users').where('role', '==', 'teacher').onSnapshot(snap => setAllTeachers(snap.docs.map(d => d.data() as UserProfile).filter(u => u && u.uid))));
         
+        // Fetch groups
         unsubscribers.push(db.collection('groups').where('teacherId', '==', user.uid).onSnapshot(snap => setGroups(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group)))));
             
+        if (teacherClasses.length > 0 && teacherSubjects.length > 0) {
+            unsubscribers.push(
+                db.collection('terminalReports')
+                    .where('classId', 'in', teacherClasses)
+                    .onSnapshot(snap => {
+                        const reports = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TerminalReport));
+                        const relevantReports = reports.filter(report => 
+                             Object.keys(report.subjects || {}).some(subject => teacherSubjects.includes(subject))
+                        );
+                        setTerminalReports(relevantReports);
+                    })
+            );
+        }
+
         setLoading(false);
 
         return () => unsubscribers.forEach(unsub => unsub());
     }, [user, userProfile, teacherClasses, teacherSubjects]);
 
+     // Fetch unread messages count
     useEffect(() => {
         if (!user) return;
         const unsubscribe = db.collection('conversations')
@@ -616,6 +686,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         return () => unsubscribe();
     }, [user]);
     
+    // FIX: Add useEffect for AI Assistant context
     useEffect(() => {
         const baseInstruction = "You are an AI assistant for a teacher at UTOPIA INTERNATIONAL SCHOOL. Your role is to help with lesson planning, student progress analysis, and administrative tasks. Maintain a professional and supportive tone. You can summarize the content on the teacher's current page if asked. As a bilingual AI, you can also be 'Kofi AI'. If a user speaks Twi, respond as Kofi AI in fluent Asante Twi, using correct grammar and letters like 'ɛ' and 'ɔ'.";
         let context = '';
@@ -648,6 +719,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         setAiSuggestedPrompts(prompts);
     }, [activeTab, submissions, assignments]);
 
+    // Attendance data fetcher
     useEffect(() => {
         if (activeTab === 'attendance' && userProfile?.classTeacherOf) {
             const recordId = `${attendanceDate}_${userProfile.classTeacherOf}`;
@@ -661,6 +733,22 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             return () => unsub();
         }
     }, [activeTab, attendanceDate, userProfile?.classTeacherOf]);
+
+    // Terminal Reports data loader
+    useEffect(() => {
+        if (activeTab === 'terminal_reports' && reportClass && reportSubject && schoolSettings) {
+            const academicYear = schoolSettings.academicYear?.replace(/\//g, '-') || '';
+            const term = schoolSettings.currentTerm || 1;
+            const reportId = `${academicYear}_${term}_${reportClass}`;
+
+            const report = terminalReports.find(r => r.id === reportId);
+            if (report && report.subjects && report.subjects[reportSubject]) {
+                setMarks(report.subjects[reportSubject].marks || {});
+            } else {
+                setMarks({});
+            }
+        }
+    }, [activeTab, reportClass, reportSubject, terminalReports, schoolSettings]);
 
     const handleStartGrading = (submission: Submission) => {
         setIsGrading(submission.id);
@@ -698,7 +786,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 status: 'Graded'
             });
             setToast({ message: 'Grade saved successfully.', type: 'success' });
-            handleCancelGrading(); 
+            handleCancelGrading(); // This will reset state and close the form
         } catch (err: any) {
             setToast({ message: `Error saving grade: ${err.message}`, type: 'error' });
         }
@@ -716,6 +804,8 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
 
     const handleDeleteAssignment = async (assignmentId: string) => {
         if (window.confirm('Are you sure you want to delete this assignment and all its submissions?')) {
+            // It's safer to use a Cloud Function for this to ensure all related data is deleted.
+            // For now, we'll just delete the assignment doc.
             await db.collection('assignments').doc(assignmentId).delete();
         }
     };
@@ -723,8 +813,9 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
     const handleStartLiveLesson = useCallback(async (content: GeneratedContent) => {
         if (!user || !userProfile) return;
 
-        setShowPresentationGenerator(false); 
+        setShowPresentationGenerator(false); // Close generator if it was open
 
+        // FIX: Map the `question` property from the quiz to the `text` property required by LiveLessonStep.
         const lessonPlan: LiveLessonStep[] = content.presentation.slides.map((slide, index) => {
             const quizQuestion = content.quiz?.quiz[index];
             return {
@@ -732,7 +823,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 question: quizQuestion ? {
                     id: `${content.id || 'new'}_q${index}`,
                     text: quizQuestion.question,
-                    options: quizQuestion.options || [],
+                    options: quizQuestion.options,
                     correctAnswer: quizQuestion.correctAnswer
                 } : null
             };
@@ -741,7 +832,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         const newLessonData: Omit<LiveLesson, 'id' | 'createdAt'> = {
             teacherId: user.uid,
             teacherName: userProfile.name,
-            classId: content.classes[0], 
+            classId: content.classes[0], // For now, lesson is for the first selected class
             subject: content.subject,
             topic: content.topic,
             status: 'active',
@@ -751,6 +842,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
             currentQuestion: lessonPlan[0].question,
         };
 
+        // If starting from a saved presentation, link it
         if (content.id) {
             newLessonData.sourcePresentationId = content.id;
         }
@@ -761,7 +853,10 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            if (!content.id) { 
+            // The "optimistic start" approach: write text content instantly,
+            // then process and upload images in the background.
+            // Split data: main doc for text, sub-collection for images.
+            if (!content.id) { // This is a new, unsaved presentation
                 const imagePromises = content.presentation.slides.map(async (slide, index) => {
                     if (slide.imageUrl && slide.imageUrl.startsWith('data:')) {
                         const response = await fetch(slide.imageUrl);
@@ -772,17 +867,19 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                         await storageRef.put(compressedBlob);
                         const downloadURL = await storageRef.getDownloadURL();
                         
+                        // Save image URL to sub-collection
                         return lessonRef.collection('images').doc(index.toString()).set({
                             imageUrl: downloadURL,
                             imageStyle: slide.imageStyle
                         });
                     }
                 });
+                // We don't await these promises, letting them run in the background
                 Promise.all(imagePromises).catch(err => {
                     console.error("Background image upload failed:", err);
                     setToast({ message: "Some lesson images failed to upload.", type: 'error' });
                 });
-            } else { 
+            } else { // This is a saved presentation with permanent URLs
                 const imagePromises = content.presentation.slides.map((slide, index) => {
                     return lessonRef.collection('images').doc(index.toString()).set({
                         imageUrl: slide.imageUrl,
@@ -815,6 +912,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         }
     };
 
+    // --- ATTENDANCE HANDLERS ---
     const handleAttendanceChange = (studentId: string, status: AttendanceStatus) => {
         setAttendanceData(prev => ({ ...prev, [studentId]: status }));
     };
@@ -842,6 +940,7 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 parentUids: parentUids,
             }, { merge: true });
             
+            // Send notifications for absences
             const absentStudentIds = classStudents.filter(s => attendanceData[s.uid] === 'Absent').map(s => s.uid);
             if (absentStudentIds.length > 0) {
                  const sendNotifications = functions.httpsCallable('sendNotificationsToParentsOfStudents');
@@ -870,6 +969,158 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         setAttendanceData(newAttendanceData);
     };
 
+    // --- TERMINAL REPORTS HANDLERS ---
+    const handleMarkChange = (studentId: string, field: keyof TerminalReportMark, value: string) => {
+        const numericValue = value === '' ? undefined : Number(value);
+        setMarks(prev => ({
+            ...prev,
+            [studentId]: {
+                ...prev[studentId],
+                [field]: numericValue
+            }
+        }));
+    };
+    
+    const handleAutoFillScores = () => {
+        const studentsInClass = students.filter(s => s.class === reportClass);
+        const assignmentsForSubject = assignments.filter(a => a.classId === reportClass && a.subject === reportSubject);
+        const submissionsForSubject = submissions.filter(s => s.classId === reportClass && assignmentsForSubject.some(a => a.id === s.assignmentId) && s.grade);
+        const groupsForSubject = groups.filter(g => g.classId === reportClass && g.subject === reportSubject && g.grade);
+
+        const newMarks: Record<string, Partial<TerminalReportMark>> = {};
+
+        studentsInClass.forEach(student => {
+            const studentSubmissions = submissionsForSubject.filter(s => s.studentId === student.uid);
+
+            let totalPercentageSum = 0;
+            const totalAssignmentsCount = assignmentsForSubject.length;
+
+            if (totalAssignmentsCount > 0) {
+                assignmentsForSubject.forEach(assignment => {
+                    const submission = studentSubmissions.find(s => s.assignmentId === assignment.id);
+                    if (submission && submission.grade) {
+                        let score: number | null = null;
+                        let maxScore: number | null = null;
+
+                        if (submission.grade.includes('/')) {
+                            const parts = submission.grade.split('/').map(p => parseFloat(p.trim()));
+                            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && parts[1] > 0) {
+                                score = parts[0];
+                                maxScore = parts[1];
+                            }
+                        } else if (!isNaN(parseFloat(submission.grade))) {
+                            score = parseFloat(submission.grade);
+                            maxScore = 20; // Default max for single-number grades
+                        }
+
+                        if (score !== null && maxScore !== null && maxScore > 0) {
+                            totalPercentageSum += (score / maxScore);
+                        }
+                    }
+                    // If no submission, score is 0, so we add nothing to the sum.
+                });
+                
+                const averagePercentage = totalPercentageSum / totalAssignmentsCount;
+                const assignmentScore = averagePercentage * 15; // Scale to 15
+
+                newMarks[student.uid] = {
+                    ...marks[student.uid],
+                    studentName: student.name,
+                    indivTest: parseFloat(assignmentScore.toFixed(1)),
+                };
+            }
+
+            const studentGroup = groupsForSubject.find(g => g.memberUids.includes(student.uid));
+            if (studentGroup && studentGroup.grade) {
+                 const groupWorkScore = parseFloat(studentGroup.grade);
+                 if (!isNaN(groupWorkScore)) {
+                     newMarks[student.uid] = {
+                        ...newMarks[student.uid],
+                        studentName: student.name,
+                        groupWork: parseFloat(groupWorkScore.toFixed(1)),
+                    };
+                 }
+            }
+        });
+        setMarks(newMarks);
+        setToast({message: "Scores from assignments and group work have been filled in.", type: "success"});
+    };
+
+    const calculateTotalsAndSave = async () => {
+        if (!reportClass || !reportSubject || !schoolSettings || !user) {
+            setToast({ message: "Missing required report information.", type: 'error' });
+            return;
+        }
+        setIsSavingMarks(true);
+
+        const studentsInClass = students.filter(s => s.class === reportClass);
+        const calculatedMarks: Record<string, TerminalReportMark> = {};
+        const studentTotals: { studentId: string, total: number }[] = [];
+
+        studentsInClass.forEach(student => {
+            const studentMark = marks[student.uid] || {};
+            
+            const totalClassScore = (studentMark.indivTest || 0) + (studentMark.groupWork || 0) + (studentMark.classTest || 0) + (studentMark.project || 0);
+            const examScore = studentMark.endOfTermExams || 0;
+
+            const scaledClassScore = (totalClassScore / 60) * 50;
+            const scaledExamScore = (examScore / 100) * 50;
+            const overallTotal = scaledClassScore + scaledExamScore;
+            
+            calculatedMarks[student.uid] = {
+                studentName: student.name,
+                indivTest: studentMark.indivTest,
+                groupWork: studentMark.groupWork,
+                classTest: studentMark.classTest,
+                project: studentMark.project,
+                endOfTermExams: studentMark.endOfTermExams,
+                totalClassScore: parseFloat(totalClassScore.toFixed(1)),
+                scaledClassScore: parseFloat(scaledClassScore.toFixed(1)),
+                scaledExamScore: parseFloat(scaledExamScore.toFixed(1)),
+                overallTotal: parseFloat(overallTotal.toFixed(1)),
+                grade: getGrade(overallTotal),
+            };
+            studentTotals.push({ studentId: student.uid, total: overallTotal });
+        });
+        
+        studentTotals.sort((a, b) => b.total - a.total);
+        studentTotals.forEach((item, index) => {
+            let position = index + 1;
+            if (index > 0 && item.total === studentTotals[index - 1].total) {
+                position = calculatedMarks[studentTotals[index - 1].studentId].position || position;
+            }
+            calculatedMarks[item.studentId].position = position;
+        });
+
+        const academicYear = schoolSettings.academicYear.replace(/\//g, '-');
+        const term = schoolSettings.currentTerm || 1;
+        const reportId = `${academicYear}_${term}_${reportClass}`;
+        const reportRef = db.collection('terminalReports').doc(reportId);
+
+        try {
+            await reportRef.set({
+                id: reportId,
+                academicYear: schoolSettings.academicYear,
+                term,
+                classId: reportClass,
+                subjects: {
+                    [reportSubject]: {
+                        teacherId: user.uid,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        marks: calculatedMarks
+                    }
+                }
+            }, { merge: true });
+
+            setMarks(calculatedMarks);
+            setToast({ message: 'Marks saved successfully!', type: 'success' });
+        } catch (err: any) {
+            setToast({ message: `Failed to save marks: ${err.message}`, type: 'error' });
+        } finally {
+            setIsSavingMarks(false);
+        }
+    };
+
     const handleDeleteGroup = async () => {
         if (!groupToDelete) return;
         setIsDeletingGroup(true);
@@ -885,31 +1136,21 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
         }
     };
 
-    const handleSaveStudent = async (uid: string, data: Partial<UserProfile>) => {
-        try {
-            await db.collection('users').doc(uid).update(data);
-            setToast({ message: "Student updated successfully", type: "success" });
-            setIsEditModalOpen(false);
-            setEditingStudent(null);
-        } catch (error: any) {
-             setToast({ message: `Error updating student: ${error.message}`, type: "error" });
-        }
-    };
-
 
     const navItems = [
-        { key: 'dashboard', label: 'Dashboard', icon: <span className="text-2xl">🚀</span> },
-        { key: 'my_students', label: 'My Students', icon: <span className="text-2xl">👨‍🎓</span> },
-        { key: 'assignments', label: 'Assignments', icon: <span className="text-2xl">📚</span> },
-        { key: 'live_lesson', label: <span className="flex items-center">Live Lesson {activeLiveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: <span className="text-2xl">📡</span> },
-        { key: 'group_work', label: 'Group Work', icon: <span className="text-2xl">🤝</span> },
-        { key: 'ai_tools', label: 'AI Copilot', icon: <span className="text-2xl">🤖</span> },
-        { key: 'messages', label: <span className="flex items-center justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: <span className="text-2xl">💬</span> },
-        { key: 'my_library', label: 'My Library', icon: <span className="text-2xl">🗃️</span> },
-        { key: 'my_voice', label: 'My Voice', icon: <span className="text-2xl">🎙️</span> },
-        { key: 'attendance', label: 'Attendance', icon: <span className="text-2xl">📅</span> },
-        { key: 'terminal_reports', label: 'Terminal Reports', icon: <span className="text-2xl">📊</span> },
-        { key: 'past_questions', label: 'BECE Questions', icon: <span className="text-2xl">📝</span> },
+        { key: 'dashboard', label: 'Dashboard', icon: '🚀' },
+        { key: 'my_students', label: 'My Students', icon: '👨‍🎓' },
+        { key: 'assignments', label: 'Assignments', icon: '📚' },
+        { key: 'live_lesson', label: <span className="flex items-center">Live Class {activeLiveLesson && <span className="ml-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: '📡' },
+        { key: 'group_work', label: 'Group Work', icon: '🤝' },
+        { key: 'messages', label: <span className="flex items-center justify-between w-full">Messages {unreadMessages > 0 && <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadMessages}</span>}</span>, icon: '💬' },
+        { key: 'my_library', label: 'My Library', icon: '📂' },
+        { key: 'attendance', label: 'Attendance', icon: '📅' },
+        { key: 'progress', label: 'Progress', icon: '📈' },
+        { key: 'terminal_reports', label: 'Reports', icon: '📊' },
+        { key: 'past_questions', label: 'BECE Questions', icon: '📝' },
+        { key: 'ai_tools', label: 'AI Tools', icon: '🤖' },
+        { key: 'my_voice', label: 'My Voice', icon: '🎙️' },
     ];
     
     if (!user || !userProfile) {
@@ -949,22 +1190,8 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                                     </div>
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                         {classStudents.map(student => (
-                                            <button key={student.uid} onClick={() => setViewingStudentProgress(student)} className="p-3 bg-slate-700 rounded-lg text-left hover:bg-slate-600 transition-colors flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-slate-800 overflow-hidden flex-shrink-0 border border-slate-600">
-                                                    {student.photoURL ? (
-                                                        <img src={student.photoURL} alt={student.name} className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <div className="w-full h-full flex items-center justify-center text-slate-400 font-bold">{student.name.charAt(0)}</div>
-                                                    )}
-                                                </div>
-                                                <span className="font-medium text-slate-200">{student.name}</span>
-                                                <div 
-                                                    className="ml-auto p-1.5 hover:bg-slate-500 rounded text-slate-400 hover:text-white"
-                                                    onClick={(e) => { e.stopPropagation(); setEditingStudent(student); setIsEditModalOpen(true); }}
-                                                    title="Edit Student"
-                                                >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path d="M5.433 13.917l1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" /><path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" /></svg>
-                                                </div>
+                                            <button key={student.uid} onClick={() => setViewingStudentProgress(student)} className="p-3 bg-slate-700 rounded-lg text-left hover:bg-slate-600 transition-colors">
+                                                {student.name}
                                             </button>
                                         ))}
                                     </div>
@@ -1070,8 +1297,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                         )) : <p className="text-center text-gray-400">No groups created yet.</p>}
                      </div>
                 );
-            case 'ai_tools':
-                return <TeacherAITools students={students} userProfile={userProfile} />;
             case 'messages':
                 return <MessagingView userProfile={userProfile} contacts={contactsForMessaging} />;
             case 'my_library':
@@ -1098,8 +1323,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                         </div>
                     </div>
                 );
-            case 'my_voice':
-                return <TeacherMyVoice userProfile={userProfile} />;
             case 'attendance':
                 if (!userProfile.classTeacherOf) {
                     return <Card><p className="text-center">You are not a designated class teacher. Only class teachers can take attendance.</p></Card>;
@@ -1140,9 +1363,10 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                     <AdminTerminalReports 
                         schoolSettings={schoolSettings} 
                         user={user} 
+                        userProfile={userProfile}
                         teacherMode={true}
                         allowedClasses={teacherClasses}
-                        allStudents={students} // Pass already fetched students to optimize
+                        allStudents={students}
                         assignments={assignments}
                         submissions={submissions}
                         groups={groups}
@@ -1150,6 +1374,12 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 );
             case 'past_questions':
                 return <BECEPastQuestionsView />;
+            case 'progress':
+                return <TeacherProgressDashboard students={students} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} />;
+            case 'ai_tools':
+                return <TeacherAITools students={students} userProfile={userProfile} />;
+            case 'my_voice':
+                return <TeacherMyVoice userProfile={userProfile} />;
             default:
                 return <div>Select a tab</div>;
         }
@@ -1329,16 +1559,6 @@ const TeacherView: React.FC<TeacherViewProps> = ({ isSidebarExpanded, setIsSideb
                 isLoading={isDeletingGroup}
                 confirmButtonText="Yes, Delete Group"
             />
-            {isEditModalOpen && editingStudent && (
-                <UserEditModal
-                    isOpen={isEditModalOpen}
-                    onClose={() => setIsEditModalOpen(false)}
-                    user={editingStudent}
-                    onSave={handleSaveStudent}
-                    allUsers={students}
-                    subjectsByClass={null}
-                />
-            )}
         </div>
     );
 };

@@ -1,11 +1,13 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db, firebase } from '../services/firebase';
-import { GES_CLASSES, GES_SUBJECTS, TerminalReport, TerminalReportMark, UserProfile, SchoolSettings, Assignment, Submission, Group } from '../types';
+import { GES_CLASSES, GES_SUBJECTS, TerminalReport, TerminalReportMark, UserProfile, SchoolSettings, Assignment, Submission, Group, AttendanceRecord } from '../types';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
 import { useToast } from './common/Toast';
 import StudentReportCard from './common/StudentReportCard';
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 
 const getGrade = (score: number) => {
     if (score >= 80) return 'A';
@@ -32,9 +34,10 @@ interface RankingData {
 interface AdminTerminalReportsProps {
     schoolSettings: SchoolSettings | null;
     user: firebase.User | null;
+    userProfile?: UserProfile | null; // Added userProfile for permission checks
     teacherMode?: boolean;
     allowedClasses?: string[];
-    allStudents?: UserProfile[]; // Pass all students if available to avoid refetching or for filtering
+    allStudents?: UserProfile[]; 
     assignments?: Assignment[];
     submissions?: Submission[];
     groups?: Group[];
@@ -43,6 +46,7 @@ interface AdminTerminalReportsProps {
 const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({ 
     schoolSettings, 
     user, 
+    userProfile,
     teacherMode = false, 
     allowedClasses, 
     allStudents,
@@ -60,9 +64,11 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
     const [students, setStudents] = useState<UserProfile[]>([]);
     const [fullReport, setFullReport] = useState<TerminalReport | null>(null);
     const [marks, setMarks] = useState<Record<string, Partial<TerminalReportMark>>>({});
+    const [attendanceSummary, setAttendanceSummary] = useState<Record<string, { present: number, total: number }>>({});
     
     const [loading, setLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [pdfGeneratingProgress, setPdfGeneratingProgress] = useState<string | null>(null);
 
     // Sorting & Ordering
     const [orderedUids, setOrderedUids] = useState<string[]>([]);
@@ -71,6 +77,19 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
 
     // Printing selection state
     const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+
+    // Permission Logic
+    const isClassTeacher = useMemo(() => {
+        return teacherMode && userProfile?.classTeacherOf === selectedClass;
+    }, [teacherMode, userProfile, selectedClass]);
+
+    const canEditSubject = useMemo(() => {
+        if (!teacherMode) return true; // Admins can edit everything
+        if (!userProfile?.subjectsByClass) return false;
+        
+        const subjectsForClass = userProfile.subjectsByClass[selectedClass] || [];
+        return subjectsForClass.includes(selectedSubject);
+    }, [teacherMode, userProfile, selectedClass, selectedSubject]);
 
     // Fetch students
     useEffect(() => {
@@ -135,6 +154,33 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
         };
         fetchReport();
     }, [selectedClass, selectedSubject, schoolSettings, viewMode]);
+
+    // Fetch Attendance for Print Mode
+    useEffect(() => {
+        if (viewMode === 'print' && selectedClass) {
+            const fetchAttendance = async () => {
+                try {
+                    const snap = await db.collection('attendance').where('classId', '==', selectedClass).get();
+                    const summary: Record<string, { present: number, total: number }> = {};
+                    
+                    snap.docs.forEach(doc => {
+                        const data = doc.data() as AttendanceRecord;
+                        if (data.records) {
+                            Object.entries(data.records).forEach(([uid, status]) => {
+                                if (!summary[uid]) summary[uid] = { present: 0, total: 0 };
+                                summary[uid].total += 1;
+                                if (status === 'Present' || status === 'Late') summary[uid].present += 1;
+                            });
+                        }
+                    });
+                    setAttendanceSummary(summary);
+                } catch (e) {
+                    console.error("Error loading attendance for reports", e);
+                }
+            };
+            fetchAttendance();
+        }
+    }, [viewMode, selectedClass]);
 
     // --- SORTING & DRAG-DROP ---
 
@@ -290,6 +336,8 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
     }, [fullReport]);
 
     const handleMarkChange = (studentId: string, field: keyof TerminalReportMark, value: string) => {
+        if (!canEditSubject) return; // double check
+
         const numericValue = value === '' ? undefined : Number(value);
         setMarks(prev => ({
             ...prev,
@@ -305,6 +353,11 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
             showToast("Missing required information.", 'error');
             return;
         }
+        if (!canEditSubject) {
+            showToast("You are not authorized to save marks for this subject.", 'error');
+            return;
+        }
+
         setIsSaving(true);
 
         const calculatedMarks: Record<string, TerminalReportMark> = {};
@@ -340,6 +393,7 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
             studentTotals.push({ studentId: student.uid, total: overallTotal });
         });
         
+        // Subject Position Calculation (Not Overall Class Position)
         studentTotals.sort((a, b) => b.total - a.total);
         studentTotals.forEach((item, index) => {
             let position = index + 1;
@@ -395,13 +449,82 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
             setIsSaving(false);
         }
     };
+    
+    const handleTogglePublish = async () => {
+        if (!fullReport) return;
+        const newStatus = !fullReport.published;
+        
+        if (window.confirm(newStatus ? 
+            "Are you sure you want to PUBLISH these reports? Students and Parents will be able to view them." : 
+            "Are you sure you want to UNPUBLISH these reports? Access will be revoked.")) {
+            
+            try {
+                await db.collection('terminalReports').doc(fullReport.id).update({
+                    published: newStatus
+                });
+                setFullReport({ ...fullReport, published: newStatus });
+                showToast(newStatus ? 'Reports Published!' : 'Reports Unpublished.', 'success');
+            } catch (err: any) {
+                showToast(`Failed to update status: ${err.message}`, 'error');
+            }
+        }
+    };
 
-    const handlePrint = () => {
+    const handleDownloadPDF = async () => {
         if (selectedStudentIds.length === 0) {
-            showToast("Please select at least one student to print.", "error");
+            showToast("Please select at least one student to download.", "error");
             return;
         }
-        window.print();
+
+        const studentsToPrint = orderedUids.filter(id => selectedStudentIds.includes(id));
+        setPdfGeneratingProgress(`Starting PDF generation for ${studentsToPrint.length} reports...`);
+
+        try {
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const width = pdf.internal.pageSize.getWidth();
+            const height = pdf.internal.pageSize.getHeight();
+
+            for (let i = 0; i < studentsToPrint.length; i++) {
+                const uid = studentsToPrint[i];
+                setPdfGeneratingProgress(`Rendering report ${i + 1} of ${studentsToPrint.length}...`);
+
+                const element = document.getElementById(`report-card-${uid}`);
+                if (!element) {
+                    console.warn(`Report element for ${uid} not found.`);
+                    continue;
+                }
+
+                const canvas = await html2canvas(element, {
+                    scale: 2, // Improve quality
+                    useCORS: true, // For images (avatars, logos)
+                    backgroundColor: '#ffffff'
+                });
+
+                const imgData = canvas.toDataURL('image/png');
+                
+                // Calculate dimensions to fit A4 width, maintaining aspect ratio
+                // Add margins (e.g. 10mm)
+                const margin = 10;
+                const imgWidth = width - (margin * 2); 
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+                if (i > 0) {
+                    pdf.addPage();
+                }
+
+                pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight);
+            }
+            
+            setPdfGeneratingProgress("Finalizing PDF...");
+            pdf.save(`Terminal_Reports_${selectedClass}_${new Date().toLocaleDateString()}.pdf`);
+            showToast("Reports downloaded successfully!", "success");
+
+        } catch (error: any) {
+            console.error("PDF Generation failed:", error);
+            showToast(`Failed to generate PDF: ${error.message}`, "error");
+        } finally {
+            setPdfGeneratingProgress(null);
+        }
     };
 
     const toggleStudentSelection = (uid: string) => {
@@ -459,33 +582,55 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
                     {viewMode === 'entry' ? (
                         <>
                             {teacherMode && (
-                                <Button onClick={handleAutoFillScores} variant="secondary" size="sm" className="hidden xl:block">
+                                <Button onClick={handleAutoFillScores} disabled={!canEditSubject} variant="secondary" size="sm" className="hidden xl:block">
                                     Auto-fill Scores
                                 </Button>
                             )}
-                            <Button onClick={calculateTotalsAndSave} disabled={isSaving || loading} className="w-full sm:w-auto flex-grow justify-center">
+                            <Button onClick={calculateTotalsAndSave} disabled={isSaving || loading || !canEditSubject} className="w-full sm:w-auto flex-grow justify-center">
                                 {isSaving ? 'Saving...' : 'Save Changes'}
                             </Button>
                         </>
                     ) : (
-                        <Button onClick={handlePrint} variant="secondary" className="w-full sm:w-auto flex-grow justify-center bg-green-600 hover:bg-green-500 text-white border-none">
-                            🖨️ Print Selected ({selectedStudentIds.length})
-                        </Button>
+                        <>
+                            <Button 
+                                onClick={handleTogglePublish} 
+                                variant={fullReport?.published ? 'danger' : 'primary'} 
+                                className="w-full sm:w-auto flex-grow justify-center"
+                                disabled={!fullReport}
+                            >
+                                {fullReport?.published ? 'Unpublish' : 'Publish to Portal'}
+                            </Button>
+                            <Button onClick={handleDownloadPDF} disabled={!!pdfGeneratingProgress} variant="secondary" className="w-full sm:w-auto flex-grow justify-center bg-green-600 hover:bg-green-500 text-white border-none">
+                                {pdfGeneratingProgress ? <Spinner /> : '📥 Download PDF'}
+                            </Button>
+                        </>
                     )}
                  </div>
             </div>
             
+            {pdfGeneratingProgress && (
+                <div className="bg-blue-900/50 text-blue-200 px-4 py-3 rounded-lg mb-4 flex items-center justify-center gap-3 border border-blue-500/30">
+                    <Spinner />
+                    <span className="animate-pulse font-medium">{pdfGeneratingProgress}</span>
+                </div>
+            )}
+            
             {loading ? <div className="flex justify-center items-center h-64"><Spinner /></div> : (
                  <>
                     {viewMode === 'entry' ? (
-                        <div className="flex flex-col h-full bg-white rounded-xl shadow-lg overflow-hidden border border-gray-300">
+                        <div className="flex flex-col h-full bg-white rounded-xl shadow-lg overflow-hidden border border-gray-300 relative">
+                             {!canEditSubject && (
+                                 <div className="bg-yellow-100 text-yellow-800 px-4 py-2 text-sm font-bold border-b border-yellow-200 flex items-center justify-center">
+                                     🔒 Read Only Mode: You are not assigned to teach {selectedSubject} in {selectedClass}.
+                                 </div>
+                             )}
                              <div className="bg-gray-50 border-b border-gray-200 p-2 flex gap-2 items-center text-sm overflow-x-auto">
                                 <span className="text-gray-500 font-bold px-2 whitespace-nowrap">Sort By:</span>
                                 <button onClick={() => handleSort('name')} className={`px-3 py-1 rounded border ${sortMethod === 'name' ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-gray-300'}`}>Name</button>
                                 <button onClick={() => handleSort('position')} className={`px-3 py-1 rounded border ${sortMethod === 'position' ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-gray-300'}`}>Position</button>
                                 <button onClick={() => handleSort('grade')} className={`px-3 py-1 rounded border ${sortMethod === 'grade' ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-gray-300'}`}>Grade</button>
                                 {sortMethod === 'custom' && <span className="ml-auto text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded border border-yellow-300 whitespace-nowrap">Custom Order</span>}
-                                {teacherMode && (
+                                {teacherMode && canEditSubject && (
                                      <button onClick={handleAutoFillScores} className="xl:hidden ml-auto px-3 py-1 rounded border bg-purple-100 border-purple-300 text-purple-800 text-xs whitespace-nowrap">Auto-fill</button>
                                 )}
                             </div>
@@ -502,6 +647,9 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
                                                 <th rowSpan={2} className="p-2 border-b border-r border-gray-300 text-center w-24 font-bold bg-purple-50 text-purple-800">EXAM (100)</th>
                                                 <th rowSpan={2} className="p-2 border-b border-r border-gray-300 text-center w-20 font-bold bg-gray-50 text-gray-800">EXAM (50%)</th>
                                                 <th colSpan={3} className="p-2 border-b border-gray-300 text-center bg-green-50 text-green-800 font-bold">FINAL GRADING</th>
+                                                {(isClassTeacher || !teacherMode) && (
+                                                    <th rowSpan={2} className="p-2 border-b border-l-2 border-gray-300 text-center w-24 font-black bg-indigo-50 text-indigo-800">OVERALL POS.</th>
+                                                )}
                                             </tr>
                                             <tr className="text-xs text-gray-600">
                                                 <th className="p-2 border-b border-r border-gray-300 font-medium text-center w-20">ASSIGNMENTS</th>
@@ -528,6 +676,8 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
                                                 const scaledClass = ((mark.indivTest||0) + (mark.groupWork||0) + (mark.classTest||0) + (mark.project||0)) / 60 * 50;
                                                 const scaledExam = (mark.endOfTermExams || 0) / 100 * 50;
 
+                                                const overallRankData = classRanking[student.uid];
+
                                                 return (
                                                     <tr key={student.uid} draggable onDragStart={(e) => handleDragStart(e, student.uid)} onDragEnd={handleDragEnd} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, student.uid)} className="hover:bg-blue-50 transition-colors group cursor-grab active:cursor-grabbing">
                                                         <td className="p-2 text-center text-gray-400 font-mono text-xs border-r border-gray-300 bg-gray-50">
@@ -536,17 +686,22 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
                                                         <td className="p-3 text-left border-r border-gray-300 font-bold text-black sticky left-0 bg-white group-hover:bg-blue-50 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] whitespace-nowrap uppercase text-sm">{student.name}</td>
                                                         {['indivTest', 'groupWork', 'classTest', 'project'].map((field) => (
                                                             <td key={field} className="p-1 border-r border-gray-300 bg-gray-50/50">
-                                                                <input type="number" step="0.1" min="0" max="15" value={mark[field as keyof TerminalReportMark] ?? ''} onChange={e => handleMarkChange(student.uid, field as keyof TerminalReportMark, e.target.value)} className="w-full h-10 bg-transparent text-center focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none rounded text-black font-mono border border-transparent hover:border-gray-300 text-base" placeholder="-" />
+                                                                <input type="number" step="0.1" min="0" max="15" disabled={!canEditSubject} value={mark[field as keyof TerminalReportMark] ?? ''} onChange={e => handleMarkChange(student.uid, field as keyof TerminalReportMark, e.target.value)} className="w-full h-10 bg-transparent text-center focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none rounded text-black font-mono border border-transparent hover:border-gray-300 text-base disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed" placeholder="-" />
                                                             </td>
                                                         ))}
                                                         <td className="p-2 text-center font-bold border-r border-gray-300 text-gray-700 bg-gray-100 text-sm">{scaledClass.toFixed(1)}</td>
                                                         <td className="p-1 border-r border-gray-300 bg-purple-50/50">
-                                                            <input type="number" step="0.1" min="0" max="100" value={mark.endOfTermExams ?? ''} onChange={e => handleMarkChange(student.uid, 'endOfTermExams', e.target.value)} className="w-full h-10 bg-transparent text-center focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none rounded text-black font-bold font-mono border border-transparent hover:border-gray-300 text-base" placeholder="-" />
+                                                            <input type="number" step="0.1" min="0" max="100" disabled={!canEditSubject} value={mark.endOfTermExams ?? ''} onChange={e => handleMarkChange(student.uid, 'endOfTermExams', e.target.value)} className="w-full h-10 bg-transparent text-center focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none rounded text-black font-bold font-mono border border-transparent hover:border-gray-300 text-base disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed" placeholder="-" />
                                                         </td>
                                                         <td className="p-2 text-center font-medium border-r border-gray-300 text-gray-700 bg-gray-100 text-sm">{scaledExam.toFixed(1)}</td>
                                                         <td className="p-2 text-center font-black border-r border-gray-300 text-black text-base bg-gray-50">{overallTotal.toFixed(1)}</td>
                                                         <td className={`p-2 text-center text-base border-r border-gray-300 bg-gray-50 ${gradeColor}`}>{grade}</td>
                                                         <td className="p-2 text-center font-bold text-black bg-gray-50 text-sm">{mark.position || '-'}</td>
+                                                        {(isClassTeacher || !teacherMode) && (
+                                                            <td className="p-2 text-center font-black text-indigo-700 bg-indigo-50 border-l-2 border-gray-300">
+                                                                {overallRankData ? overallRankData.position : '-'}
+                                                            </td>
+                                                        )}
                                                     </tr>
                                                 );
                                             })}
@@ -562,7 +717,11 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
                                     <input type="checkbox" checked={selectedStudentIds.length === students.length && students.length > 0} onChange={toggleSelectAll} className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                                     <span className="text-gray-700 font-semibold text-sm">Select All ({selectedStudentIds.length}/{students.length})</span>
                                 </div>
-                                <div className="text-xs text-gray-500 italic">Scroll down to verify reports. Only checked students will print.</div>
+                                <div className="flex items-center gap-4">
+                                     <div className="text-xs text-gray-500 italic">
+                                         {fullReport?.published ? '✅ Report is Published' : '🚫 Report is NOT Published'}
+                                     </div>
+                                </div>
                             </div>
                             <div className="bg-gray-100 p-4 sm:p-8 rounded-xl overflow-y-auto h-[calc(100dvh-280px)] md:h-[calc(100vh-200px)] custom-scrollbar print:h-auto print:overflow-visible print:bg-white print:p-0">
                                 <div className="grid grid-cols-1 gap-8 print:block print:gap-0">
@@ -574,8 +733,15 @@ const AdminTerminalReports: React.FC<AdminTerminalReportsProps> = ({
                                                 <div className="absolute top-4 right-4 z-20 print:hidden">
                                                     <input type="checkbox" checked={selectedStudentIds.includes(student.uid)} onChange={() => toggleStudentSelection(student.uid)} className="h-6 w-6 rounded border-gray-300 text-blue-600 focus:ring-blue-500 shadow-md cursor-pointer" />
                                                 </div>
-                                                <div className={`report-card-page-break w-full ${!selectedStudentIds.includes(student.uid) ? 'pointer-events-none' : ''}`}>
-                                                    <StudentReportCard student={student} report={fullReport} schoolSettings={schoolSettings} ranking={classRanking[student.uid] || null} classSize={students.length} currentMarks={teacherMode ? marks : undefined} />
+                                                <div id={`report-card-${student.uid}`} className={`report-card-page-break w-full ${!selectedStudentIds.includes(student.uid) ? 'pointer-events-none' : ''}`}>
+                                                    <StudentReportCard 
+                                                        student={student} 
+                                                        report={fullReport} 
+                                                        schoolSettings={schoolSettings} 
+                                                        ranking={classRanking[student.uid] || null} 
+                                                        classSize={students.length} 
+                                                        attendance={attendanceSummary[student.uid]}
+                                                    />
                                                 </div>
                                             </div>
                                         );

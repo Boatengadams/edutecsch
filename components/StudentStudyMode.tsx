@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { UserProfile, GES_SUBJECTS, Timetable } from '../types';
 import FocusTimer from './FocusTimer';
 import Card from './common/Card';
@@ -209,8 +209,10 @@ const StudentStudyMode: React.FC<StudentStudyModeProps> = ({ onExit, userProfile
   
   // Audio State
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [audioProgress, setAudioProgress] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
   
   // Audio Preloading Cache
   const audioCache = useRef<Map<number, AudioBuffer>>(new Map());
@@ -290,7 +292,12 @@ const StudentStudyMode: React.FC<StudentStudyModeProps> = ({ onExit, userProfile
           audioSourceRef.current.disconnect();
           audioSourceRef.current = null;
       }
+      if (animationFrameRef.current) {
+          cancelAnimationFrame(animationFrameRef.current);
+          animationFrameRef.current = null;
+      }
       setIsPlayingAudio(false);
+      setAudioProgress(0);
   };
 
   const fetchAudioBuffer = async (text: string, voice: string = 'Puck'): Promise<AudioBuffer> => {
@@ -327,6 +334,7 @@ const StudentStudyMode: React.FC<StudentStudyModeProps> = ({ onExit, userProfile
       // STOP PREVIOUS AUDIO IMMEDIATELY
       stopAudio();
       setIsPlayingAudio(true);
+      setAudioProgress(0);
 
       try {
           let buffer: AudioBuffer;
@@ -347,9 +355,31 @@ const StudentStudyMode: React.FC<StudentStudyModeProps> = ({ onExit, userProfile
           source.buffer = buffer;
           source.connect(audioContextRef.current.destination);
           
-          source.onended = () => setIsPlayingAudio(false);
+          const startTime = audioContextRef.current.currentTime;
+          const duration = buffer.duration;
+
+          source.onended = () => {
+              setIsPlayingAudio(false);
+              setAudioProgress(100);
+              if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+          };
+          
           source.start();
           audioSourceRef.current = source;
+
+          // Animation Loop for Progress Bar
+          const animate = () => {
+              if (!audioContextRef.current) return;
+              const elapsed = audioContextRef.current.currentTime - startTime;
+              const progress = Math.min((elapsed / duration) * 100, 100);
+              setAudioProgress(progress);
+              
+              if (progress < 100) {
+                  animationFrameRef.current = requestAnimationFrame(animate);
+              }
+          };
+          animationFrameRef.current = requestAnimationFrame(animate);
+
       } catch (err) {
           console.error("Audio playback error", err);
           setIsPlayingAudio(false);
@@ -425,7 +455,6 @@ const StudentStudyMode: React.FC<StudentStudyModeProps> = ({ onExit, userProfile
           const slide = contentSlides[i];
           try {
               // 1. Generate Audio Summary (using 'Fenrir' for a different narrator voice)
-              // NOTE: Use a fetch to TTS API directly here to get a blob URL for the <audio> tag
               let audioUrl = '';
               try {
                   const ttsResponse = await ai.models.generateContent({
@@ -543,7 +572,7 @@ const StudentStudyMode: React.FC<StudentStudyModeProps> = ({ onExit, userProfile
       For EACH content slide, provide:
       1. 'title': Engaging slide title.
       2. 'bullets': Array of 3-4 short, clear bullet points.
-      3. 'teacherScript': A comprehensive, detailed explanation (minimum 80-120 words). Act as an expert teacher breaking down complex concepts into clear, digestible parts with real-world examples. Provide deep insights and context. Do not be brief.
+      3. 'teacherScript': A comprehensive, conversational explanation (minimum 60-100 words). Write it exactly as a teacher would speak it. Use engaging and simple language.
       4. 'summaryScript': A narrative recap of this specific slide. This will be used for the video summary. Ensure it connects smoothly to the next slide conceptually to form a continuous story.
       5. 'imagePrompt': Highly descriptive prompt for an educational image related to this slide.
       6. 'checkQuestion': Optional multiple-choice question.
@@ -609,7 +638,7 @@ const StudentStudyMode: React.FC<StudentStudyModeProps> = ({ onExit, userProfile
     }
   };
 
-  const triggerNextSlide = () => {
+  const triggerNextSlide = useCallback(() => {
       // Logic for the interactive "Question" buttons
       const randomTitles = ["Check Point", "Teacher's Question", "Pause for a sec", "Quick Check"];
       const randomMessages = [
@@ -624,20 +653,34 @@ const StudentStudyMode: React.FC<StudentStudyModeProps> = ({ onExit, userProfile
       setCheckDialogMessage(randomMessages[Math.floor(Math.random() * randomMessages.length)]);
       
       setShowCheckDialog(true);
-  };
+  }, []);
 
-  const confirmNextSlide = () => {
+  const confirmNextSlide = useCallback(() => {
       setShowCheckDialog(false);
       if (learningModule && currentSlideIndex < learningModule.slides.length - 1) {
           setCurrentSlideIndex(prev => prev + 1);
       }
-  };
+  }, [learningModule, currentSlideIndex]);
 
-  const handlePrevSlide = () => {
+  const handlePrevSlide = useCallback(() => {
       if (currentSlideIndex > 0) {
           setCurrentSlideIndex(prev => prev - 1);
       }
-  };
+  }, [currentSlideIndex]);
+  
+  // Keyboard Navigation
+  useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+          if (e.key === 'ArrowRight') {
+             if (currentSlideIndex === learningModule?.slides.length! - 1) return;
+             triggerNextSlide();
+          }
+          if (e.key === 'ArrowLeft') handlePrevSlide();
+      };
+      
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [triggerNextSlide, handlePrevSlide, currentSlideIndex, learningModule]);
 
   return (
     <div className={`fixed inset-0 z-50 flex flex-col font-sans text-slate-200 transition-all duration-500 ${isFocusMode ? 'bg-black' : 'bg-slate-950'}`}>
@@ -743,6 +786,26 @@ const StudentStudyMode: React.FC<StudentStudyModeProps> = ({ onExit, userProfile
                     </button>
                 </div>
 
+                {/* Pro Side Navigation Paddles */}
+                {currentSlideIndex > 0 && (
+                    <button 
+                        onClick={handlePrevSlide}
+                        className="absolute left-0 top-1/2 -translate-y-1/2 z-40 p-6 h-32 flex items-center justify-center text-white/50 hover:text-white hover:bg-black/30 transition-all rounded-r-3xl group"
+                        title="Previous Slide (Left Arrow)"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-10 h-10 transform group-hover:-translate-x-1 transition-transform"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                    </button>
+                )}
+                {currentSlideIndex < learningModule.slides.length - 1 && (
+                    <button 
+                        onClick={triggerNextSlide}
+                        className="absolute right-0 top-1/2 -translate-y-1/2 z-40 p-6 h-32 flex items-center justify-center text-white/50 hover:text-white hover:bg-black/30 transition-all rounded-l-3xl group"
+                        title="Next Slide (Right Arrow)"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-10 h-10 transform group-hover:translate-x-1 transition-transform"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+                    </button>
+                )}
+
                 {/* Slide View Container */}
                 <div className={`flex-grow flex items-center justify-center transition-all duration-500 ${isFocusMode ? 'w-full h-full' : 'p-0 md:p-8'}`}>
                     <div className={`bg-slate-900 border border-slate-700 shadow-2xl relative overflow-hidden flex flex-col animate-fade-in-up transition-all duration-500 ${isFocusMode ? 'w-full h-full rounded-none border-0' : 'w-full max-w-7xl md:aspect-video h-full md:h-auto rounded-none md:rounded-2xl'}`}>
@@ -768,7 +831,30 @@ const StudentStudyMode: React.FC<StudentStudyModeProps> = ({ onExit, userProfile
 
                             // Layout: Stack on Mobile, Split on Desktop
                             return (
-                                <div className="w-full h-full flex flex-col md:flex-row">
+                                <div className="w-full h-full flex flex-col md:flex-row relative">
+                                    {/* Captions Overlay - Shows when audio plays */}
+                                    {isPlayingAudio && (
+                                        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-3xl z-40 animate-fade-in-up pointer-events-none">
+                                            <div className="relative bg-black/80 backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-2xl overflow-hidden">
+                                                
+                                                {/* Pro Progress Bar wrapped around top */}
+                                                <div className="absolute top-0 left-0 h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 transition-all duration-100 ease-linear shadow-[0_0_10px_rgba(168,85,247,0.6)]" style={{ width: `${audioProgress}%` }}></div>
+                                                
+                                                <div className="flex gap-4 items-start">
+                                                     <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-xl shrink-0 border border-slate-600 shadow-inner">
+                                                        👨‍🏫
+                                                     </div>
+                                                     <div>
+                                                         <h4 className="text-blue-400 text-xs font-bold uppercase tracking-widest mb-1">Teacher Speaking</h4>
+                                                         <p className="text-lg text-white font-medium leading-relaxed font-serif">
+                                                            {slide.teacherScript}
+                                                         </p>
+                                                     </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Left (Top on Mobile): Image Panel */}
                                     <div className="w-full h-48 md:w-1/2 md:h-full shrink-0 relative overflow-hidden bg-black flex items-center justify-center">
                                         {slide.imageUrl ? (
@@ -804,7 +890,7 @@ const StudentStudyMode: React.FC<StudentStudyModeProps> = ({ onExit, userProfile
                                                         onClick={() => playScript(slide.teacherScript, currentSlideIndex)} 
                                                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold border transition-all w-full md:w-auto justify-center ${isPlayingAudio ? 'bg-blue-600 border-blue-500 text-white animate-pulse' : 'bg-slate-800 border-slate-600 text-slate-300 hover:bg-slate-700'}`}
                                                     >
-                                                        {isPlayingAudio ? '🔊 Teacher Speaking...' : '🔈 Replay Explanation'}
+                                                        {isPlayingAudio ? '🔊 Replay Audio' : '🔈 Listen Again'}
                                                     </button>
                                                 </div>
                                             )}
@@ -816,35 +902,32 @@ const StudentStudyMode: React.FC<StudentStudyModeProps> = ({ onExit, userProfile
                     </div>
                 </div>
 
-                {/* Navigation Bar */}
-                <div className={`bg-slate-900 border-t border-slate-800 flex items-center justify-between px-4 md:px-8 z-10 transition-all duration-300 ${isFocusMode ? 'h-0 opacity-0 overflow-hidden' : 'h-16 md:h-20'}`}>
-                    <Button onClick={handlePrevSlide} disabled={currentSlideIndex === 0} variant="secondary" className="text-sm">Previous</Button>
+                {/* Bottom Bar - Minimal now */}
+                <div className={`bg-slate-900 border-t border-slate-800 flex items-center justify-between px-4 md:px-8 z-10 transition-all duration-300 ${isFocusMode ? 'h-0 opacity-0 overflow-hidden' : 'h-16'}`}>
                     
-                    {/* Slide Dots (Hidden on small mobile if too many) */}
-                    <div className="hidden sm:flex gap-2">
-                        {learningModule.slides.map((_, idx) => (
-                            <div 
-                                key={idx} 
-                                className={`w-2 h-2 md:w-3 md:h-3 rounded-full transition-all duration-300 ${idx === currentSlideIndex ? 'bg-blue-500 scale-125' : 'bg-slate-700'}`}
-                            />
-                        ))}
+                    <div className="flex gap-2">
+                         {/* Dots for progress */}
+                        <div className="hidden sm:flex gap-1.5 items-center">
+                            {learningModule.slides.map((_, idx) => (
+                                <div 
+                                    key={idx} 
+                                    className={`h-1.5 rounded-full transition-all duration-300 ${idx === currentSlideIndex ? 'w-6 bg-blue-500' : 'w-1.5 bg-slate-700'}`}
+                                />
+                            ))}
+                        </div>
                     </div>
-                    {/* Mobile Slide Counter */}
-                    <span className="sm:hidden text-xs text-slate-500 font-mono">{currentSlideIndex + 1}/{learningModule.slides.length}</span>
 
                     <div className="flex gap-2 md:gap-4">
                         <Button 
                             variant="ghost" 
                             onClick={onExit}
-                            className="text-red-400 hover:bg-red-900/20 sm:hidden px-3 text-sm"
+                            className="text-red-400 hover:bg-red-900/20 px-4 text-sm"
                         >
-                            Quit
+                            Quit Session
                         </Button>
-                        {currentSlideIndex === learningModule.slides.length - 1 ? (
-                            <Button onClick={() => { handleSessionComplete(); onExit(); }} className="bg-green-600 hover:bg-green-500 shadow-lg shadow-green-900/20 text-sm">Finish</Button>
-                        ) : (
-                            <Button onClick={triggerNextSlide} className="text-sm">
-                                Continue <span className="ml-2">→</span>
+                        {currentSlideIndex === learningModule.slides.length - 1 && (
+                            <Button onClick={() => { handleSessionComplete(); onExit(); }} className="bg-green-600 hover:bg-green-500 shadow-lg shadow-green-900/20 text-sm px-6">
+                                Finish Lesson
                             </Button>
                         )}
                     </div>
