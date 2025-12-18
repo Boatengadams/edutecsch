@@ -14,7 +14,7 @@ export const firebaseConfig = {
   // services like Firestore, which is likely the cause of the timeout.
   databaseURL: "https://edutecschools-default-rtdb.us-west1.firebasedatabase.app",
   projectId: "edutecschools",
-  storageBucket: "edutecschools.appspot.com",
+  storageBucket: "edutecschools.firebasestorage.app", // UPDATED to match console
   messagingSenderId: "874590795053",
   appId: "1:874590795053:web:274a2cd1732e46d4f00fa4",
   measurementId: "G-ZMSQZ67NYH"

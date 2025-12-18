@@ -3,11 +3,18 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // -------------------------
-    // Helper Functions
-    // -------------------------
+    // ===========================================================
+    // HELPER FUNCTIONS
+    // ===========================================================
+
     function isSignedIn() {
       return request.auth != null;
+    }
+
+    // Emergency / Bootstrap Super Admin
+    function isSuperAdmin() {
+      return isSignedIn()
+        && request.auth.uid == 'WsDstQ5ufSW49i0Pc5sJWWyDVk22';
     }
 
     function callerDoc() {
@@ -15,184 +22,198 @@ service firebase.storage {
     }
 
     function callerExists() {
-      return callerDoc().exists();
+      return isSignedIn() && callerDoc().exists();
     }
 
     function isCallerApproved() {
       return isSignedIn()
-        && callerExists()
         && (
-          callerDoc().data.status == 'approved' ||
-          callerDoc().data.role == 'admin'
+          isSuperAdmin() ||
+          (callerExists() && (callerDoc().data.status == 'approved' || callerDoc().data.role == 'admin'))
         );
     }
 
-    // Limit file size to 10MB
-    function fileSizeOK() {
-      return request.resource.size < 10 * 1024 * 1024;
+    function isCallerAdmin() {
+      return isSignedIn()
+        && (
+          isSuperAdmin() ||
+          (callerExists() && (
+            callerDoc().data.role == 'admin' ||
+            callerDoc().data.get('isAlsoAdmin', false) == true
+          ))
+        );
     }
 
-    // Restrict allowed file types
+    // -------------------------
+    // File Validation
+    // -------------------------
+    function fileSizeMB(limit) {
+      return request.resource.size < limit * 1024 * 1024;
+    }
+
     function mimeTypeOK() {
       return request.resource.contentType.matches('image/.*')
         || request.resource.contentType.matches('video/.*')
         || request.resource.contentType.matches('application/pdf');
     }
 
-    // Prevent overwriting existing files
-    function notOverwriting() {
-      return !resource.exists();
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
     }
 
     // ===========================================================
-    // ================== MERGED STORAGE SECTIONS ================
+    // 1. SCHOOL CONFIG / BRANDING
     // ===========================================================
+    match /schoolConfig/{allPaths=**} {
+      allow read: if true;
+      allow write: if isCallerAdmin() && fileSizeMB(5) && isImage();
+      allow delete: if isCallerAdmin();
+    }
 
     // ===========================================================
-    // 1. FLYERS (Public Read, Admin/Teacher Write)
+    // 2. FLYERS (Public Read)
     // ===========================================================
     match /flyers/{allPaths=**} {
-      allow read: if true; // Public for everyone to see
+      allow read: if true;
       allow write: if isCallerApproved()
-        && (callerDoc().data.role == 'admin' || callerDoc().data.role == 'teacher')
-        && fileSizeOK() 
-        && mimeTypeOK();
+        && (isSuperAdmin() ||
+            callerDoc().data.role == 'admin' ||
+            callerDoc().data.role == 'teacher')
+        && fileSizeMB(10)
+        && isImage();
     }
 
     // ===========================================================
-    // 2. USER PROFILE FILES (Optimized Security)
+    // 3. USER PROFILE FILES (Optimized)
     // ===========================================================
-    match /users/{userId}/{filename} {
+    match /users/{userId}/{allPaths=**} {
       allow read: if isCallerApproved();
 
-      // OPTIMIZATION: Split rules to avoid DB lookup overhead for self-uploads
-      // 1. Allow owner to upload (No DB lookup required - Fast)
-      allow write: if isSignedIn() 
-        && userId == request.auth.uid 
-        && fileSizeOK() 
-        && mimeTypeOK();
-        
-      // 2. Allow Admins/Teachers to upload for others (DB lookup required)
-      allow write: if isCallerApproved() 
-        && (callerDoc().data.role == 'admin' || callerDoc().data.role == 'teacher')
-        && fileSizeOK()
-        && mimeTypeOK();
+      // Self upload (fast, no DB read)
+      allow write: if isSignedIn()
+        && userId == request.auth.uid
+        && fileSizeMB(5)
+        && isImage();
+
+      // Admin / Teacher upload for others
+      allow write: if isCallerApproved()
+        && (isCallerAdmin() || callerDoc().data.role == 'teacher')
+        && fileSizeMB(5)
+        && isImage();
     }
 
     // ===========================================================
-    // 3. TEACHING MATERIALS (Auth Read, Teacher/Admin Write)
+    // 4. TEACHING MATERIALS
     // ===========================================================
     match /teachingMaterials/{materialId}/{fileName} {
       allow read: if isSignedIn();
-      
-      allow write: if isCallerApproved()
-        && (callerDoc().data.role == 'teacher' ||
-            callerDoc().data.role == 'admin')
-        && fileSizeOK()
-        && mimeTypeOK()
-        && notOverwriting();
 
-      allow delete: if isCallerApproved()
-        && callerDoc().data.role == 'admin';
+      allow write: if isCallerApproved()
+        && (callerDoc().data.role == 'teacher' || isCallerAdmin())
+        && fileSizeMB(20)
+        && mimeTypeOK();
+
+      allow delete: if isCallerAdmin()
+        || (
+          callerDoc().data.role == 'teacher'
+          && resource.metadata.uploaderId == request.auth.uid
+        );
     }
 
     // ===========================================================
-    // 4. ASSIGNMENT MATERIALS (Strict Teacher/Admin Write)
+    // 5. ASSIGNMENTS & MATERIALS
     // ===========================================================
     match /assignments/{assignmentId}/materials/{fileName} {
       allow read: if isCallerApproved();
 
       allow write: if isCallerApproved()
         && callerDoc().data.role == 'teacher'
-        && fileSizeOK()
-        && mimeTypeOK()
-        && notOverwriting();
+        && fileSizeMB(20)
+        && mimeTypeOK();
 
-      allow delete: if isCallerApproved()
-        && callerDoc().data.role == 'admin';
+      allow delete: if isCallerAdmin()
+        || callerDoc().data.role == 'teacher';
     }
 
     // ===========================================================
-    // 5. STUDENT SUBMISSION FILES
+    // 6. STUDENT SUBMISSIONS
     // ===========================================================
     match /submissions/{submissionId}/{studentId}/{fileName} {
-
       allow read: if isSignedIn();
 
       allow write: if isCallerApproved()
         && callerDoc().data.role == 'student'
         && studentId == request.auth.uid
-        && fileSizeOK()
-        && mimeTypeOK()
-        && notOverwriting();
+        && fileSizeMB(20)
+        && mimeTypeOK();
 
-      allow delete: if isCallerApproved()
-        && callerDoc().data.role == 'admin';
+      allow delete: if isCallerAdmin()
+        || callerDoc().data.role == 'teacher';
     }
 
     // ===========================================================
-    // 6. GROUPS & DIRECT MESSAGES UPLOADS
+    // 7. GROUPS & DIRECT MESSAGES
     // ===========================================================
-    match /groups/{groupId}/{allPaths=**} {
-      allow read, write: if isSignedIn() && fileSizeOK() && mimeTypeOK();
+    match /groups/{allPaths=**} {
+      allow read, write: if isSignedIn()
+        && fileSizeMB(10)
+        && mimeTypeOK();
     }
+
     match /direct_messages/{allPaths=**} {
-      allow read, write: if isSignedIn() && fileSizeOK() && mimeTypeOK();
+      allow read, write: if isSignedIn()
+        && fileSizeMB(10)
+        && mimeTypeOK();
     }
 
     // ===========================================================
-    // 7. LIVE LESSON IMAGES
+    // 8. LIVE LESSON IMAGES
     // ===========================================================
     match /liveLessons/{lessonId}/images/{fileName} {
       allow read: if isSignedIn();
 
       allow write: if isCallerApproved()
-        && (callerDoc().data.role == 'teacher' ||
-            callerDoc().data.role == 'admin')
-        && fileSizeOK()
-        && mimeTypeOK()
-        && notOverwriting();
+        && (callerDoc().data.role == 'teacher' || isCallerAdmin())
+        && fileSizeMB(10)
+        && isImage();
 
-      allow delete: if isCallerApproved()
-        && callerDoc().data.role == 'admin';
+      allow delete: if isCallerAdmin()
+        || callerDoc().data.role == 'teacher';
     }
 
     // ===========================================================
-    // 8. VIDEO CONTENT (Teacher/Admin Uploads)
+    // 9. VIDEO CONTENT
     // ===========================================================
     match /videoContent/{creatorId}/{videoId}/{fileName} {
       allow read: if isSignedIn();
 
       allow write: if isCallerApproved()
-        && (callerDoc().data.role == 'teacher' ||
-            callerDoc().data.role == 'admin')
         && creatorId == request.auth.uid
-        && fileSizeOK()
-        && mimeTypeOK()
-        && notOverwriting();
+        && (callerDoc().data.role == 'teacher' || isCallerAdmin())
+        && fileSizeMB(100)
+        && mimeTypeOK();
 
-      allow delete: if isCallerApproved()
-        && (callerDoc().data.role == 'admin' ||
-            creatorId == request.auth.uid);
+      allow delete: if isCallerAdmin()
+        || creatorId == request.auth.uid;
     }
-    
+
     // ===========================================================
-    // 9. CORRECTION ATTACHMENTS (Student/Teacher Write)
+    // 10. CORRECTION ATTACHMENTS
     // ===========================================================
     match /corrections/{submissionId}/{userId}/{fileName} {
-       allow read: if isSignedIn();
-       allow write: if isSignedIn() 
-         && userId == request.auth.uid
-         && fileSizeOK()
-         && mimeTypeOK();
+      allow read: if isSignedIn();
+
+      allow write: if isSignedIn()
+        && userId == request.auth.uid
+        && fileSizeMB(10)
+        && mimeTypeOK();
     }
 
     // ===========================================================
-    // DEFAULT DENY
+    // DEFAULT DENY (CRITICAL)
     // ===========================================================
     match /{path=**} {
       allow read, write: if false;
     }
-
   }
 }

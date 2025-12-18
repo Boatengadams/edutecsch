@@ -109,7 +109,11 @@ const StudentReportCard: React.FC<StudentReportCardProps> = ({ student, report, 
                 <div className="flex flex-col items-center border-b-4 border-double border-slate-200 print:border-black pb-6 mb-6 relative z-10">
                     <div className="flex w-full items-center justify-between mb-4">
                         <div className="w-24 h-24 flex items-center justify-center border-4 border-blue-50 print:border-black rounded-full bg-blue-50 print:bg-transparent overflow-hidden shadow-sm print:shadow-none">
-                            <span className="text-4xl">🎓</span>
+                            {schoolSettings?.schoolLogoUrl ? (
+                                <img src={schoolSettings.schoolLogoUrl} alt="School Logo" className="w-full h-full object-contain" />
+                            ) : (
+                                <span className="text-4xl">🎓</span>
+                            )}
                         </div>
                         <div className="text-center flex-grow px-6">
                             <h1 className="text-3xl sm:text-4xl font-black uppercase tracking-widest font-sans text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-purple-700 print:text-black print:bg-none leading-none mb-2">
@@ -124,7 +128,7 @@ const StudentReportCard: React.FC<StudentReportCardProps> = ({ student, report, 
                             {student.photoURL ? (
                                 <img src={student.photoURL} alt={student.name} className="w-full h-full object-cover" />
                             ) : (
-                                <span className="text-xs">PHOTO</span>
+                                <span className="text-xs text-center p-2">STUDENT PHOTO</span>
                             )}
                         </div>
                     </div>

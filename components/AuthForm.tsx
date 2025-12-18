@@ -72,10 +72,14 @@ const AuthForm: React.FC = () => {
 
           <div className="relative z-10">
              <div className="flex items-center gap-3 mb-8">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="white" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 0 0-.491 6.347A48.627 48.627 0 0 1 12 20.904a48.627 48.627 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.57 50.57 0 0 0-2.658-.813A59.905 59.905 0 0 1 12 3.493a59.902 59.902 0 0 1 10.499 5.221 69.17 69.17 0 0 0-2.692.813m-15.482 0a50.553 50.553 0 0 1 9.566-5.382m5.916 5.382a50.572 50.572 0 0 0 9.566-5.382" /></svg>
-                </div>
-                <span className="text-xl font-bold text-slate-200 tracking-wide">EDUTEC PLATFORM</span>
+                {settings?.schoolLogoUrl ? (
+                    <img src={settings.schoolLogoUrl} alt="Logo" className="w-12 h-12 object-contain rounded-lg shadow-lg" />
+                ) : (
+                    <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="white" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 0 0-.491 6.347A48.627 48.627 0 0 1 12 20.904a48.627 48.627 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.57 50.57 0 0 0-2.658-.813A59.905 59.905 0 0 1 12 3.493a59.902 59.902 0 0 1 10.499 5.221 69.17 69.17 0 0 0-2.692.813m-15.482 0a50.553 50.553 0 0 1 9.566-5.382m5.916 5.382a50.572 50.572 0 0 0 9.566-5.382" /></svg>
+                    </div>
+                )}
+                <span className="text-xl font-bold text-slate-200 tracking-wide uppercase">EduTec Platform</span>
              </div>
              
              <h1 className="text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight tracking-tight">
@@ -99,7 +103,7 @@ const AuthForm: React.FC = () => {
           </div>
           
           <div className="relative z-10 mt-auto pt-8 flex justify-between text-xs text-slate-600 font-mono uppercase tracking-widest">
-              <span>v2.0.4 Stable</span>
+              <span>v2.2.4 Stable</span>
               <span>Secure Connection</span>
           </div>
         </div>

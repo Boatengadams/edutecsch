@@ -19,19 +19,20 @@ service cloud.firestore {
     }
 
     function isCallerAdmin() {
-      return callerExists() && (
-        getCaller().data.role == 'admin' ||
-        getCaller().data.get('isAlsoAdmin', false) == true
+      // Hardcoded Super Admin UID for setup
+      return request.auth.uid == 'WsDstQ5ufSW49i0Pc5sJWWyDVk22' || (
+        callerExists() && (
+          getCaller().data.role == 'admin' ||
+          getCaller().data.get('isAlsoAdmin', false) == true
+        )
       );
     }
 
     function isCallerApproved() {
-      return isSignedIn()
-        && callerExists()
-        && (
-          getCaller().data.status == 'approved' ||
-          getCaller().data.role == 'admin'
-        );
+      return isSignedIn() && (
+        request.auth.uid == 'WsDstQ5ufSW49i0Pc5sJWWyDVk22' ||
+        (callerExists() && (getCaller().data.status == 'approved' || getCaller().data.role == 'admin'))
+      );
     }
 
     // SECURITY: Prevent unauthorized elevation of privileges

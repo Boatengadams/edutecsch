@@ -90,6 +90,7 @@ export interface UserProfile {
   role: UserRole;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: firebase.firestore.Timestamp;
+  photoURL?: string;
   
   // Role-specific
   class?: string; // For students
@@ -421,6 +422,8 @@ export interface SchoolSettings {
     academicYear: string;
     currentTerm?: number;
     coAdminUids?: string[];
+    schoolLogoUrl?: string; // New field
+    schoolLogoStoragePath?: string; // New field
     sleepModeConfig?: {
         enabled: boolean;
         sleepTime: string; // e.g. "21:00"
