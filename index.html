@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -77,22 +78,13 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
-  .animate-fade-in-short {
-    animation: fadeInShort 0.3s ease-out forwards;
+  .animate-stream-flow {
+      stroke-dasharray: 10, 5;
+      animation: streamFlow 0.5s linear infinite;
   }
-  @keyframes fadeInShort {
-    from { opacity: 0; transform: scale(0.98); }
-    to { opacity: 1; transform: scale(1); }
-  }
-
-  .shimmer-bg {
-    background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%);
-    background-size: 200% 100%;
-    animation: shimmer 2s infinite linear;
-  }
-  @keyframes shimmer {
-    0% { background-position: -200% 0; }
-    100% { background-position: 200% 0; }
+  @keyframes streamFlow {
+      from { stroke-dashoffset: 15; }
+      to { stroke-dashoffset: 0; }
   }
 
   /* Typography */
@@ -115,14 +107,6 @@
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 16px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  }
-
-  /* Print Styles */
-  @media print {
-    body { background: white; color: black; }
-    .no-print { display: none !important; }
-    .printable-area { position: static; width: 100%; background: white; color: black; box-shadow: none; border: none; }
-    ::-webkit-scrollbar { display: none; }
   }
 </style>
 </head>
