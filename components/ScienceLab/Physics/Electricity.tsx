@@ -96,7 +96,6 @@ const COMPONENT_DEFS: Record<ComponentType, { width: number, height: number, ter
 
 const getId = (compId: string, termId: string) => `${compId}:${termId}`;
 
-// Union-Find for node detection
 class UnionFind {
     parent: Record<string, string> = {};
     constructor(elements: string[]) {
@@ -113,12 +112,9 @@ class UnionFind {
     }
 }
 
-// Simple Gaussian Elimination Solver
 function solveLinearSystem(A: number[][], b: number[]) {
     const n = A.length;
     if (n === 0) return [];
-    
-    // Pivot and Forward Elimination
     for (let i = 0; i < n; i++) {
         let maxEl = Math.abs(A[i][i]);
         let maxRow = i;
@@ -128,8 +124,6 @@ function solveLinearSystem(A: number[][], b: number[]) {
                 maxRow = k;
             }
         }
-        
-        // Swap
         for (let k = i; k < n; k++) {
             const tmp = A[maxRow][k];
             A[maxRow][k] = A[i][k];
@@ -138,10 +132,8 @@ function solveLinearSystem(A: number[][], b: number[]) {
         const tmp = b[maxRow];
         b[maxRow] = b[i];
         b[i] = tmp;
-
-        // Make upper triangular
         for (let k = i + 1; k < n; k++) {
-            if (Math.abs(A[i][i]) < 1e-9) continue; // Singularity check
+            if (Math.abs(A[i][i]) < 1e-9) continue; 
             const c = -A[k][i] / A[i][i];
             for (let j = i; j < n; j++) {
                 if (i === j) A[k][j] = 0;
@@ -150,8 +142,6 @@ function solveLinearSystem(A: number[][], b: number[]) {
             b[k] += c * b[i];
         }
     }
-
-    // Back Substitution
     const x = new Array(n).fill(0);
     for (let i = n - 1; i > -1; i--) {
         if (Math.abs(A[i][i]) < 1e-9) continue;
@@ -164,8 +154,6 @@ function solveLinearSystem(A: number[][], b: number[]) {
     return x;
 }
 
-
-// --- VISUAL COMPONENTS ---
 const CellHolderSVG = ({ count, mode }: { count: number, mode: 'series' | 'parallel' }) => {
     if (mode === 'series') {
         const cellHeight = 32;
@@ -255,32 +243,17 @@ const CellHolderSVG = ({ count, mode }: { count: number, mode: 'series' | 'paral
 };
 
 const BulbSVG = ({ isGlowing, brightness, voltage }: { isGlowing?: boolean, brightness?: number, voltage?: number }) => {
-    // Realistic Color Temperature Simulation
-    let glowColor = "#44403c"; // Dark grey (off)
+    let glowColor = "#44403c";
     let coreColor = "#57534e";
-    
-    // Filament Voltage Logic (Rated ~6V)
     const v = Math.abs(voltage || 0);
-    
     if (v > 0.5) {
-        if (v < 2.0) {
-            glowColor = "#7f1d1d"; // Dim Red
-            coreColor = "#991b1b";
-        } else if (v < 4.0) {
-            glowColor = "#f97316"; // Orange
-            coreColor = "#fdba74";
-        } else if (v < 7.0) {
-            glowColor = "#facc15"; // Yellow (Nominal)
-            coreColor = "#fef08a";
-        } else {
-            glowColor = "#ffffff"; // White Hot (Over driven)
-            coreColor = "#e0f2fe"; // Slight blue tint
-        }
+        if (v < 2.0) { glowColor = "#7f1d1d"; coreColor = "#991b1b"; }
+        else if (v < 4.0) { glowColor = "#f97316"; coreColor = "#fdba74"; }
+        else if (v < 7.0) { glowColor = "#facc15"; coreColor = "#fef08a"; }
+        else { glowColor = "#ffffff"; coreColor = "#e0f2fe"; }
     }
-
     const opacity = Math.min(1, Math.max(0.1, (brightness || 0)));
     const haloRadius = 25 + (brightness || 0) * 15;
-
     return (
         <g className="filter drop-shadow-xl">
              <defs>
@@ -291,26 +264,12 @@ const BulbSVG = ({ isGlowing, brightness, voltage }: { isGlowing?: boolean, brig
             </defs>
             <circle cx="0" cy="30" r="28" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="1" />
             <circle cx="0" cy="30" r="20" fill="#1e293b" />
-            
-            {/* Glass Bulb */}
             <circle cx="0" cy="0" r="25" fill={isGlowing ? coreColor : "rgba(255,255,255,0.1)"} stroke="#94a3b8" strokeWidth="1" fillOpacity={isGlowing ? 0.4 : 0.1} />
-            
-            {/* Glow Halo */}
             {isGlowing && <circle cx="0" cy="0" r={haloRadius} fill={glowColor} fillOpacity={opacity * 0.8} filter="url(#glowBlur)" />}
-            
-            {/* Filament */}
             <path d="M -8 30 L -5 5 L 0 -5 L 5 5 L 8 30" stroke={isGlowing ? "#fff" : "#525252"} strokeWidth={isGlowing ? 2 : 1} fill="none" />
-            
-            {/* Base Terminals */}
             <circle cx="-30" cy="30" r="6" fill="#000" stroke="#333" />
             <circle cx="30" cy="30" r="6" fill="#000" stroke="#333" />
-            
-            {/* Visual Voltage Readout (Optional, kept subtle) */}
-            {isGlowing && (
-                <text x="0" y="-35" textAnchor="middle" fontSize="8" fill="rgba(255,255,255,0.5)" fontFamily="monospace">
-                    {v.toFixed(1)}V
-                </text>
-            )}
+            {isGlowing && <text x="0" y="-35" textAnchor="middle" fontSize="8" fill="rgba(255,255,255,0.5)" fontFamily="monospace">{v.toFixed(1)}V</text>}
         </g>
     );
 };
@@ -403,7 +362,6 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
     const workbenchRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-    // --- BATTERY DRAIN SIMULATION ---
     useEffect(() => {
         const drainInterval = setInterval(() => {
             setComponents(prev => {
@@ -411,22 +369,12 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
                 const next = prev.map(c => {
                     if ((c.type === 'cell' || c.type === 'cell_holder') && c.properties.charge !== undefined) {
                         const current = c.properties.currentValue || 0;
-                        // STRICT DRAIN RULE: Only drain if significant current (>1mA) is flowing
-                        // This prevents drain when switch is open (current ~ 0)
                         if (current > 0.001) { 
-                            // Drain rate logic: Higher current = faster drain
-                            const drainAmount = current * 0.0008; // Tuned for realistic-feeling drain speed
+                            const drainAmount = current * 0.0008; 
                             const newCharge = Math.max(0, c.properties.charge - drainAmount);
-                            
                             if (newCharge !== c.properties.charge) {
                                 hasChanges = true;
-                                return {
-                                    ...c,
-                                    properties: {
-                                        ...c.properties,
-                                        charge: newCharge
-                                    }
-                                };
+                                return { ...c, properties: { ...c.properties, charge: newCharge } };
                             }
                         }
                     }
@@ -434,37 +382,24 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
                 });
                 return hasChanges ? next : prev;
             });
-        }, 500); // Check every 500ms
-
+        }, 500);
         return () => clearInterval(drainInterval);
     }, []);
 
-    // --- MNA SOLVER WITH ISLAND DETECTION ---
     useEffect(() => {
-        // 1. Identify Nodes using Union-Find
         const allTerminals: string[] = [];
         components.forEach(c => {
             COMPONENT_DEFS[c.type].terminals.forEach(t => allTerminals.push(getId(c.id, t.id)));
         });
-
         const uf = new UnionFind(allTerminals);
-
-        // Union terminals connected by wires
-        wires.forEach(w => {
-            uf.union(getId(w.from.compId, w.from.terminalId), getId(w.to.compId, w.to.terminalId));
-        });
-
-        // Collect unique nodes (roots)
+        wires.forEach(w => uf.union(getId(w.from.compId, w.from.terminalId), getId(w.to.compId, w.to.terminalId)));
         const uniqueNodes = new Set<string>();
         allTerminals.forEach(t => uniqueNodes.add(uf.find(t)));
         const nodesList = Array.from(uniqueNodes);
         const nodeMap = new Map<string, number>();
         nodesList.forEach((n, i) => nodeMap.set(n, i));
-
         const n = nodesList.length;
         if (n < 2) return; 
-
-        // 2. Identify Disjoint Islands (Separate Circuits)
         const islandParent = new Array(n).fill(0).map((_, i) => i);
         const findIsland = (i: number): number => {
             if (islandParent[i] === i) return i;
@@ -475,74 +410,50 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
             const rootJ = findIsland(j);
             if (rootI !== rootJ) islandParent[rootI] = rootJ;
         };
-
         components.forEach(c => {
-            // Include components in connectivity graph (except open switches to break islands)
             if (c.type === 'switch' && c.properties.isOpen) return;
-
             const terms = COMPONENT_DEFS[c.type].terminals;
             if (terms.length < 2) return;
-
             const u = nodeMap.get(uf.find(getId(c.id, terms[0].id)));
             const v = nodeMap.get(uf.find(getId(c.id, terms[1].id)));
-
-            if (u !== undefined && v !== undefined) {
-                unionIsland(u, v);
-            }
+            if (u !== undefined && v !== undefined) unionIsland(u, v);
         });
-
         const islands = new Map<number, number[]>();
         for (let i = 0; i < n; i++) {
             const root = findIsland(i);
             if (!islands.has(root)) islands.set(root, []);
             islands.get(root)!.push(i);
         }
-
-        // 3. Fix Grounds per Island
         const fixedPotentials = new Map<number, number>();
-
         islands.forEach((islandNodes) => {
-            // Check for batteries in this island
             const islandBatteries = components.filter(c => {
                 if (c.type !== 'cell' && c.type !== 'cell_holder') return false;
                 const negId = uf.find(getId(c.id, 'neg'));
                 const negIdx = nodeMap.get(negId);
                 return islandNodes.includes(negIdx!);
             });
-
             if (islandBatteries.length > 0) {
-                // Island has power. Pick one negative terminal as 0V reference.
                 const refBat = islandBatteries[0];
                 const negId = uf.find(getId(refBat.id, 'neg'));
                 const negIdx = nodeMap.get(negId)!;
                 fixedPotentials.set(negIdx, 0);
             } else {
-                // Passive island (no batteries). Fix one arbitrary node to 0V.
                 fixedPotentials.set(islandNodes[0], 0);
             }
         });
-        
-        // 4. Propagate Fixed Potentials (Voltage Sources)
         const batteries = components.filter(c => c.type === 'cell' || c.type === 'cell_holder');
         let changed = true;
         let iter = 0;
-        while(changed && iter < 20) { // Limit iterations
+        while(changed && iter < 20) {
             changed = false;
             iter++;
             batteries.forEach(bat => {
                 const posNode = nodeMap.get(uf.find(getId(bat.id, 'pos')));
                 const negNode = nodeMap.get(uf.find(getId(bat.id, 'neg')));
-                
                 if (posNode === undefined || negNode === undefined) return;
-
-                // REALISTIC VOLTAGE Calculation
-                // Voltage attenuated by charge level (e.g. 1.5V * 0.5 charge = 0.75V)
                 const nominalVoltage = bat.type === 'cell' ? (bat.properties.cellCount || 2) * 1.5 : 1.5;
                 const chargeFactor = bat.properties.charge !== undefined ? bat.properties.charge : 1.0;
-                
-                // If dead (charge <= 0.01), voltage effectively 0
                 const voltage = chargeFactor > 0.01 ? nominalVoltage * chargeFactor : 0;
-
                 if (fixedPotentials.has(negNode) && !fixedPotentials.has(posNode)) {
                     fixedPotentials.set(posNode, fixedPotentials.get(negNode)! + voltage);
                     changed = true;
@@ -552,44 +463,25 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
                 }
             });
         }
-
-        // 5. Build Linear Equations System (Conductance Matrix)
         const unknownNodes = nodesList.map((_, i) => i).filter(i => !fixedPotentials.has(i));
         const uCount = unknownNodes.length;
-        
         const uMap = new Map<number, number>();
         unknownNodes.forEach((realIdx, solverIdx) => uMap.set(realIdx, solverIdx));
-
         const G_matrix = Array.from({ length: uCount }, () => Array(uCount).fill(0));
         const I_vector = Array(uCount).fill(0);
-
-        // Populate Matrix with Components
         components.forEach(c => {
-            if (c.type === 'cell' || c.type === 'cell_holder') return; // Sources handled as constraints
-
+            if (c.type === 'cell' || c.type === 'cell_holder') return;
             const terms = COMPONENT_DEFS[c.type].terminals;
             if (terms.length < 2) return;
-
             const n1 = nodeMap.get(uf.find(getId(c.id, terms[0].id)))!;
             const n2 = nodeMap.get(uf.find(getId(c.id, terms[1].id)))!;
-
-            if (n1 === n2) return; // Shorted component
-
-            // Determine Resistance
-            let R = 1e9; // Default open
-            if (c.type === 'switch') {
-                R = c.properties.isOpen ? 1e9 : 0.001;
-            } else if (c.type === 'voltmeter') {
-                R = 1000000; // 1M Ohm
-            } else if (c.type === 'ammeter') {
-                R = 0.001; // 1 mOhm
-            } else {
-                R = c.properties.resistance || 10;
-            }
-
+            if (n1 === n2) return; 
+            let R = 1e9;
+            if (c.type === 'switch') R = c.properties.isOpen ? 1e9 : 0.001;
+            else if (c.type === 'voltmeter') R = 1000000;
+            else if (c.type === 'ammeter') R = 0.001;
+            else R = c.properties.resistance || 10;
             const g = 1 / R;
-
-            // Apply stamps
             if (uMap.has(n1)) {
                 const u1 = uMap.get(n1)!;
                 G_matrix[u1][u1] += g;
@@ -600,7 +492,6 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
                     I_vector[u1] += g * fixedPotentials.get(n2)!;
                 }
             }
-
             if (uMap.has(n2)) {
                 const u2 = uMap.get(n2)!;
                 G_matrix[u2][u2] += g;
@@ -612,87 +503,52 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
                 }
             }
         });
-
-        // 6. Solve
         const solvedPotentials = solveLinearSystem(G_matrix, I_vector);
-        
-        // 7. Map back to all nodes
         const finalPotentials = new Map<number, number>();
         fixedPotentials.forEach((v, k) => finalPotentials.set(k, v));
         unknownNodes.forEach((realIdx, i) => finalPotentials.set(realIdx, solvedPotentials[i]));
-
-        // 8. Update Components State
         setComponents(prev => prev.map(c => {
             const terms = COMPONENT_DEFS[c.type].terminals;
             if (terms.length < 2) return c;
-
             const n1 = nodeMap.get(uf.find(getId(c.id, terms[0].id)))!;
             const n2 = nodeMap.get(uf.find(getId(c.id, terms[1].id)))!;
-
             const v1 = finalPotentials.get(n1);
             const v2 = finalPotentials.get(n2);
-            
-            // Check if component is fully connected (both terminals mapped to a solved potential)
-            if (v1 === undefined || v2 === undefined) {
-                 // Component not connected to a grounded circuit (floating)
-                 return { ...c, properties: { ...c.properties, currentValue: 0, isGlowing: false } };
-            }
-
+            if (v1 === undefined || v2 === undefined) return { ...c, properties: { ...c.properties, currentValue: 0, isGlowing: false } };
             const voltageDrop = Math.abs(v1 - v2);
-            
             let R = c.properties.resistance || 1;
             if (c.type === 'switch') R = c.properties.isOpen ? 1e9 : 0.001;
             if (c.type === 'voltmeter') R = 1e6;
             if (c.type === 'ammeter') R = 0.001;
-            
             const current = voltageDrop / R;
             const absCurrent = Math.abs(current);
-
             const props = { ...c.properties };
-            
-            if (c.type === 'voltmeter') {
-                props.currentValue = v1 - v2; // Can be negative for voltmeter direction
-            } else if (c.type === 'ammeter') {
-                props.currentValue = (v1 - v2) / R; // Can be negative
-            } else if (c.type === 'bulb') {
+            if (c.type === 'voltmeter') props.currentValue = v1 - v2;
+            else if (c.type === 'ammeter') props.currentValue = (v1 - v2) / R;
+            else if (c.type === 'bulb') {
                 props.currentValue = absCurrent;
-                props.voltageDrop = voltageDrop; // Store for color calculation
-                // Simplified Glow Logic: Visible if > 1V
+                props.voltageDrop = voltageDrop;
                 props.isGlowing = voltageDrop > 0.5;
-                // Brightness scaled: 6V = 1.0 (Full), >6V = Over bright
                 props.brightness = Math.min(2.0, voltageDrop / 6);
-            } else if (c.type === 'cell' || c.type === 'cell_holder') {
-                props.currentValue = absCurrent; // Track current for drain logic
-            } else {
-                props.currentValue = absCurrent;
-            }
-
+            } else if (c.type === 'cell' || c.type === 'cell_holder') props.currentValue = absCurrent;
+            else props.currentValue = absCurrent;
             return { ...c, properties: props };
         }));
-
-        // Update Wires for Animation
         setWires(prev => prev.map(w => {
             const n1 = nodeMap.get(uf.find(getId(w.from.compId, w.from.terminalId)))!;
             const n2 = nodeMap.get(uf.find(getId(w.to.compId, w.to.terminalId)))!;
-            
             const v1 = finalPotentials.get(n1);
             const v2 = finalPotentials.get(n2);
-
-            // Animate wire if connected to potential
             return { ...w, current: (v1 !== undefined && Math.abs(v1) > 0.01) || (v2 !== undefined && Math.abs(v2) > 0.01) ? 0.1 : 0 }; 
         }));
-
     }, [components.map(c => `${c.x},${c.y},${c.properties.isOpen},${c.properties.resistance},${c.rotation},${c.properties.charge}`).join('|'), wires.length]);
 
-
-    // --- UI INTERACTIONS ---
 
     const spawnComponent = (type: ComponentType) => {
         const def = COMPONENT_DEFS[type];
         const container = scrollContainerRef.current;
         const cx = container ? (container.scrollLeft + container.clientWidth / 2) : 300;
         const cy = container ? (container.scrollTop + container.clientHeight / 2) : 300;
-
         const newComp: EComponent = {
             id: Math.random().toString(36).substr(2, 9),
             type,
@@ -706,38 +562,39 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
                 maxResistance: type === 'rheostat' ? 20 : 0,
                 isOpen: type === 'switch' ? true : undefined,
                 cellCount: (type === 'cell_holder' || type === 'cell') ? 2 : undefined,
-                charge: (type === 'cell' || type === 'cell_holder') ? 1.0 : undefined, // Initialize full charge
+                charge: (type === 'cell' || type === 'cell_holder') ? 1.0 : undefined,
             }
         };
         setComponents([...components, newComp]);
         setSelectedId(newComp.id);
     };
 
-    const handleMouseDown = (e: React.MouseEvent, id: string) => {
+    const handleMouseDown = (e: React.MouseEvent | React.TouchEvent, id: string) => {
         e.stopPropagation();
-        dragRef.current = { id, startX: e.clientX, startY: e.clientY };
+        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+        dragRef.current = { id, startX: clientX, startY: clientY };
         setSelectedId(id);
         setSelectedWireId(null);
     };
 
-    const handleMouseMove = (e: React.MouseEvent) => {
+    const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
         const rect = workbenchRef.current?.getBoundingClientRect();
+        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
         if (rect) {
-            setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+            setMousePos({ x: clientX - rect.left, y: clientY - rect.top });
         }
-
         if (dragRef.current) {
-            const dx = e.clientX - dragRef.current.startX;
-            const dy = e.clientY - dragRef.current.startY;
-            
+            const dx = clientX - dragRef.current.startX;
+            const dy = clientY - dragRef.current.startY;
             setComponents(prev => prev.map(c => {
                 if (c.id === dragRef.current?.id) {
                     return { ...c, x: c.x + dx, y: c.y + dy };
                 }
                 return c;
             }));
-            
-            dragRef.current = { id: dragRef.current.id, startX: e.clientX, startY: e.clientY };
+            dragRef.current = { id: dragRef.current.id, startX: clientX, startY: clientY };
         }
     };
 
@@ -745,18 +602,15 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
         dragRef.current = null;
     };
 
-    const handleTerminalClick = (e: React.MouseEvent, compId: string, terminalId: string) => {
+    const handleTerminalClick = (e: React.MouseEvent | React.TouchEvent, compId: string, terminalId: string) => {
         e.stopPropagation();
-        
         if (drawingStart) {
             if (drawingStart.compId !== compId || drawingStart.termId !== terminalId) {
                 const comp = components.find(c => c.id === compId);
                 const termDef = COMPONENT_DEFS[comp!.type].terminals.find(t => t.id === terminalId);
-                
                 let wireColor = '#1f2937'; 
                 if (termDef?.polarity === 'positive' || drawingStart.termId === 'pos') wireColor = '#ef4444'; 
                 if (termDef?.polarity === 'negative' || drawingStart.termId === 'neg') wireColor = '#000000'; 
-
                 setWires([...wires, {
                     id: Math.random().toString(36),
                     from: { compId: drawingStart.compId, terminalId: drawingStart.termId },
@@ -768,16 +622,13 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
             setDrawingStart(null);
             return;
         }
-
         const comp = components.find(c => c.id === compId);
         if (!comp) return;
         const termDef = COMPONENT_DEFS[comp.type].terminals.find(t => t.id === terminalId);
         if (!termDef) return;
-
         const rad = comp.rotation * (Math.PI / 180);
         const tx = termDef.x * Math.cos(rad) - termDef.y * Math.sin(rad) + comp.x;
         const ty = termDef.x * Math.sin(rad) + termDef.y * Math.cos(rad) + comp.y;
-
         setDrawingStart({ compId, termId: terminalId, x: tx, y: ty });
     };
 
@@ -815,9 +666,7 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
             setWires(prev => prev.filter(w => w.from.compId !== selectedId && w.to.compId !== selectedId));
             setSelectedId(null);
         }
-        if (selectedWireId) {
-            deleteWire(selectedWireId);
-        }
+        if (selectedWireId) deleteWire(selectedWireId);
     };
 
     const getAbsTermPos = (compId: string, termId: string) => {
@@ -825,7 +674,6 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
         if (!comp) return { x: 0, y: 0 };
         const def = COMPONENT_DEFS[comp.type].terminals.find(t => t.id === termId);
         if (!def) return { x: 0, y: 0 };
-        
         const rad = comp.rotation * (Math.PI / 180);
         return {
             x: def.x * Math.cos(rad) - def.y * Math.sin(rad) + comp.x,
@@ -834,21 +682,24 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
     };
 
     return (
-        <div className="h-full flex flex-col md:flex-row bg-[#0f172a] select-none relative" onMouseUp={handleMouseUp} onMouseMove={handleMouseMove} onClick={() => { setSelectedId(null); setSelectedWireId(null); setSidebarOpen(false); }}>
-            
-            {/* Floating Menu Toggle */}
+        <div 
+            className="h-full flex flex-col md:flex-row bg-transparent select-none relative touch-none" 
+            onMouseUp={handleMouseUp} 
+            onTouchEnd={handleMouseUp}
+            onMouseMove={handleMouseMove} 
+            onTouchMove={handleMouseMove}
+            onClick={() => { setSelectedId(null); setSelectedWireId(null); setSidebarOpen(false); }}
+        >
             <button 
                 onClick={(e) => { e.stopPropagation(); setSidebarOpen(!isSidebarOpen); }} 
                 className="absolute top-4 left-4 z-50 p-3 bg-slate-800 rounded-full text-white shadow-lg border border-slate-600 hover:bg-slate-700 transition-colors"
                 title="Toggle Components"
             >
-                {isSidebarOpen ? '✖️' : '🛠️'}
+                {isSidebarOpen ? '✕' : '🛠️'}
             </button>
-
-            {/* Sidebar Toolbox - Hidden by default */}
             <div 
                 className={`absolute top-0 left-0 h-full w-64 bg-[#1e293b] border-r border-slate-700 z-40 shadow-2xl transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
-                onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside sidebar
+                onClick={(e) => e.stopPropagation()}
             >
                 <div className="p-4 pt-16 flex flex-col gap-4 h-full overflow-y-auto">
                     <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Components</h3>
@@ -868,127 +719,53 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
                     </button>
                 </div>
             </div>
-
-            {/* Workbench Container (Scrollable) */}
-            <div ref={scrollContainerRef} className="flex-grow bg-[#0f172a] overflow-auto relative cursor-crosshair">
-                 <div ref={workbenchRef} className="relative w-[2500px] h-[1500px]">
-                    <div className="absolute inset-0 bg-[radial-gradient(rgba(30,41,59,0.4)_1px,transparent_1px)] bg-[size:20px_20px] opacity-50 pointer-events-none"></div>
-
-                    {/* Simulation HUD */}
-                    <div className="absolute top-4 left-20 z-30 pointer-events-none">
-                        <div className="flex items-center gap-4 bg-slate-900/80 backdrop-blur border border-slate-700 p-2 px-4 rounded-xl shadow-2xl">
-                            <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
-                            <span className="text-slate-300 text-xs font-bold uppercase tracking-widest">Physics Engine Active</span>
-                        </div>
-                    </div>
-
-                    {/* Wires Layer */}
+            <div ref={scrollContainerRef} className="flex-grow overflow-auto relative cursor-crosshair">
+                 <div ref={workbenchRef} className="relative w-[2500px] h-[1500px] bg-transparent">
                     <svg className="absolute inset-0 w-full h-full pointer-events-auto z-10 overflow-visible">
                         <defs>
                             <filter id="glowWire">
                                 <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-                                <feMerge>
-                                    <feMergeNode in="coloredBlur"/>
-                                    <feMergeNode in="SourceGraphic"/>
-                                </feMerge>
+                                <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
                             </filter>
                         </defs>
                         {wires.map(wire => {
                             const start = getAbsTermPos(wire.from.compId, wire.from.terminalId);
                             const end = getAbsTermPos(wire.to.compId, wire.to.terminalId);
                             const isSelected = selectedWireId === wire.id;
-                            
                             const dist = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2));
                             const droop = Math.min(100, dist * 0.2); 
                             const midX = (start.x + end.x) / 2;
                             const midY = (start.y + end.y) / 2 + droop; 
-                            
                             const isLive = (wire.current || 0) > 0.01;
-                            
                             const pathD = `M ${start.x} ${start.y} Q ${midX} ${midY} ${end.x} ${end.y}`;
-                            
                             return (
                                 <g key={wire.id} onClick={(e) => { e.stopPropagation(); setSelectedWireId(wire.id); setSelectedId(null); }} className="cursor-pointer group">
-                                    <path 
-                                        d={pathD}
-                                        fill="none" 
-                                        stroke="transparent" 
-                                        strokeWidth="20" 
-                                        strokeLinecap="round"
-                                    />
-                                    <path 
-                                        d={pathD}
-                                        fill="none" 
-                                        stroke={wire.color} 
-                                        strokeWidth="6" 
-                                        strokeLinecap="round"
-                                        className={`filter transition-all ${isSelected ? 'drop-shadow-[0_0_8px_rgba(255,255,255,0.8)] stroke-white' : 'drop-shadow-md'}`}
-                                    />
+                                    <path d={pathD} fill="none" stroke="transparent" strokeWidth="20" strokeLinecap="round" />
+                                    <path d={pathD} fill="none" stroke={wire.color} strokeWidth="6" strokeLinecap="round" className={`filter transition-all ${isSelected ? 'stroke-white' : 'drop-shadow-md'}`} />
                                     <circle cx={start.x} cy={start.y} r="4" fill={wire.color} />
                                     <circle cx={end.x} cy={end.y} r="4" fill={wire.color} />
-                                    {isLive && (
-                                        <path 
-                                            d={pathD}
-                                            fill="none" 
-                                            stroke="#fbbf24" // Electricity color
-                                            strokeWidth="2" 
-                                            strokeDasharray="4 12"
-                                            strokeLinecap="round"
-                                            className="animate-flow opacity-80"
-                                            style={{ animationDuration: '0.5s' }}
-                                            filter="url(#glowWire)"
-                                        />
-                                    )}
+                                    {isLive && <path d={pathD} fill="none" stroke="#fbbf24" strokeWidth="2" strokeDasharray="4 12" strokeLinecap="round" className="animate-flow opacity-80" style={{ animationDuration: '0.5s' }} filter="url(#glowWire)" />}
                                     {isSelected && (
                                         <foreignObject x={midX - 12} y={midY - 12} width="24" height="24" className="overflow-visible">
-                                            <div 
-                                                className="w-6 h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center text-white text-xs shadow-lg cursor-pointer transform hover:scale-110 transition-transform"
-                                                title="Cut Wire"
-                                                onClick={(e) => { e.stopPropagation(); deleteWire(wire.id); }}
-                                            >
-                                                ✂️
-                                            </div>
+                                            <div className="w-6 h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center text-white text-xs shadow-lg cursor-pointer transform hover:scale-110 transition-transform" onClick={(e) => { e.stopPropagation(); deleteWire(wire.id); }}>✂️</div>
                                         </foreignObject>
                                     )}
                                 </g>
                             );
                         })}
-                        
-                        {drawingStart && (
-                            <path 
-                                d={`M ${drawingStart.x} ${drawingStart.y} L ${mousePos.x} ${mousePos.y}`} 
-                                fill="none" 
-                                stroke="#ffffff" 
-                                strokeWidth="3" 
-                                strokeDasharray="5,5" 
-                                opacity="0.8"
-                                className="animate-pulse"
-                            />
-                        )}
+                        {drawingStart && <path d={`M ${drawingStart.x} ${drawingStart.y} L ${mousePos.x} ${mousePos.y}`} fill="none" stroke="#ffffff" strokeWidth="3" strokeDasharray="5,5" opacity="0.8" className="animate-pulse" />}
                     </svg>
-
-                    {/* Components Layer */}
                     {components.map(comp => (
                         <div
                             key={comp.id}
-                            className={`absolute group cursor-grab active:cursor-grabbing transition-transform duration-75 ease-out
-                            ${selectedId === comp.id 
-                                ? 'z-50' 
-                                : 'z-20'}`}
-                            style={{ 
-                                left: comp.x, top: comp.y, 
-                                transform: `translate(-50%, -50%) rotate(${comp.rotation}deg)`,
-                                width: COMPONENT_DEFS[comp.type].width,
-                                height: COMPONENT_DEFS[comp.type].height
-                            }}
+                            className={`absolute group cursor-grab active:cursor-grabbing transition-transform duration-75 ease-out ${selectedId === comp.id ? 'z-50' : 'z-20'}`}
+                            style={{ left: comp.x, top: comp.y, transform: `translate(-50%, -50%) rotate(${comp.rotation}deg)`, width: COMPONENT_DEFS[comp.type].width, height: COMPONENT_DEFS[comp.type].height }}
                             onMouseDown={(e) => handleMouseDown(e, comp.id)}
+                            onTouchStart={(e) => handleMouseDown(e, comp.id)}
                         >
+                            {selectedId === comp.id && <div className="absolute inset-[-10px] border-2 border-cyan-400 rounded-lg opacity-60 pointer-events-none animate-pulse"></div>}
                             {selectedId === comp.id && (
-                                <div className="absolute inset-[-10px] border-2 border-cyan-400 rounded-lg opacity-60 pointer-events-none animate-pulse"></div>
-                            )}
-
-                            {selectedId === comp.id && (
-                                <div className="absolute -top-16 left-1/2 -translate-x-1/2 bg-slate-800 p-2 rounded-xl flex gap-2 shadow-2xl border border-slate-600 animate-fade-in-up z-[60]" onMouseDown={(e)=>e.stopPropagation()}>
+                                <div className="absolute -top-16 left-1/2 -translate-x-1/2 bg-slate-800 p-2 rounded-xl flex gap-2 shadow-2xl border border-slate-600 animate-fade-in-up z-[60]" onMouseDown={(e)=>e.stopPropagation()} onTouchStart={(e)=>e.stopPropagation()}>
                                     <button onClick={() => rotateComponent(comp.id)} className="p-2 hover:bg-slate-700 rounded text-slate-300" title="Rotate">↻</button>
                                     <button onClick={deleteSelected} className="p-2 hover:bg-red-900/50 text-red-400 rounded" title="Delete">🗑️</button>
                                     {(comp.type === 'cell_holder' || comp.type === 'cell') && (
@@ -1000,13 +777,7 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
                                     )}
                                 </div>
                             )}
-
-                            <div onClick={(e) => {
-                                if(comp.type === 'switch') {
-                                    e.stopPropagation();
-                                    toggleSwitch(comp.id);
-                                }
-                            }} className="w-full h-full relative">
+                            <div onClick={(e) => { if(comp.type === 'switch') { e.stopPropagation(); toggleSwitch(comp.id); } }} className="w-full h-full relative">
                                 <div className="w-full h-full flex items-center justify-center">
                                     <svg width="100%" height="100%" viewBox={`-${COMPONENT_DEFS[comp.type].width/2} -${COMPONENT_DEFS[comp.type].height/2} ${COMPONENT_DEFS[comp.type].width} ${COMPONENT_DEFS[comp.type].height}`} style={{overflow: 'visible'}}>
                                         {comp.type === 'cell' && <CellHolderSVG count={comp.properties.cellCount || 2} mode="series" />}
@@ -1019,30 +790,11 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
                                     </svg>
                                 </div>
                             </div>
-
                             {comp.type === 'rheostat' && (
-                                <input 
-                                    type="range" 
-                                    min="0" max={comp.properties.maxResistance} 
-                                    value={comp.properties.resistance} 
-                                    step="0.5"
-                                    onClick={(e) => e.stopPropagation()}
-                                    onChange={(e) => updateRheostat(comp.id, Number(e.target.value))}
-                                    onMouseDown={(e) => e.stopPropagation()} 
-                                    className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-32 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500 z-50"
-                                />
+                                <input type="range" min="0" max={comp.properties.maxResistance} value={comp.properties.resistance} step="0.5" onClick={(e) => e.stopPropagation()} onChange={(e) => updateRheostat(comp.id, Number(e.target.value))} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-32 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500 z-50" />
                             )}
-
                             {COMPONENT_DEFS[comp.type].terminals.map(term => (
-                                <div
-                                    key={term.id}
-                                    className="absolute w-6 h-6 -ml-3 -mt-3 rounded-full z-50 cursor-crosshair group/term"
-                                    style={{ 
-                                        left: '50%', top: '50%', 
-                                        transform: `translate(${term.x}px, ${term.y}px)` 
-                                    }}
-                                    onClick={(e) => handleTerminalClick(e, comp.id, term.id)}
-                                >
+                                <div key={term.id} className="absolute w-6 h-6 -ml-3 -mt-3 rounded-full z-50 cursor-crosshair group/term" style={{ left: '50%', top: '50%', transform: `translate(${term.x}px, ${term.y}px)` }} onClick={(e) => handleTerminalClick(e, comp.id, term.id)}>
                                     <div className={`w-3 h-3 mx-auto my-auto mt-1.5 rounded-full border-2 border-white shadow-sm transition-transform group-hover/term:scale-150 ${term.color === '#ef4444' ? 'bg-red-500' : 'bg-black'}`}></div>
                                 </div>
                             ))}
@@ -1050,17 +802,7 @@ const Electricity: React.FC<ElectricityProps> = ({ onUpdateChar }) => {
                     ))}
                  </div>
             </div>
-
-            {/* CSS Animation for Flow */}
-            <style>{`
-                @keyframes flow {
-                    from { stroke-dashoffset: 20; }
-                    to { stroke-dashoffset: 0; }
-                }
-                .animate-flow {
-                    animation: flow 0.5s linear infinite;
-                }
-            `}</style>
+            <style>{`@keyframes flow { from { stroke-dashoffset: 20; } to { stroke-dashoffset: 0; } } .animate-flow { animation: flow 0.5s linear infinite; }`}</style>
         </div>
     );
 };

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 
 const WeatherWidget: React.FC = () => {
     const [weather, setWeather] = useState<{ temp: number; code: number; isDay: number; wind: number } | null>(null);
-    const [location, setLocation] = useState('Accra'); // Default
+    const [location, setLocation] = useState('Detecting Location...');
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -43,13 +43,60 @@ const WeatherWidget: React.FC = () => {
         }
     };
 
+    const reverseGeocode = async (lat: number, lon: number) => {
+        try {
+            // Using OpenStreetMap Nominatim for precise reverse geocoding
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`, {
+                headers: {
+                    'Accept-Language': 'en'
+                }
+            });
+            const data = await res.json();
+            
+            const addr = data.address;
+            // Build granular string: Neighborhood/Suburb, City/Town, Country
+            const neighborhood = addr.neighbourhood || addr.suburb || addr.quarter || addr.village || addr.town;
+            const city = addr.city || addr.county || addr.state;
+            const country = addr.country;
+
+            let displayName = '';
+            if (neighborhood) displayName += `${neighborhood}, `;
+            if (city) displayName += `${city}, `;
+            if (country) displayName += country;
+
+            return displayName || `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+        } catch (e) {
+            console.warn("Reverse geocoding failed", e);
+            return `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+        }
+    };
+
+    const initLocationDetection = () => {
+        if (!navigator.geolocation) {
+            fetchWeather(5.6037, -0.1870, 'Accra, Ghana');
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                const { latitude, longitude } = position.coords;
+                const locationName = await reverseGeocode(latitude, longitude);
+                fetchWeather(latitude, longitude, locationName);
+            },
+            (err) => {
+                console.warn("Geolocation denied or failed, defaulting to capital.", err);
+                fetchWeather(5.6037, -0.1870, 'Accra, Ghana');
+            },
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        );
+    };
+
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!searchQuery.trim()) return;
 
         setLoading(true);
         try {
-            // Geocoding API
             const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchQuery)}&count=1&language=en&format=json`);
             const geoData = await geoRes.json();
 
@@ -58,7 +105,7 @@ const WeatherWidget: React.FC = () => {
                 const displayName = `${name}, ${country || ''}`;
                 await fetchWeather(latitude, longitude, displayName);
             } else {
-                setError(true); // Location not found
+                setError(true);
                 setLoading(false);
             }
         } catch (err) {
@@ -69,15 +116,13 @@ const WeatherWidget: React.FC = () => {
     };
 
     useEffect(() => {
-        // Initial load for Accra
-        fetchWeather(5.6037, -0.1870, 'Accra, Ghana');
+        initLocationDetection();
     }, []);
 
     const info = weather ? getWeatherInfo(weather.code, weather.isDay) : { icon: '...', label: 'Loading' };
 
     return (
         <div className="mx-4 mb-4 p-4 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 text-white shadow-lg border border-blue-500/30 relative overflow-hidden group transition-all">
-            {/* Decorative Background */}
             <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:bg-white/20 transition-colors"></div>
             
             <div className="relative z-10">
@@ -102,23 +147,23 @@ const WeatherWidget: React.FC = () => {
                         {error && <p className="text-[10px] text-red-300">Location not found. Try again.</p>}
                     </form>
                 ) : (
-                    <div className="flex justify-between items-center cursor-pointer" onClick={() => setIsEditing(true)} title="Click to change location">
-                        <div>
+                    <div className="flex justify-between items-center cursor-pointer" onClick={() => setIsEditing(true)} title="Click to manually search location">
+                        <div className="flex-grow min-w-0 pr-4">
                             <div className="flex items-center gap-1 mb-1">
-                                <h4 className="text-xs font-bold uppercase tracking-wider text-blue-200 truncate max-w-[120px]">{location}</h4>
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-blue-300 opacity-50 group-hover:opacity-100"><path d="M10 2a6 6 0 0 0-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 0 0 .515 1.076 32.91 32.91 0 0 0 3.256.508 57 57 0 0 0 4.157.648l1.721 1.721a.75.75 0 0 0 1.06 0l1.72-1.72c2.9-.1 5.68-.42 8.134-1.156a.75.75 0 0 0 .515-1.076A11.448 11.448 0 0 1 16 8a6 6 0 0 0-6-6Z" /></svg>
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-blue-200 truncate">{location}</h4>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-blue-300 opacity-50 flex-shrink-0"><path d="M10 2a6 6 0 0 0-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 0 0 .515 1.076 32.91 32.91 0 0 0 3.256.508 57 57 0 0 0 4.157.648l1.721 1.721a.75.75 0 0 0 1.06 0l1.72-1.72c2.9-.1 5.68-.42 8.134-1.156a.75.75 0 0 0 .515-1.076A11.448 11.448 0 0 1 16 8a6 6 0 0 0-6-6Z" /></svg>
                             </div>
                             <div className="flex items-center gap-2">
                                 <span className="text-3xl filter drop-shadow-md">{info.icon}</span>
                                 <div>
                                     <p className="text-2xl font-black leading-none">{loading ? '--' : Math.round(weather?.temp || 0)}°C</p>
-                                    <p className="text-xs text-blue-100 font-medium">{info.label}</p>
+                                    <p className="text-[10px] text-blue-100 font-bold uppercase tracking-tighter mt-1">{info.label}</p>
                                 </div>
                             </div>
                         </div>
-                        <div className="text-right">
-                             <p className="text-[10px] text-blue-200">Wind</p>
-                             <p className="text-xs font-bold">{loading ? '-' : weather ? Math.round(weather.wind || 0) : 0} km/h</p>
+                        <div className="text-right border-l border-white/10 pl-4">
+                             <p className="text-[9px] font-bold text-blue-200 uppercase tracking-widest">Wind</p>
+                             <p className="text-sm font-black">{loading ? '-' : weather ? Math.round(weather.wind || 0) : 0} <span className="text-[10px] opacity-70">km/h</span></p>
                         </div>
                     </div>
                 )}

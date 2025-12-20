@@ -4,6 +4,7 @@
   "requestFramePermissions": [
     "camera",
     "microphone",
-    "display-capture"
+    "display-capture",
+    "geolocation"
   ]
 }

@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { LabLevel, UserProfile, LabEquipment } from '../../types';
 import { useToast } from '../common/Toast';
 import { db, firebase } from '../../services/firebase';
@@ -154,19 +154,16 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
                 held.y = lerp(held.y, mousePos.current.y, 0.2);
 
                 if (held.isPouring) {
-                    // Turn left if moving left, right if moving right
                     const targetRot = dx < -1 ? -80 : dx > 1 ? 80 : held.rotation;
                     held.rotation = lerp(held.rotation, targetRot === 0 ? -80 : targetRot, 0.1);
                 } else {
                     held.rotation = lerp(held.rotation, 0, 0.15);
                 }
 
-                // Handle Transfer
                 if (held.isPouring && held.currentVolume > 0 && Math.abs(held.rotation) > 30) {
                     const def = GLASS_DEFS[held.type];
                     const rad = held.rotation * (Math.PI / 180);
                     
-                    // Spout offset flips with rotation
                     const actualSpoutOffset = { 
                         x: held.rotation < 0 ? -def.spoutOffset.x : def.spoutOffset.x, 
                         y: def.spoutOffset.y 
@@ -214,11 +211,22 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
         return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
     }, [updatePhysics]);
 
-    const handleMouseMove = (e: React.MouseEvent) => {
+    const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
         const rect = workbenchRef.current?.getBoundingClientRect();
         if (rect) {
-            mousePos.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+            const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+            const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+            mousePos.current = { x: clientX - rect.left, y: clientY - rect.top };
         }
+    };
+
+    const handleMouseDown = (id: string) => {
+        setHeldId(id);
+        setSelectedId(id);
+    };
+
+    const handleMouseUp = () => {
+        setHeldId(null);
     };
 
     const spawn = (type: ContainerType) => {
@@ -268,8 +276,14 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
     };
 
     return (
-        <div className="h-full flex flex-col md:flex-row bg-[#080b12] overflow-hidden select-none relative font-sans" onMouseMove={handleMouseMove} onMouseUp={() => setHeldId(null)}>
-            
+        <div 
+            className="h-full flex flex-col md:flex-row bg-transparent overflow-hidden select-none relative font-sans touch-none" 
+            onMouseMove={handleMouseMove} 
+            onTouchMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onTouchEnd={handleMouseUp}
+            onClick={() => { setSelectedId(null); setSidebarOpen(false); }}
+        >
             {/* HUD */}
             {selectedId && containers.find(c => c.id === selectedId) && (
                 <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
@@ -307,7 +321,7 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
                             {Object.entries(REAGENTS).map(([category, items]) => (
                                 <div key={category} className="space-y-2">
                                     <button 
-                                        onClick={() => setOpenReagentCategory(openReagentCategory === category ? null : category)}
+                                        onClick={(e) => { e.stopPropagation(); setOpenReagentCategory(openReagentCategory === category ? null : category); }}
                                         className="w-full flex items-center justify-between p-3 bg-slate-800/50 rounded-xl border border-white/5 hover:border-emerald-500/30 transition-all group"
                                     >
                                         <div className="flex items-center gap-3">
@@ -320,7 +334,7 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
                                     {openReagentCategory === category && (
                                         <div className="grid grid-cols-1 gap-2 pl-2 animate-fade-in-down">
                                             {items.map(chem => (
-                                                <button key={chem.id} onClick={() => spawnReagentBottle(chem)} className="w-full flex items-center gap-3 p-2.5 bg-white/5 hover:bg-slate-800 border border-white/5 rounded-xl text-left transition-all group">
+                                                <button key={chem.id} onClick={(e) => { e.stopPropagation(); spawnReagentBottle(chem); }} className="w-full flex items-center gap-3 p-2.5 bg-white/5 hover:bg-slate-800 border border-white/5 rounded-xl text-left transition-all group">
                                                     <div className="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center text-lg group-hover:bg-emerald-500/20 transition-colors shadow-inner">{chem.icon}</div>
                                                     <div className="min-w-0">
                                                         <p className="text-[11px] font-bold text-slate-200 truncate">{chem.name}</p>
@@ -336,26 +350,23 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
                 </div>
             </div>
 
-            <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="absolute top-4 left-4 z-[70] p-4 bg-blue-600 rounded-2xl text-white shadow-2xl hover:bg-blue-500 transition-all">
+            <button onClick={(e) => { e.stopPropagation(); setSidebarOpen(!isSidebarOpen); }} className="absolute top-4 left-4 z-[70] p-4 bg-blue-600 rounded-2xl text-white shadow-2xl hover:bg-blue-500 transition-all">
                 {isSidebarOpen ? '✕' : '🧪'}
             </button>
 
             {/* Workbench */}
-            <div ref={workbenchRef} className="flex-grow relative bg-[#04060a] overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(37,99,235,0.1)_0%,transparent_70%)]"></div>
-                <div className="absolute bottom-0 w-full h-40 bg-slate-900/40 border-t border-white/5 backdrop-blur-xl"></div>
-                <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '60px 60px' }}></div>
-
+            <div ref={workbenchRef} className="flex-grow relative bg-transparent overflow-hidden">
                 {containers.map(c => (
                     <div 
                         key={c.id} 
                         className={`absolute cursor-grab active:cursor-grabbing transition-transform duration-75`}
                         style={{ left: c.x, top: c.y, transform: `translate(-50%, -50%) rotate(${c.rotation}deg)`, zIndex: c.zIndex }}
-                        onMouseDown={() => { setHeldId(c.id); setSelectedId(c.id); }}
+                        onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(c.id); }}
+                        onTouchStart={(e) => { e.stopPropagation(); handleMouseDown(c.id); }}
                     >
                         {selectedId === c.id && (
                             <div className="absolute -top-20 left-1/2 -translate-x-1/2 flex gap-3 animate-fade-in-up">
-                                <button onClick={() => setContainers(prev => prev.filter(x => x.id !== c.id))} className="bg-red-500/10 text-red-500 p-3 rounded-2xl border border-red-500/20 hover:bg-red-500 hover:text-white transition-all shadow-xl backdrop-blur-md">🗑️</button>
+                                <button onClick={(e) => { e.stopPropagation(); setContainers(prev => prev.filter(x => x.id !== c.id)); }} className="bg-red-500/10 text-red-500 p-3 rounded-2xl border border-red-500/20 hover:bg-red-500 hover:text-white transition-all shadow-xl backdrop-blur-md">🗑️</button>
                                 {GLASS_DEFS[c.type].capacity > 0 && (
                                     <button 
                                         onClick={(e) => {
@@ -389,7 +400,6 @@ const PouringStream: React.FC<{ source: LabContainer }> = ({ source }) => {
     const def = GLASS_DEFS[source.type];
     const rad = source.rotation * (Math.PI / 180);
     
-    // Spout offset flips with rotation
     const actualSpoutOffset = { 
         x: source.rotation < 0 ? -def.spoutOffset.x : def.spoutOffset.x, 
         y: def.spoutOffset.y 
@@ -429,8 +439,8 @@ const GlassRenderer: React.FC<{ container: LabContainer; isHeld: boolean }> = ({
     const def = GLASS_DEFS[container.type];
 
     const renderGlassBody = () => {
-        const glassFill = "rgba(255, 255, 255, 0.04)";
-        const glassStroke = "rgba(255, 255, 255, 0.25)";
+        const glassFill = "rgba(255, 255, 255, 0.08)";
+        const glassStroke = "rgba(255, 255, 255, 0.4)";
         
         switch (container.type) {
             case 'beaker':

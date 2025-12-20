@@ -31,6 +31,7 @@ interface MechanicsComponent {
         flipped?: boolean;
     };
     stopwatchTime?: number;
+    stopwatchTimeRef?: number;
     stopwatchRunning?: boolean;
     targetOscillations?: number; 
     currentOscillationCount?: number; 
@@ -43,20 +44,11 @@ interface MechanicsProps {
 }
 
 // --- CONSTANTS & CONFIG ---
-const PIXELS_PER_CM = 5; 
-const RULER_WIDTH_PX = 500; 
-const DEFAULT_STIFFNESS = 25; 
-const DEFAULT_DAMPING = 0.3; 
-const DEFAULT_GRAVITY = 9.81;
-const SNAP_RADIUS = 40; 
-const DETACH_THRESHOLD = 80; 
-
-// --- TOOLBOX DEFINITIONS ---
 const TOOLBOX_ITEMS: { id: ComponentType; label: string; icon: string; defaultProps?: Partial<MechanicsComponent> }[] = [
     { id: 'retort_stand', label: 'Retort Stand', icon: '🏗️', defaultProps: { clampY: 400, rotation: 0, state: { flipped: false, isOpen: false }, locked: false } },
     { id: 'metre_rule', label: 'Metre Rule', icon: '📏', defaultProps: { mass: 100, rotation: 0, angularVelocity: 0, length: 100 } },
     { id: 'knife_edge', label: 'Knife Edge', icon: '🔺', defaultProps: { rotation: 0, mass: 50 } },
-    { id: 'spring', label: 'Spiral Spring', icon: '➰', defaultProps: { length: 15, stiffness: DEFAULT_STIFFNESS, currentLength: 15, rotation: 0, velocity: 0, angularVelocity: 0 } },
+    { id: 'spring', label: 'Spiral Spring', icon: '➰', defaultProps: { length: 15, stiffness: 25, currentLength: 15, rotation: 0, velocity: 0, angularVelocity: 0 } },
     { id: 'string', label: 'Thread / String', icon: '🧵', defaultProps: { length: 40, angle: 15, angularVelocity: 0, rotation: 0 } },
     { id: 'pendulum_bob', label: 'Pendulum Bob', icon: '⚫', defaultProps: { mass: 50, rotation: 0 } },
     { id: 'beaker', label: 'Beaker', icon: '🥃', defaultProps: { density: 1.0, volume: 500 } }, 
@@ -75,87 +67,43 @@ const MASSES: { id: string; label: string; weight: number; color: string; size: 
 ];
 
 // --- VISUAL COMPONENTS ---
-const MetreRuleVisual = ({ rotation }: { rotation: number }) => {
-    return (
-        <div className="w-[500px] h-[40px] relative select-none group">
-            <svg width="500" height="40" viewBox="0 0 500 40" className="drop-shadow-xl overflow-visible">
-                <defs>
-                    <linearGradient id="woodGradient" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor="#f59e0b" />
-                        <stop offset="100%" stopColor="#d97706" />
-                    </linearGradient>
-                    <filter id="woodGrain">
-                        <feTurbulence type="fractalNoise" baseFrequency="0.5" numOctaves="3" stitchTiles="stitch" />
-                        <feColorMatrix type="saturate" values="0.2" />
-                        <feBlend in="SourceGraphic" mode="multiply" />
-                    </filter>
-                </defs>
-                {/* Main Body */}
-                <rect x="0" y="0" width="500" height="40" rx="2" fill="url(#woodGradient)" stroke="#78350f" strokeWidth="1" />
-                <rect x="0" y="0" width="500" height="40" rx="2" fill="#000" opacity="0.1" filter="url(#woodGrain)" />
-                {/* Ends */}
-                <rect x="0" y="0" width="10" height="40" rx="2" fill="#fcd34d" stroke="#b45309" />
-                <rect x="490" y="0" width="10" height="40" rx="2" fill="#fcd34d" stroke="#b45309" />
-                {/* Markings */}
-                {Array.from({ length: 101 }).map((_, i) => {
-                    const isDecimeter = i % 10 === 0;
-                    const isMid = i % 5 === 0 && !isDecimeter;
-                    const h = isDecimeter ? 15 : isMid ? 10 : 6;
-                    const x = i * 5;
-                    return (
-                        <g key={i}>
-                            <line x1={x} y1={0} x2={x} y2={h} stroke="#451a03" strokeWidth={isDecimeter ? 1.5 : 1} />
-                            {isDecimeter && i !== 0 && i !== 100 && (
-                                <text x={x} y={28} fontSize="9" textAnchor="middle" fontWeight="bold" fill="#451a03" fontFamily="monospace">{i}</text>
-                            )}
-                        </g>
-                    );
-                })}
-                {/* Center Marker */}
-                <circle cx="250" cy="20" r="2" fill="red" />
-            </svg>
-            {/* Torque Overlay */}
-            {Math.abs(rotation) > 2 && (
-                 <div className="absolute top-[-35px] left-1/2 -translate-x-1/2 text-[10px] font-bold text-red-500 bg-white/90 px-3 py-1 rounded-full border border-red-200 shadow-sm whitespace-nowrap z-50">
-                     {rotation > 0 ? '↻' : '↺'} {(Math.abs(rotation)).toFixed(1)}°
-                 </div>
-            )}
-        </div>
-    );
-};
+const MetreRuleVisual = ({ rotation }: { rotation: number }) => (
+    <div className="w-[500px] h-[40px] relative select-none group">
+        <svg width="500" height="40" viewBox="0 0 500 40" className="drop-shadow-xl overflow-visible">
+            <defs>
+                <linearGradient id="woodGradient" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#f59e0b" /><stop offset="100%" stopColor="#d97706" /></linearGradient>
+            </defs>
+            <rect x="0" y="0" width="500" height="40" rx="2" fill="url(#woodGradient)" stroke="#78350f" strokeWidth="1" />
+            {Array.from({ length: 101 }).map((_, i) => {
+                const isDecimeter = i % 10 === 0;
+                const h = isDecimeter ? 15 : i % 5 === 0 ? 10 : 6;
+                const x = i * 5;
+                return (
+                    <g key={i}>
+                        <line x1={x} y1={0} x2={x} y2={h} stroke="#451a03" strokeWidth={isDecimeter ? 1.5 : 1} />
+                        {isDecimeter && i !== 0 && i !== 100 && <text x={x} y={28} fontSize="9" textAnchor="middle" fontWeight="bold" fill="#451a03" fontFamily="monospace">{i}</text>}
+                    </g>
+                );
+            })}
+            <circle cx="250" cy="20" r="2" fill="red" />
+        </svg>
+    </div>
+);
 
-const RetortStandVisual = ({ clampY, isSelected, flipped, isOpen, onClampMouseDown }: any) => {
+const RetortStandVisual = ({ clampY, isSelected, flipped, isOpen }: any) => {
     const jawOffset = isOpen ? 12 : 0; 
     return (
         <div className="relative select-none w-40 h-[600px] flex flex-col justify-end items-center group">
-            {/* Base */}
-            <div className={`w-48 h-8 bg-[#334155] rounded-md shadow-2xl border-t border-slate-500 relative z-20 flex justify-center items-center ${isSelected ? 'ring-2 ring-blue-500' : ''}`}>
+            <div className={`w-48 h-8 bg-[#334155] rounded-md shadow-2xl border-t border-slate-500 relative z-20 ${isSelected ? 'ring-2 ring-blue-500' : ''}`}>
                  <div className="absolute inset-0 bg-gradient-to-b from-slate-600 to-slate-800 rounded-md"></div>
-                 <span className="absolute bottom-1 text-[8px] text-slate-400 font-mono tracking-widest">LAB-EQUIP</span>
             </div>
-            {/* Rod */}
             <div className="absolute bottom-6 w-3 h-[580px] bg-gradient-to-r from-slate-300 via-slate-100 to-slate-400 rounded-t-full shadow-lg z-10 border-x border-slate-400"></div>
-            {/* Clamp */}
-            <div 
-                className="absolute left-1/2 z-30 transition-transform duration-75 cursor-ns-resize group/clamp" 
-                style={{ bottom: clampY, transform: `translateX(-50%) ${flipped ? 'scaleX(-1)' : ''}` }}
-                onMouseDown={onClampMouseDown}
-                onTouchStart={onClampMouseDown}
-            >
-                 <div className="absolute -left-6 -top-5 w-12 h-10 bg-slate-700 rounded shadow-xl flex items-center justify-center border border-slate-500">
-                    <div className="w-3 h-3 bg-slate-400 rounded-full shadow-inner border border-slate-600"></div>
-                 </div>
-                 <div className="absolute left-0 top-0 w-28 h-3 bg-gradient-to-b from-slate-300 to-slate-500 rounded-r-sm shadow-md border border-slate-500"></div>
-                 {/* Jaws */}
+            <div className="absolute left-1/2 z-30 transition-transform duration-75 cursor-ns-resize" style={{ bottom: clampY, transform: `translateX(-50%) ${flipped ? 'scaleX(-1)' : ''}` }}>
+                 <div className="absolute -left-6 -top-5 w-12 h-10 bg-slate-700 rounded shadow-xl flex items-center justify-center border border-slate-500"><div className="w-3 h-3 bg-slate-400 rounded-full"></div></div>
+                 <div className="absolute left(0) top-0 w-28 h-3 bg-gradient-to-b from-slate-300 to-slate-500 rounded-r-sm shadow-md border border-slate-500"></div>
                  <div className="absolute left-[112px] top-[-10px] flex flex-col items-center">
                      <div className="w-6 h-4 bg-slate-600 border border-slate-500 rounded-t-md relative z-10 shadow-sm flex items-end justify-center"><div className="w-5 h-1 bg-[#8d6e63] rounded-sm opacity-90"></div></div>
-                     <div className="w-1 h-6 bg-slate-400/50 absolute top-3 z-0"></div>
-                     <div className="w-6 h-4 bg-slate-600 border border-slate-500 rounded-b-md relative z-10 shadow-sm flex items-start justify-center transition-all duration-300 ease-out" style={{ transform: `translateY(${jawOffset}px)` }}>
-                          <div className="w-5 h-1 bg-[#8d6e63] rounded-sm opacity-90"></div>
-                     </div>
-                     <div className="absolute top-10 w-2 h-6 bg-slate-400 rounded-b-full transition-all duration-300" style={{ transform: `translateY(${jawOffset}px)` }}>
-                         <div className="w-4 h-2 bg-slate-700 absolute bottom-0 -left-1 rounded-full"></div>
-                     </div>
+                     <div className="w-6 h-4 bg-slate-600 border border-slate-500 rounded-b-md relative z-10 shadow-sm flex items-start justify-center transition-all duration-300 ease-out" style={{ transform: `translateY(${jawOffset}px)` }}><div className="w-5 h-1 bg-[#8d6e63] rounded-sm opacity-90"></div></div>
                  </div>
             </div>
         </div>
@@ -173,10 +121,8 @@ const SpringSVG = ({ length }: { length: number }) => {
         d += `Q ${width} ${y + coilHeight/4} ${0} ${y + coilHeight/2} Q ${width} ${y + 3*coilHeight/4} ${width/2} ${y + coilHeight} `;
     }
     d += `L ${width/2} ${visualLength - 5} A 4 4 0 1 0 ${width/2 - 0.1} ${visualLength}`; 
-
     return (
         <div className="relative pointer-events-none group">
-            <div className="absolute top-[-5px] left-1/2 -translate-x-1/2 w-2 h-2 border border-red-500/0 rounded-full"></div>
             <svg width={width} height={visualLength + 10} className="overflow-visible drop-shadow-sm">
                 <path d={d} fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -211,7 +157,6 @@ const Mechanics: React.FC<MechanicsProps> = ({ onUpdateChar }) => {
     const [components, setComponents] = useState<MechanicsComponent[]>([]);
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [selectedId, setSelectedId] = useState<string | null>(null);
-
     const workbenchRef = useRef<HTMLDivElement>(null);
     const dragRef = useRef<{ id: string, startX: number, startY: number, initialX: number, initialY: number } | null>(null);
 
@@ -230,15 +175,16 @@ const Mechanics: React.FC<MechanicsProps> = ({ onUpdateChar }) => {
         setComponents([...components, newComp]);
     };
 
-    // Basic drag implementation
-    const handleMouseDown = (e: React.MouseEvent, id: string) => {
+    const handleMouseDown = (e: React.MouseEvent | React.TouchEvent, id: string) => {
         e.stopPropagation();
+        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
         const comp = components.find(c => c.id === id);
         if(comp) {
             dragRef.current = { 
                 id, 
-                startX: e.clientX, 
-                startY: e.clientY,
+                startX: clientX, 
+                startY: clientY,
                 initialX: comp.x,
                 initialY: comp.y
             };
@@ -246,10 +192,12 @@ const Mechanics: React.FC<MechanicsProps> = ({ onUpdateChar }) => {
         }
     };
 
-    const handleMouseMove = (e: React.MouseEvent) => {
+    const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
         if(dragRef.current) {
-            const dx = e.clientX - dragRef.current.startX;
-            const dy = e.clientY - dragRef.current.startY;
+            const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+            const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+            const dx = clientX - dragRef.current.startX;
+            const dy = clientY - dragRef.current.startY;
             setComponents(prev => prev.map(c => {
                 if(c.id === dragRef.current?.id) {
                     return { ...c, x: dragRef.current.initialX + dx, y: dragRef.current.initialY + dy };
@@ -271,42 +219,32 @@ const Mechanics: React.FC<MechanicsProps> = ({ onUpdateChar }) => {
     };
 
     return (
-        <div className="h-full flex flex-col md:flex-row bg-[#0f172a] relative select-none" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onClick={() => { setSelectedId(null); setSidebarOpen(false); }}>
-            
-             <button 
-                onClick={(e) => { e.stopPropagation(); setSidebarOpen(!isSidebarOpen); }} 
-                className="absolute top-4 left-4 z-50 p-3 bg-slate-800 rounded-full text-white shadow-lg border border-slate-600 hover:bg-slate-700 transition-colors"
-                title="Mechanics Tools"
-            >
-                {isSidebarOpen ? '✖️' : '🛠️'}
+        <div 
+            className="h-full flex flex-col md:flex-row bg-transparent relative select-none touch-none" 
+            onMouseMove={handleMouseMove} 
+            onTouchMove={handleMouseMove}
+            onMouseUp={handleMouseUp} 
+            onTouchEnd={handleMouseUp}
+            onClick={() => { setSelectedId(null); setSidebarOpen(false); }}
+        >
+             <button onClick={(e) => { e.stopPropagation(); setSidebarOpen(!isSidebarOpen); }} className="absolute top-4 left-4 z-50 p-3 bg-slate-800 rounded-full text-white shadow-lg border border-slate-600 hover:bg-slate-700 transition-colors">
+                {isSidebarOpen ? '✕' : '🛠️'}
             </button>
-
-            {/* Sidebar */}
-             <div 
-                className={`absolute top-0 left-0 h-full w-64 bg-[#1e293b] border-r border-slate-700 z-40 shadow-2xl transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
-                onClick={(e) => e.stopPropagation()} 
-            >
+             <div className={`absolute top-0 left-0 h-full w-64 bg-[#1e293b] border-r border-slate-700 z-40 shadow-2xl transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`} onClick={(e) => e.stopPropagation()}>
                 <div className="p-4 pt-16 flex flex-col gap-4 h-full overflow-y-auto">
                     <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Lab Equipment</h3>
                     <div className="grid grid-cols-2 gap-2">
                     {TOOLBOX_ITEMS.map(item => (
-                        <button
-                            key={item.id}
-                            onClick={() => spawnComponent(item.id)}
-                            className="flex flex-col items-center p-3 bg-slate-800 rounded-xl border border-slate-600 hover:border-blue-500 hover:bg-slate-700 transition-all shadow-md active:scale-95"
-                        >
+                        <button key={item.id} onClick={() => spawnComponent(item.id)} className="flex flex-col items-center p-3 bg-slate-800 rounded-xl border border-slate-600 hover:border-blue-500 hover:bg-slate-700 transition-all shadow-md active:scale-95">
                             <span className="text-2xl mb-1">{item.icon}</span>
                             <span className="text-[10px] text-slate-300 font-bold text-center">{item.label}</span>
                         </button>
                     ))}
                     </div>
-                    
                     <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mt-4">Masses</h3>
                     <div className="grid grid-cols-3 gap-2">
                         {MASSES.map(mass => (
-                             <button
-                                key={mass.id}
-                                onClick={() => {
+                             <button key={mass.id} onClick={() => {
                                      const scrollX = workbenchRef.current?.scrollLeft || 0;
                                      const scrollY = workbenchRef.current?.scrollTop || 0;
                                      const newComp: MechanicsComponent = {
@@ -326,49 +264,30 @@ const Mechanics: React.FC<MechanicsProps> = ({ onUpdateChar }) => {
                             </button>
                         ))}
                     </div>
-
                     <div className="flex-grow"></div>
-                    <button onClick={() => setComponents([])} className="w-full py-3 rounded-lg bg-red-900/50 text-red-400 hover:bg-red-600 hover:text-white flex items-center justify-center gap-2 transition-colors border border-red-500/30">
-                        <span>🗑️</span> Clear Bench
-                    </button>
+                    <button onClick={() => setComponents([])} className="w-full py-3 rounded-lg bg-red-900/50 text-red-400 hover:bg-red-600 hover:text-white flex items-center justify-center gap-2 transition-colors border border-red-500/30">🗑️ Clear Bench</button>
                 </div>
             </div>
-
-            {/* Workspace */}
-            <div ref={workbenchRef} className="flex-grow bg-[#0f172a] relative overflow-auto custom-scrollbar cursor-crosshair">
-                <div className="absolute inset-0 bg-[radial-gradient(rgba(30,41,59,0.4)_1px,transparent_1px)] bg-[size:20px_20px] opacity-50 pointer-events-none" style={{width: '2000px', height: '1500px'}}></div>
-                
-                 {/* Floor / Table Surface visual */}
-                 <div className="absolute bottom-0 w-full h-12 bg-slate-800 border-t border-slate-600" style={{width: '2000px', top: '1440px'}}></div>
-
+            <div ref={workbenchRef} className="flex-grow bg-transparent relative overflow-auto custom-scrollbar cursor-crosshair">
                  {components.map(comp => (
                      <div
                         key={comp.id}
                         className={`absolute cursor-grab active:cursor-grabbing ${selectedId === comp.id ? 'z-50' : 'z-10'}`}
                         style={{ left: comp.x, top: comp.y, transform: 'translate(-50%, -50%)' }}
                         onMouseDown={(e) => handleMouseDown(e, comp.id)}
+                        onTouchStart={(e) => handleMouseDown(e, comp.id)}
                      >
-                        {/* Selection Highlight */}
                         {selectedId === comp.id && (
                              <>
                                 <div className="absolute inset-[-10px] border-2 border-cyan-400 rounded-lg opacity-60 pointer-events-none animate-pulse"></div>
-                                <button 
-                                    className="absolute -top-10 left-1/2 -translate-x-1/2 bg-red-500 text-white p-1 rounded-full shadow-lg hover:bg-red-600"
-                                    onClick={(e) => { e.stopPropagation(); deleteSelected(); }}
-                                >
-                                    🗑️
-                                </button>
+                                <button className="absolute -top-10 left-1/2 -translate-x-1/2 bg-red-500 text-white p-1 rounded-full shadow-lg hover:bg-red-600" onClick={(e) => { e.stopPropagation(); deleteSelected(); }}>🗑️</button>
                              </>
                         )}
-                        
-                        {/* Visuals */}
                         {comp.type === 'metre_rule' && <MetreRuleVisual rotation={comp.rotation || 0} />}
                         {comp.type === 'retort_stand' && <RetortStandVisual clampY={comp.clampY || 400} isSelected={selectedId === comp.id} />}
                         {comp.type === 'spring' && <SpringSVG length={comp.currentLength || 30} />}
                         {comp.type === 'pendulum_bob' && <PendulumBobVisual mass={comp.mass || 50} />}
                         {(comp.type.startsWith('mass_')) && <MassVisual mass={comp.mass || 0} />}
-                        
-                        {/* Fallback for others */}
                         {['stopwatch', 'protractor', 'knife_edge', 'string', 'beaker', 'pulley', 'optical_pin'].includes(comp.type) && (
                              <div className="bg-slate-700 p-2 rounded border border-slate-500 flex flex-col items-center">
                                  <span className="text-2xl">{TOOLBOX_ITEMS.find(t => t.id === comp.type)?.icon || '❓'}</span>

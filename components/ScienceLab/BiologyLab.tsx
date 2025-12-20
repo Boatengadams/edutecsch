@@ -35,6 +35,7 @@ const BiologyLab: React.FC<BiologyLabProps> = ({ level }) => {
     const [position, setPosition] = useState({ x: 50, y: 50 }); // Percentage center
     const [isDragging, setIsDragging] = useState(false);
     const viewportRef = useRef<HTMLDivElement>(null);
+    const lastMousePos = useRef({ x: 0, y: 0 });
 
     const handleSlideSelect = (slide: LabEquipment) => {
         setCurrentSlide(slide);
@@ -43,17 +44,31 @@ const BiologyLab: React.FC<BiologyLabProps> = ({ level }) => {
         setPosition({ x: 50, y: 50 }); // Center
     };
 
-    const handleMouseMove = (e: React.MouseEvent) => {
+    const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
+        setIsDragging(true);
+        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+        lastMousePos.current = { x: clientX, y: clientY };
+    };
+
+    const handleMove = (e: React.MouseEvent | React.TouchEvent) => {
         if (isDragging && viewportRef.current) {
+            const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+            const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+            
+            const dx = clientX - lastMousePos.current.x;
+            const dy = clientY - lastMousePos.current.y;
+            
             const rect = viewportRef.current.getBoundingClientRect();
-            // Inverted control for "moving the slide" feeling
-            const deltaX = (e.movementX / rect.width) * 100; 
-            const deltaY = (e.movementY / rect.height) * 100;
+            const deltaX = (dx / rect.width) * 100; 
+            const deltaY = (dy / rect.height) * 100;
             
             setPosition(prev => ({
                 x: Math.max(0, Math.min(100, prev.x - deltaX)),
                 y: Math.max(0, Math.min(100, prev.y - deltaY))
             }));
+            
+            lastMousePos.current = { x: clientX, y: clientY };
         }
     };
 
@@ -61,7 +76,7 @@ const BiologyLab: React.FC<BiologyLabProps> = ({ level }) => {
     const zoomScale = magnification / 40; // Normalize scale for CSS
 
     return (
-        <div className="h-full flex flex-col md:flex-row bg-slate-950 relative overflow-hidden" onClick={() => setSidebarOpen(false)}>
+        <div className="h-full flex flex-col md:flex-row bg-slate-950 relative overflow-hidden touch-none" onClick={() => setSidebarOpen(false)}>
             
             {/* Main Viewport (Microscope View) */}
             <div className="flex-grow relative bg-black flex flex-col items-center justify-center overflow-hidden">
@@ -69,39 +84,36 @@ const BiologyLab: React.FC<BiologyLabProps> = ({ level }) => {
                     <div 
                         ref={viewportRef}
                         className="relative w-full h-full flex items-center justify-center cursor-move"
-                        onMouseDown={() => setIsDragging(true)}
+                        onMouseDown={handleStart}
+                        onTouchStart={handleStart}
                         onMouseUp={() => setIsDragging(false)}
+                        onTouchEnd={() => setIsDragging(false)}
                         onMouseLeave={() => setIsDragging(false)}
-                        onMouseMove={handleMouseMove}
+                        onMouseMove={handleMove}
+                        onTouchMove={handleMove}
                     >
                         {/* Circular Mask Container */}
                         <div className="w-[80vmin] h-[80vmin] rounded-full overflow-hidden border-[20px] border-slate-900 shadow-2xl relative bg-white z-10 ring-1 ring-white/10">
-                            {/* The Image Layer */}
                             <div 
                                 className="absolute w-[200%] h-[200%] bg-cover transition-all duration-300 ease-out"
                                 style={{
                                     backgroundImage: `url(${IMAGES[currentSlide.id]})`,
                                     left: `${-position.x}%`,
                                     top: `${-position.y}%`,
-                                    transform: `scale(${1 + zoomScale * 0.5})`, // Subtle zoom effect based on mag
-                                    filter: `blur(${blurAmount}px) brightness(${brightness}%) contrast(${contrast}%) grayscale(${magnification === 1000 ? 1 : 0})` // High mag often Electron in games (grayscale) or just blurrier
+                                    transform: `scale(${1 + zoomScale * 0.5})`, 
+                                    filter: `blur(${blurAmount}px) brightness(${brightness}%) contrast(${contrast}%) grayscale(${magnification === 1000 ? 1 : 0})`
                                 }}
                             ></div>
-                            
-                            {/* Reticle / Scale Overlay */}
                             <div className="absolute inset-0 pointer-events-none opacity-30">
                                 <div className="absolute top-1/2 left-0 w-full h-px bg-black"></div>
                                 <div className="absolute left-1/2 top-0 h-full w-px bg-black"></div>
-                                {/* Scale markings */}
                                 <div className="absolute bottom-10 right-10 border-b-2 border-black w-24 text-right text-[10px] font-bold text-black pr-1">
                                     {magnification === 40 ? '500µm' : magnification === 100 ? '200µm' : magnification === 400 ? '50µm' : '20µm'}
                                 </div>
                             </div>
                         </div>
-
-                        {/* Hint */}
                         <div className="absolute bottom-8 text-slate-500 text-xs bg-black/50 px-3 py-1 rounded-full backdrop-blur-sm pointer-events-none">
-                            Click & Drag to move slide stage
+                            Swipe to move slide stage
                         </div>
                     </div>
                 ) : (
@@ -112,28 +124,22 @@ const BiologyLab: React.FC<BiologyLabProps> = ({ level }) => {
                 )}
             </div>
 
-            {/* Floating Toggle Button */}
             <button 
                 onClick={(e) => { e.stopPropagation(); setSidebarOpen(!isSidebarOpen); }} 
                 className="absolute top-4 right-4 z-50 p-3 bg-slate-800 rounded-full text-white shadow-lg border border-slate-600 hover:bg-slate-700 transition-colors"
-                title="Microscope Controls"
             >
                 {isSidebarOpen ? '✖️' : '🔬'}
             </button>
 
-            {/* Controls Dashboard (Hidden by Default) */}
             <div 
                 className={`absolute top-0 right-0 h-full w-80 bg-[#0f172a] border-l border-slate-800 p-6 flex flex-col gap-6 shadow-2xl z-40 overflow-y-auto transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}
                 onClick={(e) => e.stopPropagation()}
             >
-                
-                {/* Header */}
                 <div className="pt-12">
                     <h2 className="text-2xl font-bold text-white mb-1">BioScope Pro</h2>
                     <p className="text-xs text-slate-400 font-mono">MODEL X-2025 // OPTICAL SYSTEM</p>
                 </div>
 
-                {/* Slide Tray */}
                 <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
                     <h3 className="text-xs font-bold text-slate-400 uppercase mb-3 tracking-wider">Slide Box</h3>
                     <div className="grid grid-cols-2 gap-2">
@@ -152,9 +158,7 @@ const BiologyLab: React.FC<BiologyLabProps> = ({ level }) => {
                     </div>
                 </div>
 
-                {/* Optics Controls */}
                 <div className="space-y-6">
-                    {/* Objectives */}
                     <div>
                         <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Objective Lenses</label>
                         <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800">
@@ -171,7 +175,6 @@ const BiologyLab: React.FC<BiologyLabProps> = ({ level }) => {
                         </div>
                     </div>
 
-                    {/* Knobs */}
                     <div className="bg-slate-900 rounded-xl p-4 border border-slate-800 space-y-4">
                         <div>
                             <div className="flex justify-between mb-1">
@@ -200,7 +203,6 @@ const BiologyLab: React.FC<BiologyLabProps> = ({ level }) => {
                     </div>
                 </div>
 
-                {/* Analysis Data */}
                 {currentSlide && Math.abs(50 - focus) < 10 && (
                     <div className="mt-auto bg-blue-900/20 border border-blue-500/30 p-4 rounded-xl animate-fade-in-up">
                         <h4 className="text-blue-400 text-sm font-bold mb-1 flex items-center gap-2">
