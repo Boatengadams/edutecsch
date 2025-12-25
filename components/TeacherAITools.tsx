@@ -51,10 +51,7 @@ const TeacherAITools: React.FC<TeacherAIToolsProps> = ({ students, userProfile }
 
             {activeTool ? (
                 <div className="flex-grow flex flex-col animate-fade-in-up">
-                    <button 
-                        onClick={() => setActiveTool(null)} 
-                        className="mb-4 self-start flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-slate-800"
-                    >
+                    <button onClick={() => setActiveTool(null)} className="mb-4 self-start flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-slate-800">
                         ← Back to Tools
                     </button>
                     <Card className="flex-grow overflow-hidden flex flex-col !p-0 bg-slate-900 border-slate-800">
@@ -64,35 +61,22 @@ const TeacherAITools: React.FC<TeacherAIToolsProps> = ({ students, userProfile }
                                  {tools.find(t => t.id === activeTool)?.title}
                              </h3>
                         </div>
-                        <div className="p-6 flex-grow overflow-y-auto custom-scrollbar">
-                            {renderActiveTool()}
-                        </div>
+                        <div className="p-6 flex-grow overflow-y-auto custom-scrollbar">{renderActiveTool()}</div>
                     </Card>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in-up">
                     {tools.map(tool => (
-                        <button 
-                            key={tool.id}
-                            onClick={() => setActiveTool(tool.id as ToolType)}
-                            className="group relative p-6 bg-slate-800/50 border border-slate-700 rounded-2xl hover:bg-slate-800 hover:border-blue-500/50 transition-all duration-300 text-left flex flex-col h-full shadow-sm hover:shadow-xl hover:-translate-y-1 overflow-hidden"
-                        >
+                        <button key={tool.id} onClick={() => setActiveTool(tool.id as ToolType)} className="group relative p-6 bg-slate-800/50 border border-slate-700 rounded-2xl hover:bg-slate-800 hover:border-blue-500/50 transition-all duration-300 text-left flex flex-col h-full shadow-sm hover:shadow-xl hover:-translate-y-1 overflow-hidden">
                             <div className="absolute top-0 right-0 p-20 bg-blue-500/5 rounded-full blur-3xl group-hover:bg-blue-500/10 transition-colors pointer-events-none"></div>
-                            
                             <div className="w-14 h-14 bg-slate-700/50 rounded-2xl flex items-center justify-center text-3xl mb-4 group-hover:scale-110 transition-transform duration-300 shadow-inner border border-slate-600 group-hover:border-blue-500/30">
                                 {tool.icon}
                             </div>
-                            
                             <h3 className="text-lg font-bold text-white mb-2 group-hover:text-blue-300 transition-colors">{tool.title}</h3>
                             <p className="text-sm text-slate-400 leading-relaxed">{tool.description}</p>
-                            
-                            <div className="mt-auto pt-4 flex items-center text-xs font-bold text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0">
-                                Launch Tool →
-                            </div>
+                            <div className="mt-auto pt-4 flex items-center text-xs font-bold text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0">Launch Tool →</div>
                         </button>
                     ))}
-                    
-                    {/* Coming Soon Placeholder */}
                     <div className="p-6 bg-slate-900/30 border border-slate-800 border-dashed rounded-2xl flex flex-col items-center justify-center text-center opacity-60 cursor-not-allowed">
                         <span className="text-3xl mb-2 grayscale">🚀</span>
                         <h3 className="text-md font-bold text-slate-500">More Coming Soon</h3>

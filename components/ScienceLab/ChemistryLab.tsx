@@ -88,7 +88,7 @@ const REAGENTS: Record<string, LabEquipment[]> = {
     ]
 };
 
-// --- CORE PHYSICS & LOGIC ---
+// --- PHYSICS ENGINE HELPERS ---
 
 const blendChemicals = (contents: Chemical[]) => {
     if (contents.length === 0) return { color: 'rgba(255,255,255,0.05)', ph: 7.0 };
@@ -216,7 +216,15 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
         if (rect) {
             const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
             const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-            mousePos.current = { x: clientX - rect.left, y: clientY - rect.top };
+            
+            const parent = workbenchRef.current?.parentElement;
+            const scrollLeft = parent?.scrollLeft || 0;
+            const scrollTop = parent?.scrollTop || 0;
+            
+            mousePos.current = { 
+                x: (clientX - rect.left) + scrollLeft, 
+                y: (clientY - rect.top) + scrollTop 
+            };
         }
     };
 
@@ -231,12 +239,21 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
 
     const spawn = (type: ContainerType) => {
         const def = GLASS_DEFS[type];
+        const parent = workbenchRef.current?.parentElement;
+        const scrollLeft = parent?.scrollLeft || 0;
+        const scrollTop = parent?.scrollTop || 0;
+        const visibleWidth = parent?.clientWidth || 800;
+        const visibleHeight = parent?.clientHeight || 600;
+        
+        // Tuned Spawn for v5.6 Massive Surface
         const newC: LabContainer = {
             id: Math.random().toString(36).substr(2, 9),
             type, name: type.replace('_', ' ').toUpperCase(), 
             capacity: def.capacity, currentVolume: 0,
             contents: [], temperature: 25,
-            x: 400, y: 300, rotation: 0, zIndex: 10,
+            x: scrollLeft + visibleWidth / 2 + (Math.random() * 200 - 100), 
+            y: scrollTop + visibleHeight * 0.82 + (Math.random() * 50 - 25), 
+            rotation: 0, zIndex: 10,
             lastX: 400
         };
         setContainers(prev => [...prev, newC]);
@@ -248,6 +265,12 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
         const def = GLASS_DEFS[type];
         const props = chem.properties!;
         
+        const parent = workbenchRef.current?.parentElement;
+        const scrollLeft = parent?.scrollLeft || 0;
+        const scrollTop = parent?.scrollTop || 0;
+        const visibleWidth = parent?.clientWidth || 800;
+        const visibleHeight = parent?.clientHeight || 600;
+
         const newC: LabContainer = {
             id: Math.random().toString(36).substr(2, 9),
             type, 
@@ -265,7 +288,8 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
                 type: 'solvent' 
             }], 
             temperature: 25,
-            x: 400, y: 300, 
+            x: scrollLeft + visibleWidth / 2 + (Math.random() * 200 - 100),
+            y: scrollTop + visibleHeight * 0.82 + (Math.random() * 50 - 25), 
             rotation: 0, 
             zIndex: 15,
             lastX: 400
@@ -284,60 +308,51 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
             onTouchEnd={handleMouseUp}
             onClick={() => { setSelectedId(null); setSidebarOpen(false); }}
         >
-            {/* HUD */}
-            {selectedId && containers.find(c => c.id === selectedId) && (
-                <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-                    <div className="bg-slate-900/90 backdrop-blur-2xl border border-white/10 p-5 rounded-3xl flex gap-10 shadow-2xl border-b-blue-500/50">
-                        <div className="text-center">
-                            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Volume</p>
-                            <p className="text-2xl font-mono text-blue-400 font-bold">{containers.find(c => c.id === selectedId)?.currentVolume.toFixed(1)}ml</p>
-                        </div>
-                        <div className="text-center border-x border-white/5 px-10">
-                            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">pH Level</p>
-                            <p className="text-2xl font-mono text-emerald-400 font-bold">{blendChemicals(containers.find(c => c.id === selectedId)?.contents || []).ph.toFixed(2)}</p>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Sidebar */}
-            <div className={`absolute top-0 left-0 h-full w-72 bg-slate-950/95 backdrop-blur-3xl border-r border-white/5 z-[60] transition-transform duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-                <div className="p-8 pt-24 space-y-8 overflow-y-auto h-full custom-scrollbar">
+            {/* Sidebar (Fixed position) */}
+            <div className={`fixed top-14 left-0 h-[calc(100%-3.5rem)] w-80 bg-slate-950/98 backdrop-blur-3xl border-r border-white/5 z-[60] transition-transform duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                <div className="p-10 pt-16 space-y-10 overflow-y-auto h-full custom-scrollbar">
                     <section>
-                        <h4 className="text-[11px] font-black text-blue-500 uppercase tracking-widest mb-6">APPARATUS</h4>
-                        <div className="grid grid-cols-2 gap-4">
+                        <h4 className="text-[12px] font-black text-blue-500 uppercase tracking-[0.2em] mb-8 flex items-center gap-2">
+                             <div className="w-1.5 h-4 bg-blue-500 rounded-full"></div>
+                             Apparatus
+                        </h4>
+                        <div className="grid grid-cols-2 gap-5">
                             {(Object.keys(GLASS_DEFS) as ContainerType[]).filter(t => t !== 'reagent_bottle' && GLASS_DEFS[t].capacity > 0).map(type => (
-                                <button key={type} onClick={() => spawn(type)} className="flex flex-col items-center p-4 bg-white/5 hover:bg-blue-600/20 rounded-2xl border border-white/5 hover:border-blue-500/50 transition-all active:scale-95 group">
-                                    <span className="text-3xl mb-2 group-hover:scale-110 transition-transform">{GLASS_DEFS[type].icon}</span>
-                                    <span className="text-[10px] font-black text-slate-400 group-hover:text-white uppercase tracking-tighter text-center">{type.replace('_', ' ')}</span>
+                                <button key={type} onClick={() => spawn(type)} className="flex flex-col items-center p-5 bg-white/5 hover:bg-blue-600/10 rounded-3xl border border-white/5 hover:border-blue-500/40 transition-all active:scale-95 group shadow-sm hover:shadow-blue-500/10">
+                                    <span className="text-4xl mb-3 group-hover:scale-110 transition-transform">{GLASS_DEFS[type].icon}</span>
+                                    <span className="text-[10px] font-black text-slate-400 group-hover:text-white uppercase tracking-tighter text-center leading-tight">{type.replace('_', ' ')}</span>
                                 </button>
                             ))}
                         </div>
                     </section>
                     
                     <section>
-                        <h4 className="text-[11px] font-black text-emerald-500 uppercase tracking-widest mb-6">REAGENTS</h4>
+                         <h4 className="text-[12px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-8 flex items-center gap-2">
+                             <div className="w-1.5 h-4 bg-emerald-500 rounded-full"></div>
+                             Chemicals
+                        </h4>
                         <div className="space-y-4">
                             {Object.entries(REAGENTS).map(([category, items]) => (
                                 <div key={category} className="space-y-2">
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); setOpenReagentCategory(openReagentCategory === category ? null : category); }}
-                                        className="w-full flex items-center justify-between p-3 bg-slate-800/50 rounded-xl border border-white/5 hover:border-emerald-500/30 transition-all group"
+                                        className="w-full flex items-center justify-between p-4 bg-slate-900/50 rounded-2xl border border-white/5 hover:border-emerald-500/40 transition-all group"
                                     >
                                         <div className="flex items-center gap-3">
-                                            <span className="text-emerald-400">⚗️</span>
-                                            <span className="text-xs font-bold text-slate-300">{category}</span>
+                                            <span className="text-emerald-400 opacity-70 group-hover:opacity-100 transition-opacity">⚗️</span>
+                                            <span className="text-[11px] font-black text-slate-300 uppercase tracking-widest">{category}</span>
                                         </div>
-                                        <span className={`text-xs transition-transform ${openReagentCategory === category ? 'rotate-90' : ''}`}>▶</span>
+                                        <span className={`text-[10px] text-slate-500 transition-transform ${openReagentCategory === category ? 'rotate-90 text-white' : ''}`}>▶</span>
                                     </button>
                                     
                                     {openReagentCategory === category && (
-                                        <div className="grid grid-cols-1 gap-2 pl-2 animate-fade-in-down">
+                                        <div className="grid grid-cols-1 gap-2.5 pl-3 animate-fade-in-down">
                                             {items.map(chem => (
-                                                <button key={chem.id} onClick={(e) => { e.stopPropagation(); spawnReagentBottle(chem); }} className="w-full flex items-center gap-3 p-2.5 bg-white/5 hover:bg-slate-800 border border-white/5 rounded-xl text-left transition-all group">
-                                                    <div className="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center text-lg group-hover:bg-emerald-500/20 transition-colors shadow-inner">{chem.icon}</div>
+                                                <button key={chem.id} onClick={(e) => { e.stopPropagation(); spawnReagentBottle(chem); }} className="w-full flex items-center gap-4 p-3 bg-white/5 hover:bg-slate-800 border border-white/5 rounded-2xl text-left transition-all group hover:scale-[1.02]">
+                                                    <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-xl group-hover:bg-emerald-500/20 transition-colors shadow-inner border border-white/5">{chem.icon}</div>
                                                     <div className="min-w-0">
-                                                        <p className="text-[11px] font-bold text-slate-200 truncate">{chem.name}</p>
+                                                        <p className="text-[11px] font-black text-slate-200 truncate uppercase tracking-tighter">{chem.name}</p>
+                                                        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{chem.id}</p>
                                                     </div>
                                                 </button>
                                             ))}
@@ -350,12 +365,12 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
                 </div>
             </div>
 
-            <button onClick={(e) => { e.stopPropagation(); setSidebarOpen(!isSidebarOpen); }} className="absolute top-4 left-4 z-[70] p-4 bg-blue-600 rounded-2xl text-white shadow-2xl hover:bg-blue-500 transition-all">
+            <button onClick={(e) => { e.stopPropagation(); setSidebarOpen(!isSidebarOpen); }} className="fixed top-18 left-6 z-[70] p-4 bg-blue-600 rounded-2xl text-white shadow-2xl hover:bg-blue-500 transition-all active:scale-90 ring-4 ring-blue-600/20">
                 {isSidebarOpen ? '✕' : '🧪'}
             </button>
 
-            {/* Workbench */}
-            <div ref={workbenchRef} className="flex-grow relative bg-transparent overflow-hidden">
+            {/* Massive Workbench Area (2500px x 1800px) */}
+            <div ref={workbenchRef} className="absolute inset-0 w-[2500px] h-[1800px] bg-transparent overflow-visible">
                 {containers.map(c => (
                     <div 
                         key={c.id} 
@@ -365,17 +380,17 @@ const ChemistryLab: React.FC<ChemistryLabProps> = () => {
                         onTouchStart={(e) => { e.stopPropagation(); handleMouseDown(c.id); }}
                     >
                         {selectedId === c.id && (
-                            <div className="absolute -top-20 left-1/2 -translate-x-1/2 flex gap-3 animate-fade-in-up">
-                                <button onClick={(e) => { e.stopPropagation(); setContainers(prev => prev.filter(x => x.id !== c.id)); }} className="bg-red-500/10 text-red-500 p-3 rounded-2xl border border-red-500/20 hover:bg-red-500 hover:text-white transition-all shadow-xl backdrop-blur-md">🗑️</button>
+                            <div className="absolute -top-24 left-1/2 -translate-x-1/2 flex gap-4 animate-fade-in-up">
+                                <button onClick={(e) => { e.stopPropagation(); setContainers(prev => prev.filter(x => x.id !== c.id)); }} className="bg-red-500/10 text-red-500 p-4 rounded-3xl border border-red-500/20 hover:bg-red-500 hover:text-white transition-all shadow-2xl backdrop-blur-xl">🗑️</button>
                                 {GLASS_DEFS[c.type].capacity > 0 && (
                                     <button 
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             setContainers(prev => prev.map(x => x.id === c.id ? { ...x, isPouring: !x.isPouring } : x));
                                         }}
-                                        className={`px-6 py-2 rounded-2xl font-black text-[11px] tracking-widest uppercase transition-all shadow-xl backdrop-blur-md border ${c.isPouring ? 'bg-blue-600 text-white border-blue-400 animate-pulse' : 'bg-slate-800/80 text-slate-300 border-white/10'}`}
+                                        className={`px-8 py-3 rounded-3xl font-black text-[12px] tracking-widest uppercase transition-all shadow-2xl backdrop-blur-xl border ${c.isPouring ? 'bg-blue-600 text-white border-blue-400 animate-pulse' : 'bg-slate-900/80 text-slate-300 border-white/20 hover:bg-slate-800'}`}
                                     >
-                                        {c.isPouring ? 'Pouring...' : 'Pour'}
+                                        {c.isPouring ? 'Flowing...' : 'Pour'}
                                     </button>
                                 )}
                             </div>
@@ -409,25 +424,25 @@ const PouringStream: React.FC<{ source: LabContainer }> = ({ source }) => {
     const startY = source.y + (actualSpoutOffset.x * Math.sin(rad) + actualSpoutOffset.y * Math.cos(rad));
     
     const endX = startX + Math.sin(Date.now() / 150) * 3;
-    const endY = startY + 300;
+    const endY = startY + 400;
 
     return (
         <svg className="absolute inset-0 pointer-events-none w-full h-full z-40 overflow-visible">
             <defs>
                 <filter id="streamGlow">
-                    <feGaussianBlur stdDeviation="3" />
+                    <feGaussianBlur stdDeviation="4" />
                     <feComposite in="SourceGraphic" operator="over" />
                 </filter>
             </defs>
             <path 
-                d={`M ${startX} ${startY} Q ${startX} ${startY + 80}, ${endX} ${endY}`}
+                d={`M ${startX} ${startY} Q ${startX} ${startY + 100}, ${endX} ${endY}`}
                 stroke={color}
-                strokeWidth="8"
+                strokeWidth="10"
                 fill="none"
                 strokeLinecap="round"
                 filter="url(#streamGlow)"
                 className="animate-stream-flow"
-                style={{ strokeDasharray: '12, 4' }}
+                style={{ strokeDasharray: '16, 6', opacity: 0.8 }}
             />
         </svg>
     );
@@ -439,77 +454,85 @@ const GlassRenderer: React.FC<{ container: LabContainer; isHeld: boolean }> = ({
     const def = GLASS_DEFS[container.type];
 
     const renderGlassBody = () => {
-        const glassFill = "rgba(255, 255, 255, 0.08)";
-        const glassStroke = "rgba(255, 255, 255, 0.4)";
+        const glassFill = "rgba(255, 255, 255, 0.05)";
+        const glassStroke = "rgba(255, 255, 255, 0.3)";
+        const reflectionGradient = "url(#glassReflection)";
         
         switch (container.type) {
             case 'beaker':
                 return (
                     <g>
-                        <rect x="-45" y="-55" width="90" height="110" rx="8" fill={glassFill} stroke={glassStroke} strokeWidth="3" />
+                        <rect x="-45" y="-55" width="90" height="110" rx="4" fill={glassFill} stroke={glassStroke} strokeWidth="2.5" />
                         <rect x="-45" y={55 - (fill * 1.1)} width="90" height={fill * 1.1} rx="2" fill={color} className="transition-all duration-500" />
-                        {Array.from({length: 6}).map((_, i) => <line key={i} x1="20" y1={40 - i * 18} x2="40" y2={40 - i * 18} stroke="rgba(255,255,255,0.2)" strokeWidth="1" />)}
+                        {/* Scale marks */}
+                        {Array.from({length: 6}).map((_, i) => <line key={i} x1="25" y1={40 - i * 18} x2="40" y2={40 - i * 18} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />)}
+                        <rect x="-40" y="-50" width="80" height="100" fill={reflectionGradient} opacity="0.3" pointerEvents="none" />
                     </g>
                 );
             case 'conical_flask':
-                const path = "M -15 -65 L 15 -65 L 18 -40 L 50 65 L -50 65 L -18 -40 Z";
+                const path = "M -15 -65 L 15 -65 L 20 -40 L 52 65 L -52 65 L -20 -40 Z";
                 return (
                     <g>
-                        <path d={path} fill={glassFill} stroke={glassStroke} strokeWidth="3" />
+                        <path d={path} fill={glassFill} stroke={glassStroke} strokeWidth="2.5" />
                         <clipPath id={`fill-${container.id}`}><path d={path} /></clipPath>
-                        <rect x="-50" y={65 - (fill * 1.3)} width="100" height={fill * 1.3} fill={color} clipPath={`url(#fill-${container.id})`} className="transition-all duration-500" />
+                        <rect x="-52" y={65 - (fill * 1.3)} width="104" height={fill * 1.3} fill={color} clipPath={`url(#fill-${container.id})`} className="transition-all duration-500" />
+                        <path d={path} fill={reflectionGradient} opacity="0.2" pointerEvents="none" />
                     </g>
                 );
             case 'test_tube':
                 return (
                     <g>
-                        <path d="M -15 -60 L 15 -60 L 15 45 A 15 15 0 0 1 -15 45 Z" fill={glassFill} stroke={glassStroke} strokeWidth="3" />
+                        <path d="M -15 -60 L 15 -60 L 15 45 A 15 15 0 0 1 -15 45 Z" fill={glassFill} stroke={glassStroke} strokeWidth="2.5" />
                         <clipPath id={`tube-${container.id}`}><path d="M -15 -60 L 15 -60 L 15 45 A 15 15 0 0 1 -15 45 Z" /></clipPath>
                         <rect x="-15" y={60 - (fill * 1.2)} width="30" height={fill * 1.2} fill={color} clipPath={`url(#tube-${container.id})`} className="transition-all duration-500" />
+                        <rect x="-12" y="-55" width="24" height="100" fill={reflectionGradient} opacity="0.4" pointerEvents="none" />
                     </g>
                 );
             case 'reagent_bottle':
                 return (
                     <g>
-                        <rect x="-35" y="-55" width="70" height="110" rx="12" fill="rgba(80, 40, 20, 0.7)" stroke="rgba(0,0,0,0.4)" strokeWidth="3" />
+                        <rect x="-35" y="-55" width="70" height="110" rx="14" fill="rgba(60, 40, 30, 0.85)" stroke="rgba(0,0,0,0.5)" strokeWidth="3" />
                         <rect x="-35" y={55 - fill} width="70" height={fill} rx="4" fill={color} className="mix-blend-overlay" />
-                        <rect x="-20" y="-68" width="40" height="14" rx="2" fill="#111" />
-                        <rect x="-25" y="-15" width="50" height="40" rx="4" fill="#fff" />
-                        <text x="0" y="8" textAnchor="middle" fontSize="7" fill="#222" fontWeight="900" className="uppercase tracking-tighter" style={{ pointerEvents: 'none' }}>
+                        <rect x="-20" y="-68" width="40" height="14" rx="3" fill="#111" />
+                        <rect x="-25" y="-12" width="50" height="42" rx="4" fill="#f8fafc" stroke="#e2e8f0" />
+                        <text x="0" y="8" textAnchor="middle" fontSize="6.5" fill="#334155" fontWeight="900" className="uppercase tracking-tighter font-mono" style={{ pointerEvents: 'none' }}>
                              {container.label?.split(' ').slice(0, 2).join(' ') || container.name.split(' ')[0]}
                         </text>
+                        <rect x="-30" y="-50" width="10" height="90" fill="white" opacity="0.1" rx="2" />
                     </g>
                 );
             case 'measuring_cylinder':
                 return (
                     <g>
-                        <rect x="-20" y="-90" width="40" height="180" rx="4" fill={glassFill} stroke={glassStroke} strokeWidth="3" />
+                        <rect x="-20" y="-90" width="40" height="180" rx="6" fill={glassFill} stroke={glassStroke} strokeWidth="2.5" />
                         <rect x="-20" y={90 - (fill * 1.8)} width="40" height={fill * 1.8} fill={color} className="transition-all duration-500" />
-                        {Array.from({length: 10}).map((_, i) => <line key={i} x1="-10" y1={80 - i * 16} x2="10" y2={80 - i * 16} stroke="rgba(255,255,255,0.3)" strokeWidth="1" />)}
+                        {Array.from({length: 15}).map((_, i) => <line key={i} x1="-12" y1={80 - i * 12} x2="12" y2={80 - i * 12} stroke="rgba(255,255,255,0.2)" strokeWidth="1" />)}
                     </g>
                 );
             case 'burette':
                 return (
                     <g>
-                        <rect x="-10" y="-175" width="20" height="350" rx="4" fill={glassFill} stroke={glassStroke} strokeWidth="2" />
+                        <rect x="-10" y="-175" width="20" height="350" rx="4" fill={glassFill} stroke={glassStroke} strokeWidth="2.5" />
                         <rect x="-10" y={175 - (fill * 3.5)} width="20" height={fill * 3.5} fill={color} className="transition-all duration-500" />
-                        <circle cx="0" cy="140" r="10" fill="#333" stroke="#555" strokeWidth="2" />
+                        <circle cx="0" cy="140" r="12" fill="#1e293b" stroke="#475569" strokeWidth="2.5" />
+                        <rect x="-2" y="130" width="4" height="20" fill="#64748b" />
                     </g>
                 );
             case 'bunsen_burner':
                 return (
                     <g>
-                        <rect x="-40" y="55" width="80" height="10" rx="2" fill="#1e293b" />
-                        <rect x="-10" y="-40" width="20" height="100" fill="#64748b" stroke="#475569" strokeWidth="2" />
-                        <circle cx="0" cy="55" r="14" fill="#334155" />
+                        <rect x="-40" y="55" width="80" height="12" rx="4" fill="#0f172a" />
+                        <rect x="-10" y="-40" width="20" height="105" fill="#94a3b8" stroke="#475569" strokeWidth="2.5" />
+                        <circle cx="0" cy="55" r="16" fill="#1e293b" stroke="#334155" strokeWidth="2" />
+                        <rect x="-12" y="-42" width="24" height="6" fill="#334155" rx="1" />
                     </g>
                 );
             case 'retort_stand':
                 return (
                     <g>
-                        <rect x="-75" y="190" width="150" height="10" rx="2" fill="#1e293b" />
-                        <rect x="-5" y="-200" width="10" height="400" rx="2" fill="#94a3b8" />
-                        <rect x="-60" y="-80" width="120" height="4" rx="2" fill="#475569" />
+                        <rect x="-75" y="190" width="150" height="12" rx="3" fill="#0f172a" />
+                        <rect x="-6" y="-200" width="12" height="400" rx="6" fill="#cbd5e1" stroke="#94a3b8" strokeWidth="1.5" />
+                        <rect x="-60" y="-80" width="120" height="6" rx="3" fill="#475569" stroke="#334155" strokeWidth="1.5" />
                     </g>
                 );
             default: return null;
@@ -517,17 +540,19 @@ const GlassRenderer: React.FC<{ container: LabContainer; isHeld: boolean }> = ({
     };
 
     return (
-        <div className={`relative transition-all duration-500 ${isHeld ? 'drop-shadow-[0_40px_60px_rgba(0,0,0,0.8)] scale-110' : 'drop-shadow-2xl'}`}>
+        <div className={`relative transition-all duration-500 ${isHeld ? 'drop-shadow-[0_60px_80px_rgba(0,0,0,0.8)] scale-110' : 'drop-shadow-2xl'}`}>
             <svg width={def.width} height={def.height} viewBox={`-${def.width/2} -${def.height/2} ${def.width} ${def.height}`} style={{ overflow: 'visible' }}>
                 <defs>
-                    <linearGradient id="glassShiny" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="white" stopOpacity="0.5" />
-                        <stop offset="40%" stopColor="white" stopOpacity="0.1" />
+                    <linearGradient id="glassReflection" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="white" stopOpacity="0.2" />
+                        <stop offset="10%" stopColor="white" stopOpacity="0.6" />
+                        <stop offset="25%" stopColor="white" stopOpacity="0.1" />
+                        <stop offset="90%" stopColor="white" stopOpacity="0.3" />
                         <stop offset="100%" stopColor="white" stopOpacity="0" />
                     </linearGradient>
                 </defs>
                 {renderGlassBody()}
-                <path d={`M -${def.width/2.5} -${def.height/2.5} Q -${def.width/3} 0 -${def.width/2.5} ${def.height/2.5}`} stroke="url(#glassShiny)" strokeWidth="6" fill="none" opacity="0.8" strokeLinecap="round" />
+                <path d={`M -${def.width/2.8} -${def.height/2.8} Q -${def.width/3} 0 -${def.width/2.8} ${def.height/2.8}`} stroke="rgba(255,255,255,0.4)" strokeWidth="4" fill="none" opacity="0.6" strokeLinecap="round" pointerEvents="none" />
             </svg>
         </div>
     );

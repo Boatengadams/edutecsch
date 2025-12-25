@@ -1,13 +1,11 @@
 
-// ... (imports)
 import React, { useState, useEffect, useRef } from 'react';
 import { db, firebase } from '../services/firebase';
-import type { LiveLesson, LiveLessonStep, LiveLessonResponse, UserProfile, LiveAction, LiveActionType, DrawingElement, Point, DrawingToolType } from '../types';
+import type { LiveLesson, LiveLessonResponse, UserProfile, LiveAction, LiveActionType, DrawingElement, Point, DrawingToolType } from '../types';
 import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
 import SirEduAvatar from './common/SirEduAvatar';
-import { GoogleGenAI } from '@google/genai';
 import { useToast } from './common/Toast';
 
 interface TeacherLiveClassroomProps {
@@ -18,19 +16,15 @@ interface TeacherLiveClassroomProps {
 }
 
 export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ lessonId, onClose, userProfile, setToast }) => {
-  const { showToast: useShowToast } = useToast(); // Local context toast if needed
-  const [reconstructedLesson, setReconstructedLesson] = useState<LiveLesson | null>(null);
+  const [lesson, setLesson] = useState<LiveLesson | null>(null);
   const [responses, setResponses] = useState<LiveLessonResponse[]>([]);
   const [studentsInClass, setStudentsInClass] = useState<UserProfile[]>([]);
-  const [activeTab, setActiveTab] = useState<'board' | 'dynamics'>('board');
-  const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false);
+  const [activeTab, setActiveTab] = useState<'board' | 'dynamics' | 'roster'>('board');
 
   // Whiteboard State
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentTool, setCurrentTool] = useState<DrawingToolType>('pen');
-  const [currentColor, setCurrentColor] = useState('#ef4444'); // Default red
-  const [isShapeMenuOpen, setIsShapeMenuOpen] = useState(false);
-  const [isColorMenuOpen, setIsColorMenuOpen] = useState(false);
+  const [currentColor, setCurrentColor] = useState('#ef4444');
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [drawingData, setDrawingData] = useState<DrawingElement[]>([]);
@@ -40,11 +34,8 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
     const unsubscribe = db.collection('liveLessons').doc(lessonId).onSnapshot(doc => {
       if (doc.exists) {
         const data = doc.data() as LiveLesson;
-        setReconstructedLesson({ id: doc.id, ...data });
-        // Sync drawing data from DB if it exists (handles refresh)
-        if (data.drawingData) {
-            setDrawingData(data.drawingData);
-        }
+        setLesson({ id: doc.id, ...data });
+        if (data.drawingData) setDrawingData(data.drawingData);
       } else {
         onClose();
       }
@@ -52,535 +43,299 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
     return () => unsubscribe();
   }, [lessonId, onClose]);
 
-  // ... (drawing logic useEffects and handlers)
   useEffect(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-
-      // Handle resizing
       canvas.width = canvas.parentElement?.clientWidth || 800;
       canvas.height = canvas.parentElement?.clientHeight || 600;
-
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
       drawingData.forEach(stroke => {
           ctx.beginPath();
-          
           if (stroke.type === 'eraser') {
-              ctx.globalCompositeOperation = 'destination-out';
-              ctx.lineWidth = 20; 
+              ctx.globalCompositeOperation = 'destination-out'; ctx.lineWidth = 30; 
           } else {
-              ctx.globalCompositeOperation = 'source-over';
-              ctx.strokeStyle = stroke.color;
-              ctx.lineWidth = 3;
+              ctx.globalCompositeOperation = 'source-over'; ctx.strokeStyle = stroke.color; ctx.lineWidth = 4;
           }
-
           if ((stroke.type === 'pen' || stroke.type === 'eraser') && stroke.points && stroke.points.length > 0) {
               ctx.moveTo(stroke.points[0].x * canvas.width, stroke.points[0].y * canvas.height);
-              for (let i = 1; i < stroke.points.length; i++) {
-                  ctx.lineTo(stroke.points[i].x * canvas.width, stroke.points[i].y * canvas.height);
-              }
+              for (let i = 1; i < stroke.points.length; i++) ctx.lineTo(stroke.points[i].x * canvas.width, stroke.points[i].y * canvas.height);
           } else if (stroke.type === 'line' && stroke.points && stroke.points.length >= 2) {
-              const start = stroke.points[0];
-              const end = stroke.points[stroke.points.length - 1];
-              ctx.moveTo(start.x * canvas.width, start.y * canvas.height);
-              ctx.lineTo(end.x * canvas.width, end.y * canvas.height);
+              ctx.moveTo(stroke.points[0].x * canvas.width, stroke.points[0].y * canvas.height);
+              ctx.lineTo(stroke.points[stroke.points.length - 1].x * canvas.width, stroke.points[stroke.points.length - 1].y * canvas.height);
           } else if (stroke.type === 'rect' && stroke.points && stroke.points.length >= 2) {
-              const start = stroke.points[0];
-              const end = stroke.points[stroke.points.length - 1];
-              const w = (end.x - start.x) * canvas.width;
-              const h = (end.y - start.y) * canvas.height;
-              ctx.rect(start.x * canvas.width, start.y * canvas.height, w, h);
+              const start = stroke.points[0]; const end = stroke.points[stroke.points.length - 1];
+              ctx.rect(start.x * canvas.width, start.y * canvas.height, (end.x - start.x) * canvas.width, (end.y - start.y) * canvas.height);
           } else if (stroke.type === 'circle' && stroke.points && stroke.points.length >= 2) {
-              const start = stroke.points[0];
-              const end = stroke.points[stroke.points.length - 1];
-              const radius = Math.sqrt(Math.pow((end.x - start.x) * canvas.width, 2) + Math.pow((end.y - start.y) * canvas.height, 2));
-              ctx.arc(start.x * canvas.width, start.y * canvas.height, radius, 0, 2 * Math.PI);
+              const start = stroke.points[0]; const end = stroke.points[stroke.points.length - 1];
+              const r = Math.sqrt(Math.pow((end.x - start.x) * canvas.width, 2) + Math.pow((end.y - start.y) * canvas.height, 2));
+              ctx.arc(start.x * canvas.width, start.y * canvas.height, r, 0, 2 * Math.PI);
           }
-          
           ctx.stroke();
       });
-      // Reset composite operation
       ctx.globalCompositeOperation = 'source-over';
-  }, [drawingData, activeTab]);
+  }, [drawingData, activeTab, lesson?.currentStepIndex]);
 
-  const handleStartDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  const handleStartDrawing = (e: React.MouseEvent | React.TouchEvent) => {
+      if (currentTool === 'laser') return;
       setIsDrawing(true);
-      // Close menus when drawing starts
-      setIsShapeMenuOpen(false);
-      setIsColorMenuOpen(false);
-
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      
+      const canvas = canvasRef.current; if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
-      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-      
-      const x = (clientX - rect.left) / canvas.width;
-      const y = (clientY - rect.top) / canvas.height;
-      
+      const x = (('touches' in e ? e.touches[0].clientX : e.clientX) - rect.left) / canvas.width;
+      const y = (('touches' in e ? e.touches[0].clientY : e.clientY) - rect.top) / canvas.height;
       lastPoint.current = { x, y };
-      
-      // Start a new stroke/shape
-      const newStroke: DrawingElement = {
-          type: currentTool,
-          color: currentTool === 'eraser' ? '#000000' : currentColor,
-          points: [{ x, y }, { x, y }] // Init with two points for shapes to have a valid end initially
-      };
-      
-      setDrawingData(prev => [...prev, newStroke]);
+      setDrawingData(prev => [...prev, { type: currentTool, color: currentTool === 'eraser' ? '#000000' : currentColor, points: [{ x, y }, { x, y }] }]);
   };
 
-  const handleDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-      if (!isDrawing || !lastPoint.current) return;
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
+  const handleDraw = (e: React.MouseEvent | React.TouchEvent) => {
+      const canvas = canvasRef.current; if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
-      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+      const x = (('touches' in e ? e.touches[0].clientX : e.clientX) - rect.left) / canvas.width;
+      const y = (('touches' in e ? e.touches[0].clientY : e.clientY) - rect.top) / canvas.height;
 
-      const x = (clientX - rect.left) / canvas.width;
-      const y = (clientY - rect.top) / canvas.height;
+      if (currentTool === 'laser') {
+          db.collection('liveLessons').doc(lessonId).update({ pointerPosition: { x, y } });
+          return;
+      }
 
+      if (!isDrawing || !lastPoint.current) return;
       setDrawingData(prev => {
-          const newData = [...prev];
-          const currentStroke = newData[newData.length - 1];
-          
+          const newData = [...prev]; const currentStroke = newData[newData.length - 1];
           if (currentStroke && currentStroke.points) {
-              if (currentTool === 'pen' || currentTool === 'eraser') {
-                  // For freehand, append points
-                  currentStroke.points.push({ x, y });
-              } else {
-                  // For shapes/lines, only update the last point to "stretch" it
-                  currentStroke.points[currentStroke.points.length - 1] = { x, y };
-              }
+              if (currentTool === 'pen' || currentTool === 'eraser') currentStroke.points.push({ x, y });
+              else currentStroke.points[currentStroke.points.length - 1] = { x, y };
           }
           return newData;
       });
-      
       lastPoint.current = { x, y };
   };
 
   const handleStopDrawing = async () => {
-      if (isDrawing) {
-          setIsDrawing(false);
-          lastPoint.current = null;
-          // Sync to Firestore
-          await db.collection('liveLessons').doc(lessonId).update({
-              drawingData: drawingData
-          });
+      if (currentTool === 'laser') {
+          db.collection('liveLessons').doc(lessonId).update({ pointerPosition: null });
+          return;
       }
-  };
-  
-  const handleClearBoard = async () => {
-      if(window.confirm("Are you sure you want to clear the entire board? This cannot be undone.")) {
-          setDrawingData([]);
-          await db.collection('liveLessons').doc(lessonId).update({
-              drawingData: []
-          });
-          setToast({ message: 'Board cleared', type: 'success' });
+      if (isDrawing) {
+          setIsDrawing(false); lastPoint.current = null;
+          await db.collection('liveLessons').doc(lessonId).update({ drawingData: drawingData });
       }
   };
 
   useEffect(() => {
-    if (reconstructedLesson?.classId) {
-        const unsub = db.collection('users')
-            .where('role', '==', 'student')
-            .where('class', '==', reconstructedLesson.classId)
-            .onSnapshot(snap => {
-                setStudentsInClass(snap.docs.map(d => ({uid: d.id, ...d.data()} as UserProfile)));
-            });
+    if (lesson?.classId) {
+        const unsub = db.collection('users').where('role', '==', 'student').where('class', '==', lesson.classId)
+            .onSnapshot(snap => setStudentsInClass(snap.docs.map(d => ({uid: d.id, ...d.data()} as UserProfile))));
         return () => unsub();
     }
-  }, [reconstructedLesson?.classId]);
+  }, [lesson?.classId]);
 
-  // ... (responses, actions, etc.)
-  // Listen for responses specific to the ACTIVE ACTION
   useEffect(() => {
-    if (!reconstructedLesson?.activeAction) {
-        setResponses([]);
-        return;
-    }
-    
-    const q = db.collection('liveLessons').doc(lessonId).collection('responses')
-        .where('actionId', '==', reconstructedLesson.activeAction.id);
-        
-    const unsubscribe = q.onSnapshot(snap => {
-        setResponses(snap.docs.map(d => ({ id: d.id, ...d.data() } as LiveLessonResponse)));
-    });
+    if (!lesson?.activeAction) { setResponses([]); return; }
+    const unsubscribe = db.collection('liveLessons').doc(lessonId).collection('responses')
+        .where('actionId', '==', lesson.activeAction.id)
+        .onSnapshot(snap => setResponses(snap.docs.map(d => ({ id: d.id, ...d.data() } as LiveLessonResponse))));
     return () => unsubscribe();
-  }, [lessonId, reconstructedLesson?.activeAction?.id]);
+  }, [lessonId, lesson?.activeAction?.id]);
 
   const triggerAction = async (type: LiveActionType, text: string, targetStudentId?: string, options?: string[]) => {
-      const actionId = Date.now().toString();
-      const action: LiveAction = {
-          id: actionId,
-          type,
-          text,
-          options,
-          targetStudentId: targetStudentId || undefined,
-          targetStudentName: targetStudentId ? studentsInClass.find(s => s.uid === targetStudentId)?.name : undefined,
-          timestamp: Date.now(),
-          relatedSlideContent: reconstructedLesson?.currentBoardContent // Save context
-      };
-      
-      // Sanitize action to remove undefined fields
-      const safeAction = JSON.parse(JSON.stringify(action));
-
-      await db.collection('liveLessons').doc(lessonId).update({
-          activeAction: safeAction
-      });
-      setToast({ message: `Action Sent: ${type === 'direct_question' ? 'Direct Question' : text}`, type: 'success' });
-  };
-
-  const handleGenerateSmartExplanation = async (confusionText: string) => {
-      if (!reconstructedLesson) return;
-      setIsGeneratingExplanation(true);
-      try {
-          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-          const prompt = `
-            The teacher is presenting a slide with the following content:
-            "${reconstructedLesson.currentBoardContent.replace(/<[^>]*>/g, '')}"
-            
-            A student has indicated they are confused about this specific part:
-            "${confusionText}"
-            
-            Provide a clear, simple, and encouraging explanation to clarify this specific point for the class. Keep it under 50 words.
-          `;
-          
-          const response = await ai.models.generateContent({
-              model: 'gemini-3-pro-preview',
-              contents: prompt
-          });
-          
-          const explanation = response.text;
-          await triggerAction('explanation', explanation);
-          
-      } catch(err) {
-          console.error(err);
-          setToast({ message: 'Failed to generate explanation', type: 'error' });
-      } finally {
-          setIsGeneratingExplanation(false);
-      }
+      const action: LiveAction = { id: Date.now().toString(), type, text, options, targetStudentId, timestamp: Date.now(), relatedSlideContent: lesson?.currentBoardContent };
+      await db.collection('liveLessons').doc(lessonId).update({ activeAction: JSON.parse(JSON.stringify(action)) });
+      setToast({ message: `Sent: ${text.substring(0, 20)}...`, type: 'success' });
   };
 
   const changeStep = async (newIndex: number) => {
-    if (!reconstructedLesson || newIndex < 0 || newIndex >= reconstructedLesson.lessonPlan.length) return;
-    
-    const nextSlide = reconstructedLesson.lessonPlan[newIndex];
-    const nextAudioUrl = nextSlide.audioUrl || null;
-
-    // Clear drawings when changing slides
+    if (!lesson || newIndex < 0 || newIndex >= lesson.lessonPlan.length) return;
+    const nextStep = lesson.lessonPlan[newIndex];
     setDrawingData([]);
-
     await db.collection('liveLessons').doc(lessonId).update({
-      currentStepIndex: newIndex,
-      currentBoardContent: nextSlide.boardContent,
-      currentQuestion: nextSlide.question,
-      currentAudioUrl: nextAudioUrl,
-      activeAction: null,
-      drawingData: [],
-      pointerPosition: null,
+      currentStepIndex: newIndex, 
+      currentBoardContent: nextStep.boardContent, 
+      currentQuestion: nextStep.question,
+      currentImageUrl: nextStep.imageUrl || '',
+      currentImageStyle: nextStep.imageStyle || 'cover',
+      currentTeacherScript: nextStep.teacherScript || '',
+      currentAudioUrl: nextStep.audioUrl || null, 
+      activeAction: null, 
+      drawingData: [], 
+      pointerPosition: null
     });
-    
-    // Automatically trigger question if present in new slide
-    if (nextSlide.question) {
-        // Determine action type based on question type
-        // Use type if available (from newer content) or check options for objective (from legacy content)
-        const question = nextSlide.question as any;
-        const isObjective = (question.type === 'Objective') || (nextSlide.question.options && nextSlide.question.options.length > 0);
-
-        if (!isObjective) {
-             // For theory, we just want discussion, maybe "Ask for Questions" implicitly, 
-             // or a custom "Discuss" action. For now, let's just show it on board.
-             // If you want to force a prompt, uncomment below:
-             // triggerAction('direct_question', nextSlide.question.text);
-        } else {
-             // Objective - Trigger Poll
-             // Wait a moment for slide to load then trigger poll
-             setTimeout(() => {
-                 if (nextSlide.question?.options) {
-                    triggerAction('poll', nextSlide.question.text, undefined, nextSlide.question.options);
-                 }
-             }, 1000);
-        }
-    }
+    if (nextStep.question?.options) triggerAction('poll', nextStep.question.text, undefined, nextStep.question.options);
   };
 
-  const handleEndLesson = async () => {
-    if (window.confirm("End this live lesson?")) {
-      await db.collection('liveLessons').doc(lessonId).update({ status: 'ended' });
-      onClose();
-    }
-  };
-
-  if (!reconstructedLesson) return <div className="flex justify-center items-center h-full"><Spinner /></div>;
-
-  // --- Aggregation Logic ---
-  const yesCount = responses.filter(r => r.answer === 'Yes').length;
-  const noCount = responses.filter(r => r.answer === 'No').length;
-  const totalRes = responses.length;
-  
-  const confusionPoints = responses
-    .filter(r => r.confusionPoint)
-    .reduce<Record<string, number>>((acc, curr) => {
-        const point = curr.confusionPoint!;
-        acc[point] = (acc[point] || 0) + 1;
-        return acc;
-    }, {});
-
-  const sortedConfusion = Object.entries(confusionPoints).sort((a, b) => (b[1] as number) - (a[1] as number));
+  if (!lesson) return <div className="flex justify-center items-center h-full"><Spinner /></div>;
 
   return (
-    <div className="h-full flex flex-col bg-slate-950 text-white overflow-hidden">
-      {/* Top Bar */}
-      <div className="flex items-center justify-between px-6 py-3 bg-slate-900 border-b border-slate-800 shadow-md z-10">
-        {/* ... top bar content ... */}
-        <div className="flex items-center gap-4">
-            <div className="bg-red-600 px-3 py-1 rounded-full flex items-center gap-2 animate-pulse">
-                <div className="w-2 h-2 bg-white rounded-full"></div>
-                <span className="text-xs font-bold uppercase tracking-wider">Live</span>
-            </div>
-            <div>
-                <h2 className="text-lg font-bold text-slate-100">{reconstructedLesson.topic}</h2>
-                <p className="text-xs text-slate-400">{reconstructedLesson.classId} &bull; {studentsInClass.length} Students</p>
+    <div className="h-full flex flex-col bg-[#020617] text-white overflow-hidden font-sans">
+      <header className="flex items-center justify-between px-8 py-4 bg-slate-900 border-b border-white/5 shadow-2xl z-50">
+        <div className="flex items-center gap-6">
+            <div className="flex flex-col">
+                <h2 className="text-xl font-black tracking-tight text-white uppercase">{lesson.topic}</h2>
+                <div className="flex items-center gap-2 mt-0.5">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{lesson.classId} &bull; {studentsInClass.length} STUDENTS LIVE</span>
+                </div>
             </div>
         </div>
-        <div className="flex gap-2">
-            <button 
-                onClick={() => setActiveTab('board')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'board' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-            >
-                Board View
-            </button>
-            <button 
-                onClick={() => setActiveTab('dynamics')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'dynamics' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-            >
-                Class Dynamics
-            </button>
-            <Button variant="danger" size="sm" onClick={handleEndLesson}>End Class</Button>
+        <div className="flex items-center gap-3">
+            {['board', 'dynamics', 'roster'].map((tab) => (
+                <button key={tab} onClick={() => setActiveTab(tab as any)} className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                    {tab}
+                </button>
+            ))}
+            <div className="h-8 w-px bg-slate-700 mx-2"></div>
+            <Button variant="danger" size="sm" onClick={() => { if(window.confirm("End session?")) { db.collection('liveLessons').doc(lessonId).update({ status: 'ended' }); onClose(); } }}>End Session</Button>
         </div>
-      </div>
+      </header>
 
       <div className="flex-grow flex overflow-hidden">
-        {/* LEFT: Main Content (Always Visible but resized) */}
-        <div className={`flex-grow flex flex-col relative transition-all duration-300 ${activeTab === 'dynamics' ? 'w-2/3' : 'w-full'}`}>
-            {/* Slide Content & Whiteboard */}
-            <div className="flex-grow relative overflow-hidden bg-slate-900">
-                 {/* Slide Content Layer */}
-                 <div className="absolute inset-0 flex items-center justify-center overflow-y-auto p-8 z-0">
-                     <div className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center">
-                         <span className="text-9xl font-bold text-slate-700">EDUTECSCH</span>
-                     </div>
-                     <div className="prose-styles prose-2xl text-center max-w-4xl" dangerouslySetInnerHTML={{ __html: reconstructedLesson.currentBoardContent }} />
+        <div className={`flex-grow flex flex-col relative transition-all duration-500 ${activeTab !== 'board' ? 'w-2/3' : 'w-full'}`}>
+            
+            {/* IMMERSIVE SPLIT STAGE */}
+            <div className="flex-grow flex flex-col md:flex-row relative bg-[#0f172a] shadow-inner overflow-hidden">
+                 
+                 {/* Left Panel: High-fidelity Visual */}
+                 <div className="w-full md:w-1/2 h-48 md:h-full relative overflow-hidden bg-black flex items-center justify-center">
+                    {lesson.currentImageUrl ? (
+                        <img 
+                            src={lesson.currentImageUrl} 
+                            alt="Visual Support" 
+                            className={`w-full h-full object-${lesson.currentImageStyle || 'cover'} transition-all duration-1000`} 
+                        />
+                    ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-700 opacity-20">
+                            <span className="text-9xl mb-4">💡</span>
+                            <p className="font-black uppercase tracking-[1em]">Visual Input</p>
+                        </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none"></div>
                  </div>
 
-                 {/* Whiteboard Layer */}
-                 {activeTab === 'board' && (
-                     <canvas
-                        ref={canvasRef}
-                        className="absolute inset-0 z-10 cursor-crosshair touch-none"
-                        onMouseDown={handleStartDrawing}
-                        onMouseMove={handleDraw}
-                        onMouseUp={handleStopDrawing}
-                        onMouseLeave={handleStopDrawing}
-                        onTouchStart={handleStartDrawing}
-                        onTouchMove={handleDraw}
-                        onTouchEnd={handleStopDrawing}
-                     />
+                 {/* Right Panel: Content Board */}
+                 <div className="w-full md:w-1/2 h-full flex flex-col bg-white overflow-y-auto p-12 relative">
+                    <div className="prose-styles prose-xl !text-slate-900 leading-tight w-full" dangerouslySetInnerHTML={{ __html: lesson.currentBoardContent }} />
+                    
+                    {lesson.currentTeacherScript && (
+                         <div className="mt-auto pt-8 border-t border-slate-100">
+                             <h4 className="text-blue-600 text-xs font-black uppercase tracking-widest mb-2 flex items-center gap-2">
+                                <span className="text-lg">👨‍🏫</span> Teacher Script
+                             </h4>
+                             <p className="text-sm text-slate-500 italic leading-relaxed">
+                                "{lesson.currentTeacherScript}"
+                             </p>
+                         </div>
+                    )}
+                 </div>
+
+                 {/* Whiteboard Overlay Layer */}
+                 <canvas 
+                    ref={canvasRef} 
+                    className={`absolute inset-0 z-20 touch-none ${currentTool === 'laser' ? 'cursor-none' : 'cursor-crosshair'}`} 
+                    onMouseDown={handleStartDrawing} 
+                    onMouseMove={handleDraw} 
+                    onMouseUp={handleStopDrawing} 
+                    onTouchStart={handleStartDrawing} 
+                    onTouchMove={handleDraw} 
+                    onTouchEnd={handleStopDrawing} 
+                 />
+                 
+                 {/* Laser Pointer */}
+                 {lesson.pointerPosition && (
+                     <div className="absolute z-30 pointer-events-none w-6 h-6 bg-red-500 rounded-full shadow-[0_0_20px_rgba(239,68,68,1)] border-2 border-white/50" style={{ left: `calc(${lesson.pointerPosition.x} * 100%)`, top: `calc(${lesson.pointerPosition.y} * 100%)`, transform: 'translate(-50%, -50%)' }}>
+                        <div className="absolute inset-0 bg-red-500 rounded-full animate-ping opacity-75"></div>
+                    </div>
                  )}
 
-                 {/* Modern Floating Toolbar (Dock) */}
-                 {activeTab === 'board' && (
-                     <div className="absolute left-4 top-1/2 transform -translate-y-1/2 z-30 flex flex-col gap-3 bg-slate-800/90 backdrop-blur-xl p-2 rounded-2xl border border-slate-700 shadow-2xl transition-all">
-                         {/* ... toolbar buttons ... */}
-                         <button 
-                             onClick={() => { setCurrentTool('pen'); setIsShapeMenuOpen(false); setIsColorMenuOpen(false); }} 
-                             className={`p-3 rounded-xl transition-all ${currentTool === 'pen' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`}
-                             title="Pen"
-                         >
-                             <span className="text-xl">✏️</span>
-                         </button>
-
-                         <button 
-                             onClick={() => { setCurrentTool('eraser'); setIsShapeMenuOpen(false); setIsColorMenuOpen(false); }} 
-                             className={`p-3 rounded-xl transition-all ${currentTool === 'eraser' ? 'bg-pink-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`}
-                             title="Eraser"
-                         >
-                             <span className="text-xl">🧽</span>
-                         </button>
-
-                         {/* Shapes Toggle */}
-                         <div className="relative">
-                             <button 
-                                 onClick={() => { setIsShapeMenuOpen(!isShapeMenuOpen); setIsColorMenuOpen(false); }} 
-                                 className={`p-3 rounded-xl transition-all ${['line', 'rect', 'circle'].includes(currentTool) ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`}
-                                 title="Shapes"
-                             >
-                                 <span className="text-xl">📐</span>
-                             </button>
-                             
-                             {/* Shapes Submenu - Popover to the right */}
-                             {isShapeMenuOpen && (
-                                 <div className="absolute left-full top-0 ml-3 bg-slate-800 border border-slate-700 rounded-xl p-2 flex flex-col gap-2 shadow-xl animate-fade-in-short z-40">
-                                     <button onClick={() => { setCurrentTool('line'); setIsShapeMenuOpen(false); }} className={`p-2 rounded-lg hover:bg-slate-700 ${currentTool === 'line' ? 'bg-purple-600 text-white' : 'text-slate-300'}`} title="Line">📏</button>
-                                     <button onClick={() => { setCurrentTool('rect'); setIsShapeMenuOpen(false); }} className={`p-2 rounded-lg hover:bg-slate-700 ${currentTool === 'rect' ? 'bg-purple-600 text-white' : 'text-slate-300'}`} title="Rectangle">⬜</button>
-                                     <button onClick={() => { setCurrentTool('circle'); setIsShapeMenuOpen(false); }} className={`p-2 rounded-lg hover:bg-slate-700 ${currentTool === 'circle' ? 'bg-purple-600 text-white' : 'text-slate-300'}`} title="Circle">⭕</button>
-                                 </div>
-                             )}
-                         </div>
-
-                         {/* Color Picker */}
-                         <div className="relative">
-                              <button 
-                                 onClick={() => { setIsColorMenuOpen(!isColorMenuOpen); setIsShapeMenuOpen(false); }}
-                                 className="w-10 h-10 rounded-full border-2 border-white/20 shadow-sm mx-auto block transition-transform hover:scale-110 mt-1"
-                                 style={{ backgroundColor: currentColor }}
-                                 title="Color Palette"
-                             />
-                              {isColorMenuOpen && (
-                                 <div className="absolute left-full top-1/2 transform -translate-y-1/2 ml-3 bg-slate-800 border border-slate-700 rounded-xl p-3 grid grid-cols-3 gap-2 shadow-xl w-40 animate-fade-in-short z-40">
-                                     {['#ef4444', '#f97316', '#facc15', '#22c55e', '#3b82f6', '#a855f7', '#ec4899', '#ffffff', '#000000'].map(color => (
-                                         <button
-                                             key={color}
-                                             onClick={() => { setCurrentColor(color); setIsColorMenuOpen(false); if(currentTool === 'eraser') setCurrentTool('pen'); }}
-                                             className="w-8 h-8 rounded-full border border-slate-600 hover:scale-110 transition-transform"
-                                             style={{ backgroundColor: color }}
-                                         />
-                                     ))}
-                                 </div>
-                              )}
-                         </div>
-
-                         <div className="h-px bg-slate-700 w-full my-1"></div>
-
-                         {/* Trash / Clear All */}
-                         <button 
-                             onClick={handleClearBoard} 
-                             className="p-3 rounded-xl text-red-400 hover:bg-red-500/20 hover:text-red-200 transition-all"
-                             title="Erase All (Clear Board)"
-                         >
-                             <span className="text-xl">🗑️</span>
-                         </button>
-                     </div>
-                 )}
+                 {/* Toolbox Dock */}
+                 <div className="absolute left-6 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-3 bg-slate-900/90 backdrop-blur-2xl p-2.5 rounded-3xl border border-white/10 shadow-2xl">
+                     <button onClick={() => setCurrentTool('pen')} className={`p-4 rounded-2xl transition-all ${currentTool === 'pen' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-800'}`}>✏️</button>
+                     <button onClick={() => setCurrentTool('laser')} className={`p-4 rounded-2xl transition-all ${currentTool === 'laser' ? 'bg-red-600 text-white animate-pulse' : 'text-slate-500 hover:bg-slate-800'}`}>🔦</button>
+                     <button onClick={() => setCurrentTool('eraser')} className={`p-4 rounded-2xl transition-all ${currentTool === 'eraser' ? 'bg-pink-600 text-white' : 'text-slate-500 hover:bg-slate-800'}`}>🧽</button>
+                     <div className="h-px bg-white/10 mx-2"></div>
+                     <button onClick={() => { setDrawingData([]); db.collection('liveLessons').doc(lessonId).update({ drawingData: [] }); }} className="p-4 rounded-2xl text-red-400 hover:bg-red-900/20">🗑️</button>
+                 </div>
             </div>
 
-            {/* Navigation Bar */}
-            <div className="h-20 bg-slate-900 border-t border-slate-800 flex items-center justify-between px-6 z-20">
-                <Button onClick={() => changeStep(reconstructedLesson.currentStepIndex - 1)} disabled={reconstructedLesson.currentStepIndex === 0} variant="secondary">Previous Slide</Button>
-                <span className="text-slate-400 font-mono">Slide {reconstructedLesson.currentStepIndex + 1} / {reconstructedLesson.lessonPlan.length}</span>
-                <Button onClick={() => changeStep(reconstructedLesson.currentStepIndex + 1)} disabled={reconstructedLesson.currentStepIndex === reconstructedLesson.lessonPlan.length - 1}>Next Slide</Button>
+            <div className="h-24 bg-slate-900 border-t border-white/5 flex items-center justify-between px-10">
+                <button onClick={() => changeStep(lesson.currentStepIndex - 1)} disabled={lesson.currentStepIndex === 0} className="flex items-center gap-2 text-slate-400 hover:text-white disabled:opacity-20 font-bold uppercase tracking-widest text-xs transition-colors">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg> Previous
+                </button>
+                <div className="flex flex-col items-center">
+                    <span className="text-white font-black text-lg tracking-tighter">{lesson.currentStepIndex + 1} / {lesson.lessonPlan.length}</span>
+                    <div className="flex gap-1.5 mt-2">
+                        {lesson.lessonPlan.map((_, i) => <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === lesson.currentStepIndex ? 'w-10 bg-blue-500' : 'w-2 bg-slate-800'}`}></div>)}
+                    </div>
+                </div>
+                <button onClick={() => changeStep(lesson.currentStepIndex + 1)} disabled={lesson.currentStepIndex === lesson.lessonPlan.length - 1} className="flex items-center gap-2 text-blue-500 hover:text-blue-400 disabled:opacity-20 font-bold uppercase tracking-widest text-xs transition-colors">
+                    Next <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg>
+                </button>
             </div>
         </div>
 
-        {/* RIGHT: Dynamics Panel */}
         {activeTab === 'dynamics' && (
-            <div className="w-96 bg-slate-900 border-l border-slate-800 flex flex-col animate-fade-in-right shadow-2xl z-20">
-                <div className="p-4 border-b border-slate-800 bg-slate-800/50">
-                    <h3 className="font-bold text-purple-300 mb-1">Interactive Checks</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                        <button onClick={() => triggerAction('poll', 'Do you understand?', undefined, ['Yes', 'No'])} className="p-2 bg-slate-700 hover:bg-blue-600 rounded text-xs font-medium transition-colors border border-slate-600">
-                            Check Understanding
-                        </button>
-                        <button onClick={() => triggerAction('poll', 'Can I proceed?', undefined, ['Yes', 'No'])} className="p-2 bg-slate-700 hover:bg-green-600 rounded text-xs font-medium transition-colors border border-slate-600">
-                            Can I Proceed?
-                        </button>
-                        <button onClick={() => triggerAction('poll', 'Any questions?', undefined, ['No', 'Yes'])} className="p-2 bg-slate-700 hover:bg-orange-600 rounded text-xs font-medium transition-colors border border-slate-600">
-                            Ask for Questions
-                        </button>
-                        <button onClick={() => triggerAction('celebration', 'Great job everyone!')} className="p-2 bg-slate-700 hover:bg-pink-600 rounded text-xs font-medium transition-colors border border-slate-600">
-                            🎉 Celebrate
-                        </button>
-                    </div>
+            <aside className="w-[450px] bg-slate-900 border-l border-white/5 flex flex-col animate-fade-in-right p-6 space-y-6 overflow-hidden">
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Interaction Center</h3>
+                <div className="grid grid-cols-2 gap-3">
+                    <button onClick={() => triggerAction('poll', 'Ready to move forward?', undefined, ['Yes', 'Wait'])} className="p-4 bg-slate-800 rounded-2xl hover:bg-emerald-600 transition-all text-xs font-bold uppercase border border-white/5">👍 Ready Check</button>
+                    <button onClick={() => triggerAction('poll', 'Any questions so far?', undefined, ['None', 'I Have A Question'])} className="p-4 bg-slate-800 rounded-2xl hover:bg-amber-600 transition-all text-xs font-bold uppercase border border-white/5">❓ Q&A Hook</button>
                 </div>
 
-                <div className="flex-grow overflow-y-auto p-4 space-y-6">
-                    {/* Active Action Monitor */}
-                    {reconstructedLesson.activeAction ? (
-                        <div className="bg-slate-800 rounded-xl p-4 border border-blue-500/30 shadow-lg relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
-                            <div className="flex justify-between items-start mb-3">
-                                <h4 className="font-bold text-sm text-blue-400 uppercase tracking-wider">Live Poll Active</h4>
-                                <button onClick={() => db.collection('liveLessons').doc(lessonId).update({ activeAction: null })} className="text-xs text-red-400 hover:text-red-300">Stop</button>
-                            </div>
-                            <p className="text-lg font-semibold mb-4">{reconstructedLesson.activeAction.text}</p>
-                            
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between text-sm">
-                                    <span className="text-green-400">Yes / Clear</span>
-                                    <span className="font-bold">{yesCount}</span>
-                                </div>
-                                <div className="w-full bg-slate-700 rounded-full h-2">
-                                    <div className="bg-green-500 h-2 rounded-full transition-all duration-500" style={{ width: `${totalRes ? (yesCount/totalRes)*100 : 0}%` }}></div>
-                                </div>
-                                
-                                <div className="flex items-center justify-between text-sm mt-2">
-                                    <span className="text-red-400">No / Confused</span>
-                                    <span className="font-bold">{noCount}</span>
-                                </div>
-                                <div className="w-full bg-slate-700 rounded-full h-2">
-                                    <div className="bg-red-500 h-2 rounded-full transition-all duration-500" style={{ width: `${totalRes ? (noCount/totalRes)*100 : 0}%` }}></div>
-                                </div>
-                            </div>
+                {lesson.activeAction && (
+                    <div className="bg-slate-800 rounded-3xl p-6 border border-blue-500/30 shadow-2xl animate-fade-in-up">
+                        <div className="flex justify-between items-center mb-6">
+                            <span className="text-[10px] font-black bg-blue-500 px-2.5 py-1 rounded-full uppercase tracking-widest">Live Poll</span>
+                            <span className="text-xs text-slate-500 font-mono">{responses.length} Responded</span>
                         </div>
-                    ) : (
-                        <div className="text-center p-6 border-2 border-dashed border-slate-800 rounded-xl text-slate-500 text-sm">
-                            No active poll or question.
-                        </div>
-                    )}
-
-                    {/* Confusion Analysis */}
-                    {sortedConfusion.length > 0 && (
-                        <div className="space-y-3">
-                            <h4 className="font-bold text-sm text-red-300 flex items-center gap-2">
-                                <span className="w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
-                                Confusion Hotspots
-                            </h4>
-                            {sortedConfusion.map(([text, count], idx) => (
-                                <div key={idx} className="bg-red-900/20 border border-red-900/50 p-3 rounded-lg hover:bg-red-900/30 transition-colors cursor-pointer group" onClick={() => handleGenerateSmartExplanation(text)}>
-                                    <div className="flex justify-between items-start">
-                                        <p className="text-xs text-slate-300 line-clamp-2 italic">"...{text}..."</p>
-                                        <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 rounded-full">{count}</span>
+                        <p className="text-lg font-bold mb-6 text-white leading-tight">"{lesson.activeAction.text}"</p>
+                        
+                        <div className="space-y-4">
+                            {lesson.activeAction.options?.map(opt => {
+                                const count = responses.filter(r => r.answer === opt).length;
+                                const pct = responses.length ? (count/responses.length)*100 : 0;
+                                return (
+                                    <div key={opt} className="space-y-1.5">
+                                        <div className="flex justify-between text-[10px] font-black text-slate-300 uppercase"><span>{opt}</span><span>{count}</span></div>
+                                        <div className="h-2 bg-slate-950 rounded-full overflow-hidden"><div className="h-full bg-blue-500 transition-all duration-1000" style={{ width: `${pct}%` }}></div></div>
                                     </div>
-                                    <div className="mt-2 pt-2 border-t border-red-900/30 flex justify-end">
-                                        <button disabled={isGeneratingExplanation} className="text-xs text-red-400 font-medium flex items-center gap-1 group-hover:text-white transition-colors">
-                                            {isGeneratingExplanation ? <Spinner /> : '✨ Explain with AI'}
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Student List */}
-                    <div>
-                        <h4 className="font-bold text-sm text-slate-400 mb-2 uppercase tracking-wider">Student Roster</h4>
-                        <div className="space-y-1 max-h-60 overflow-y-auto custom-scrollbar pr-2">
-                            {studentsInClass.map(s => (
-                                <button 
-                                    key={s.uid} 
-                                    onClick={() => triggerAction('direct_question', `Hello ${s.name}, do you understand this part?`, s.uid)}
-                                    className="w-full flex items-center justify-between p-2 rounded hover:bg-slate-800 text-left group transition-all"
-                                >
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold group-hover:bg-blue-600 transition-colors">{(s.name || '?').charAt(0)}</div>
-                                        <span className="text-sm text-slate-300 group-hover:text-white">{s.name}</span>
-                                    </div>
-                                    <span className="opacity-0 group-hover:opacity-100 text-[10px] text-blue-400 border border-blue-500/30 px-1 rounded">Ask</span>
-                                </button>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
+                )}
+                
+                <div className="bg-slate-800/40 rounded-3xl p-6 flex-grow flex flex-col items-center justify-center border border-white/5 italic text-slate-500 text-center">
+                    <div className="mb-4"><SirEduAvatar isSpeaking={false} /></div>
+                    <p className="text-xs max-w-[200px]">Class insights and real-time activity metrics will populate here.</p>
                 </div>
-            </div>
+            </aside>
+        )}
+
+        {activeTab === 'roster' && (
+            <aside className="w-[450px] bg-slate-900 border-l border-white/5 flex flex-col animate-fade-in-right overflow-hidden shadow-2xl">
+                <div className="p-6 border-b border-white/5 flex justify-between items-center">
+                    <h3 className="text-sm font-black text-slate-100 uppercase tracking-widest">Student Attendance</h3>
+                    <span className="px-2 py-1 bg-blue-500/20 text-blue-400 rounded-lg text-[10px] font-black">{studentsInClass.length} Active</span>
+                </div>
+                <div className="flex-grow overflow-y-auto p-4 space-y-2 custom-scrollbar">
+                    {studentsInClass.map(s => {
+                        const hasHandRaised = lesson.raisedHands?.includes(s.uid);
+                        return (
+                            <div key={s.uid} className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${hasHandRaised ? 'bg-amber-900/20 border-amber-500/50 shadow-lg scale-[1.02]' : 'bg-slate-800/40 border-transparent hover:bg-slate-800'}`}>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center font-black text-sm border border-white/5">{(s.name || '?').charAt(0)}</div>
+                                    <div>
+                                        <p className="text-sm font-bold text-white truncate max-w-[150px]">{s.name}</p>
+                                        <p className="text-[10px] text-slate-500 uppercase tracking-widest">{hasHandRaised ? 'Waiting for help' : 'Engaged'}</p>
+                                    </div>
+                                </div>
+                                {hasHandRaised && <span className="text-2xl animate-bounce">✋</span>}
+                            </div>
+                        );
+                    })}
+                </div>
+            </aside>
         )}
       </div>
     </div>

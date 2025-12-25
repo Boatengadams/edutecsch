@@ -1,4 +1,3 @@
-
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 
@@ -179,9 +178,14 @@ export interface DrawingElement {
     fontSize?: number;
 }
 
+// FIX: Added title, imageUrl, imageStyle, and teacherScript to LiveLessonStep to resolve TS errors. Also allowed audioUrl to be null.
 export interface LiveLessonStep {
+  title?: string;
   boardContent: string;
-  audioUrl?: string; // Pre-generated audio for this step
+  imageUrl?: string;
+  imageStyle?: 'contain' | 'cover';
+  teacherScript?: string;
+  audioUrl?: string | null; // Pre-generated audio for this step
   question: {
     id: string;
     text: string;
@@ -204,6 +208,7 @@ export interface LiveAction {
     relatedSlideContent?: string; 
 }
 
+// FIX: Added currentImageUrl, currentImageStyle, and currentTeacherScript to LiveLesson to resolve TS errors. Also allowed currentAudioUrl to be null.
 export interface LiveLesson {
   id: string;
   teacherId: string;
@@ -218,7 +223,10 @@ export interface LiveLesson {
   lessonPlan: LiveLessonStep[];
   // Denormalized for easy student access
   currentBoardContent: string;
-  currentAudioUrl?: string; // URL of the audio file for the current step
+  currentImageUrl?: string;
+  currentImageStyle?: 'contain' | 'cover';
+  currentTeacherScript?: string;
+  currentAudioUrl?: string | null; // URL of the audio file for the current step
   currentQuestion: LiveLessonStep['question'] | null;
   sourcePresentationId?: string;
   
@@ -257,8 +265,7 @@ export interface SavedWhiteboard {
 export interface LiveLessonResponse {
   id: string;
   lessonId: string;
-  studentId: string;
-  studentName: string;
+  studentId: string; studentName: string;
   questionId?: string;
   actionId?: string; // Links response to a specific LiveAction
   answer: string;
@@ -297,10 +304,10 @@ export interface Conversation {
     senderId: string;
     timestamp: firebase.firestore.Timestamp;
   };
-  updatedAt: firebase.firestore.Timestamp;
   unreadCount: {
     [uid: string]: number;
   };
+  updatedAt: firebase.firestore.Timestamp;
 }
 
 
@@ -358,9 +365,14 @@ export interface Assignment {
 }
 
 export interface Correction {
+    // FIX: Added text, attachmentURL, attachmentName, and reattemptedAnswers properties to Correction interface in src/types.ts
+    text?: string;
+    attachmentURL?: string;
+    attachmentName?: string;
     answers: Record<string, string>;
     grade: string;
     feedback: string;
+    reattemptedAnswers?: Record<string, string>;
     submittedAt: firebase.firestore.Timestamp;
 }
 

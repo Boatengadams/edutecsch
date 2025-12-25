@@ -1,11 +1,11 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { db, firebase } from '../services/firebase';
-import type { LiveLesson, LiveLessonResponse, UserProfile, LiveAction } from '../types';
+import type { LiveLesson, LiveLessonResponse, UserProfile } from '../types';
 import Spinner from './common/Spinner';
 import SirEduAvatar from './common/SirEduAvatar';
-import Button from './common/Button';
+// FIX: Added Card import which was missing and causing errors on lines 163 and 166.
 import Card from './common/Card';
+import Button from './common/Button';
 import { useLiveLessonAudio } from '../hooks/useLiveLessonAudio';
 import { useToast } from './common/Toast';
 
@@ -15,330 +15,178 @@ interface StudentLiveClassroomProps {
   onClose: () => void;
 }
 
+const REACTIONS = ['👍', '👏', '❤️', '🤯', '😮', '❓'];
+
 const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, userProfile, onClose }) => {
   const { showToast } = useToast();
   const [lesson, setLesson] = useState<LiveLesson | null>(null);
-  const [hasRespondedToAction, setHasRespondedToAction] = useState(false);
+  const [hasResponded, setHasResponded] = useState(false);
   const [confusionMode, setConfusionMode] = useState(false);
-  const [parsedConfusionItems, setParsedConfusionItems] = useState<string[]>([]);
   const [isRaisingHand, setIsRaisingHand] = useState(false);
-  const [audioEnabled, setAudioEnabled] = useState(false); // Track if user has interacted
+  const [audioEnabled, setAudioEnabled] = useState(false);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Load Lesson
   useEffect(() => {
     const unsubscribe = db.collection('liveLessons').doc(lessonId).onSnapshot(doc => {
       if (doc.exists) {
         const data = doc.data() as LiveLesson;
         setLesson({ id: doc.id, ...data });
-        if (data.status === 'ended') {
-            alert("The lesson has ended.");
-            onClose();
-        }
-      } else {
-        onClose();
-      }
+        if (data.status === 'ended') { showToast("Lesson ended", "info"); onClose(); }
+        setIsRaisingHand(data.raisedHands?.includes(userProfile.uid) || false);
+      } else onClose();
     });
     return () => unsubscribe();
-  }, [lessonId, onClose]);
+  }, [lessonId, userProfile.uid, onClose]);
 
-  // Render Whiteboard Data
   useEffect(() => {
-      const canvas = canvasRef.current;
-      if (!canvas || !lesson) return;
-      
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      // Handle resizing
+      const canvas = canvasRef.current; if (!canvas || !lesson) return;
+      const ctx = canvas.getContext('2d'); if (!ctx) return;
       canvas.width = canvas.parentElement?.clientWidth || 800;
       canvas.height = canvas.parentElement?.clientHeight || 600;
-
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
       if (lesson.drawingData) {
           lesson.drawingData.forEach(stroke => {
               ctx.beginPath();
-              
-              if (stroke.type === 'eraser') {
-                  ctx.globalCompositeOperation = 'destination-out';
-                  ctx.lineWidth = 20; 
-              } else {
-                  ctx.globalCompositeOperation = 'source-over';
-                  ctx.strokeStyle = stroke.color;
-                  ctx.lineWidth = 3;
-              }
-
-              if ((stroke.type === 'pen' || stroke.type === 'eraser') && stroke.points && stroke.points.length > 0) {
+              if (stroke.type === 'eraser') { ctx.globalCompositeOperation = 'destination-out'; ctx.lineWidth = 30; }
+              else { ctx.globalCompositeOperation = 'source-over'; ctx.strokeStyle = stroke.color; ctx.lineWidth = 4; }
+              if ((stroke.type === 'pen' || stroke.type === 'eraser') && stroke.points) {
                   ctx.moveTo(stroke.points[0].x * canvas.width, stroke.points[0].y * canvas.height);
-                  for (let i = 1; i < stroke.points.length; i++) {
-                      ctx.lineTo(stroke.points[i].x * canvas.width, stroke.points[i].y * canvas.height);
-                  }
+                  for (let i = 1; i < stroke.points.length; i++) ctx.lineTo(stroke.points[i].x * canvas.width, stroke.points[i].y * canvas.height);
               } else if (stroke.type === 'line' && stroke.points && stroke.points.length >= 2) {
-                  const start = stroke.points[0];
-                  const end = stroke.points[stroke.points.length - 1];
-                  ctx.moveTo(start.x * canvas.width, start.y * canvas.height);
-                  ctx.lineTo(end.x * canvas.width, end.y * canvas.height);
+                  ctx.moveTo(stroke.points[0].x * canvas.width, stroke.points[0].y * canvas.height);
+                  ctx.lineTo(stroke.points[stroke.points.length - 1].x * canvas.width, stroke.points[stroke.points.length - 1].y * canvas.height);
               } else if (stroke.type === 'rect' && stroke.points && stroke.points.length >= 2) {
-                  const start = stroke.points[0];
-                  const end = stroke.points[stroke.points.length - 1];
-                  const w = (end.x - start.x) * canvas.width;
-                  const h = (end.y - start.y) * canvas.height;
-                  ctx.rect(start.x * canvas.width, start.y * canvas.height, w, h);
+                  const start = stroke.points[0]; const end = stroke.points[stroke.points.length - 1];
+                  ctx.rect(start.x * canvas.width, start.y * canvas.height, (end.x - start.x) * canvas.width, (end.y - start.y) * canvas.height);
               } else if (stroke.type === 'circle' && stroke.points && stroke.points.length >= 2) {
-                  const start = stroke.points[0];
-                  const end = stroke.points[stroke.points.length - 1];
-                  const radius = Math.sqrt(Math.pow((end.x - start.x) * canvas.width, 2) + Math.pow((end.y - start.y) * canvas.height, 2));
-                  ctx.arc(start.x * canvas.width, start.y * canvas.height, radius, 0, 2 * Math.PI);
+                  const start = stroke.points[0]; const end = stroke.points[stroke.points.length - 1];
+                  const r = Math.sqrt(Math.pow((end.x - start.x) * canvas.width, 2) + Math.pow((end.y - start.y) * canvas.height, 2));
+                  ctx.arc(start.x * canvas.width, start.y * canvas.height, r, 0, 2 * Math.PI);
               }
-              
               ctx.stroke();
           });
-          // Reset composite operation
           ctx.globalCompositeOperation = 'source-over';
       }
   }, [lesson?.drawingData, lesson?.currentStepIndex]);
 
-  // Reset response state when action changes
-  useEffect(() => {
-      setHasRespondedToAction(false);
-      setConfusionMode(false);
-  }, [lesson?.activeAction?.id]);
-
-  // Audio Hook - Handles TTS for slides and active actions
-  // Now passes lesson.currentAudioUrl which is auto-updated by teacher
-  const { isPlaying, playAudio } = useLiveLessonAudio(
-      lesson?.currentBoardContent, 
-      null, 
-      lesson?.currentAudioUrl, // Pass the pre-generated audio URL if available
-      lesson?.activeAction
-  );
+  const { isPlaying, playAudio } = useLiveLessonAudio(lesson?.currentBoardContent, null, lesson?.currentAudioUrl, lesson?.activeAction);
   
-  const handleEnableAudio = () => {
-      setAudioEnabled(true);
-      // Trigger a silent play or the current audio to unlock the context
-      if (lesson?.activeAction?.text) {
-          // Logic handled inside hook, but interaction unblocks future plays
+  const handleEnableAudio = () => { setAudioEnabled(true); playAudio(); };
+
+  const handleResponse = async (answer: string) => {
+      handleEnableAudio(); if (!lesson || !lesson.activeAction) return;
+      const response: Omit<LiveLessonResponse, 'id'> = { lessonId: lesson.id, studentId: userProfile.uid, studentName: userProfile.name, actionId: lesson.activeAction.id, answer, timestamp: firebase.firestore.Timestamp.now() };
+      await db.collection('liveLessons').doc(lessonId).collection('responses').add(response);
+      setHasResponded(true); setConfusionMode(false);
+      if (lesson.currentQuestion?.correctAnswer === answer) {
+          const newXP = (userProfile.xp || 0) + 25;
+          db.collection('users').doc(userProfile.uid).update({ xp: newXP });
+          showToast("Brilliant! +25 XP", "success");
       }
   };
 
-  const handleResponse = async (answer: string, confusionPoint?: string) => {
-      handleEnableAudio(); // Interaction enables audio
-      if (!lesson || !lesson.activeAction) return;
-      
-      const responseData: Omit<LiveLessonResponse, 'id'> = {
-          lessonId: lesson.id,
-          studentId: userProfile.uid,
-          studentName: userProfile.name,
-          actionId: lesson.activeAction.id,
-          answer: answer,
-          timestamp: firebase.firestore.Timestamp.now()
-      };
-
-      if (confusionPoint) {
-          responseData.confusionPoint = confusionPoint;
-      }
-
-      await db.collection('liveLessons').doc(lessonId).collection('responses').add(responseData);
-      setHasRespondedToAction(true);
-      setConfusionMode(false);
-
-      // Award Points if it was a Quiz Question (Poll linked to slide question)
-      // Check if the slide has a question and if the answer matches
-      if (lesson.currentQuestion && lesson.currentQuestion.correctAnswer) {
-          if (answer === lesson.currentQuestion.correctAnswer) {
-              const currentXP = userProfile.xp || 0;
-              const newXP = currentXP + 20;
-              await db.collection('users').doc(userProfile.uid).update({ xp: newXP });
-              showToast("Correct! +20 XP", 'success');
-          }
-      } else {
-          // Participation Points
-          const currentXP = userProfile.xp || 0;
-          await db.collection('users').doc(userProfile.uid).update({ xp: currentXP + 5 });
-      }
-  };
-
-  const handleNoClick = () => {
-      // Parse current board content to find potential confusion points
-      if (lesson?.currentBoardContent) {
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(lesson.currentBoardContent, 'text/html');
-          // Extract text from li, p, h1-h6
-          const elements = doc.querySelectorAll('li, p, h1, h2, h3');
-          const items = Array.from(elements).map(el => el.textContent?.trim()).filter(t => t && t.length > 5); // Filter short junk
-          
-          if (items.length > 0) {
-              setParsedConfusionItems(items as string[]);
-              setConfusionMode(true);
-          } else {
-              // If no clear text structure, just submit generic "No"
-              handleResponse('No');
-          }
-      } else {
-          handleResponse('No');
-      }
-  };
-  
   const toggleRaiseHand = async () => {
-      handleEnableAudio(); // Interaction enables audio
-      const newStatus = !isRaisingHand;
-      setIsRaisingHand(newStatus);
-      // In a real app, we'd update a 'raisedHands' array in the lesson doc
-      // Assuming lesson.raisedHands is available in types now
-      try {
-          if (newStatus) {
-              await db.collection('liveLessons').doc(lessonId).update({
-                  raisedHands: firebase.firestore.FieldValue.arrayUnion(userProfile.uid)
-              });
-          } else {
-              await db.collection('liveLessons').doc(lessonId).update({
-                  raisedHands: firebase.firestore.FieldValue.arrayRemove(userProfile.uid)
-              });
-          }
-      } catch (err) {
-          console.error("Failed to toggle raise hand", err);
-      }
+      handleEnableAudio();
+      const status = !isRaisingHand;
+      await db.collection('liveLessons').doc(lessonId).update({
+          raisedHands: status ? firebase.firestore.FieldValue.arrayUnion(userProfile.uid) : firebase.firestore.FieldValue.arrayRemove(userProfile.uid)
+      });
+      setIsRaisingHand(status);
   };
 
-  if (!lesson) return <div className="flex justify-center items-center h-screen bg-slate-900"><Spinner /></div>;
+  if (!lesson) return <div className="flex h-screen items-center justify-center bg-slate-900"><Spinner /></div>;
 
-  // Determine if this student is the target of a direct question
-  const isDirectTarget = lesson.activeAction?.type === 'direct_question' && lesson.activeAction.targetStudentId === userProfile.uid;
-  const isBroadcast = lesson.activeAction && !lesson.activeAction.targetStudentId && lesson.activeAction.type === 'poll';
-  const showOverlay = (isBroadcast || isDirectTarget) && !hasRespondedToAction;
-  const isExplanation = lesson.activeAction?.type === 'explanation';
+  const showOverlay = lesson.activeAction && (lesson.activeAction.type === 'poll' || (lesson.activeAction.type === 'direct_question' && lesson.activeAction.targetStudentId === userProfile.uid)) && !hasResponded;
 
   return (
-    <div className="fixed inset-0 bg-slate-950 z-[100] flex flex-col overflow-hidden font-sans">
-      {/* Immersive Header */}
-      <header className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start z-20 pointer-events-none">
-          <div className="flex items-center gap-3 pointer-events-auto">
-              <div className="bg-red-600/90 backdrop-blur-sm px-3 py-1 rounded-full flex items-center gap-2 shadow-lg border border-red-500/50">
-                  <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                  <span className="text-xs font-bold text-white uppercase tracking-wider">Live Class</span>
+    <div className="fixed inset-0 bg-slate-950 z-[100] flex flex-col overflow-hidden font-sans selection:bg-blue-500/30">
+      {/* Dynamic Immersive Header */}
+      <header className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start z-50 pointer-events-none">
+          <div className="flex items-center gap-4 pointer-events-auto">
+              <div className="bg-red-600 px-4 py-1.5 rounded-full flex items-center gap-2.5 shadow-2xl border border-red-400/50">
+                  <div className="w-2.5 h-2.5 bg-white rounded-full animate-ping"></div>
+                  <span className="text-xs font-black text-white uppercase tracking-[0.2em]">Live Session</span>
               </div>
               {!audioEnabled && (
-                  <button onClick={handleEnableAudio} className="bg-blue-600/90 backdrop-blur-sm px-3 py-1 rounded-full flex items-center gap-2 shadow-lg animate-bounce cursor-pointer pointer-events-auto">
-                      <span className="text-xs font-bold text-white">Tap to Enable Audio 🔊</span>
+                  <button onClick={handleEnableAudio} className="bg-blue-600 px-5 py-2 rounded-full flex items-center gap-2 shadow-2xl animate-bounce transition-transform active:scale-95 border border-blue-400">
+                      <span className="text-xs font-black text-white uppercase tracking-wider">Enable Classroom Audio 🔊</span>
                   </button>
               )}
           </div>
-          <button onClick={onClose} className="pointer-events-auto bg-slate-900/50 hover:bg-slate-800 backdrop-blur-md text-white p-2 rounded-full border border-slate-700 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+          <button onClick={onClose} className="pointer-events-auto bg-white/5 hover:bg-white/10 backdrop-blur-3xl text-white p-3 rounded-full border border-white/10 transition-all hover:rotate-90">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
           </button>
       </header>
 
-      {/* Main Stage - Fullscreen Content */}
-      <div className="flex-grow flex items-center justify-center p-4 md:p-8 bg-gradient-to-b from-slate-900 to-slate-950 relative">
-           {/* Teacher Avatar Floating */}
-           <div className="absolute bottom-20 left-4 z-10 pointer-events-none transition-transform duration-300">
+      {/* Presentation Stage */}
+      <div className="flex-grow flex items-center justify-center p-4 md:p-12 relative overflow-hidden">
+           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(56,189,248,0.1),transparent_70%)]"></div>
+           
+           {/* Floating AI Teacher */}
+           <div className="absolute bottom-16 left-10 z-30 transition-all duration-500 scale-110">
                <SirEduAvatar isSpeaking={isPlaying} />
            </div>
 
-           {/* Content Board */}
-           <div className="w-full max-w-6xl aspect-video bg-white text-slate-900 rounded-xl shadow-2xl overflow-hidden relative flex flex-col justify-center items-center transition-all duration-500">
-                <div className="absolute inset-0 overflow-y-auto p-8 md:p-16 flex flex-col justify-center items-center z-0">
-                    <div className="prose-styles prose-2xl text-center w-full" dangerouslySetInnerHTML={{ __html: lesson.currentBoardContent }} />
+           {/* The Interactive Board */}
+           <div className="w-full max-w-7xl aspect-video bg-white rounded-3xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] overflow-hidden relative flex flex-col border border-white/20">
+                <div className="absolute inset-0 overflow-y-auto p-12 md:p-24 flex flex-col justify-center items-center z-10">
+                    <div className="prose-styles prose-2xl text-center w-full !text-slate-900 leading-tight" dangerouslySetInnerHTML={{ __html: lesson.currentBoardContent }} />
                 </div>
-                {/* Student View Canvas - Read Only */}
-                <canvas ref={canvasRef} className="absolute inset-0 z-10 pointer-events-none w-full h-full" />
+                {/* Whiteboard Overlay */}
+                <canvas ref={canvasRef} className="absolute inset-0 z-20 pointer-events-none w-full h-full" />
+                
+                {/* Teacher Pointer Layer */}
+                {lesson.pointerPosition && (
+                    <div className="absolute z-40 pointer-events-none w-6 h-6 bg-red-500 rounded-full shadow-[0_0_20px_rgba(239,68,68,1)] border-2 border-white/50" style={{ left: `calc(${lesson.pointerPosition.x} * 100%)`, top: `calc(${lesson.pointerPosition.y} * 100%)`, transform: 'translate(-50%, -50%)' }}>
+                        <div className="absolute inset-0 bg-red-500 rounded-full animate-ping opacity-75"></div>
+                    </div>
+                )}
            </div>
       </div>
       
-      {/* Bottom Interaction Bar */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 flex justify-center items-center gap-4 z-30 bg-gradient-to-t from-slate-900 to-transparent pb-8">
-          <div className="flex gap-2 bg-slate-800/80 backdrop-blur-md p-2 rounded-full border border-slate-700 shadow-xl">
-              <button 
-                onClick={toggleRaiseHand}
-                className={`p-3 rounded-full transition-all ${isRaisingHand ? 'bg-yellow-500 text-black scale-110' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
-                title="Raise Hand"
-              >
-                  ✋
-              </button>
-              <div className="w-px bg-slate-600 mx-1"></div>
-              <button onClick={handleEnableAudio} className="p-3 rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 hover:scale-110 transition-all" title="Like">👍</button>
-              <button onClick={handleEnableAudio} className="p-3 rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 hover:scale-110 transition-all" title="Clap">👏</button>
-              <button onClick={handleEnableAudio} className="p-3 rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 hover:scale-110 transition-all" title="Love">❤️</button>
+      {/* Interaction Bar */}
+      <div className="absolute bottom-0 left-0 right-0 p-8 flex justify-center items-center z-40 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent">
+          <div className="flex items-center gap-4 bg-slate-900/60 backdrop-blur-3xl p-3 rounded-full border border-white/5 shadow-2xl">
+              <button onClick={toggleRaiseHand} className={`p-4 rounded-full transition-all flex items-center justify-center text-2xl shadow-lg ${isRaisingHand ? 'bg-amber-500 text-black animate-pulse scale-125' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`} title="Raise Hand">✋</button>
+              <div className="h-10 w-px bg-slate-700 mx-2"></div>
+              {REACTIONS.map(emoji => (
+                  <button key={emoji} onClick={() => { handleEnableAudio(); showToast(`Sent ${emoji}`, 'info'); }} className="p-3 text-2xl hover:scale-125 transition-transform hover:rotate-12">{emoji}</button>
+              ))}
           </div>
       </div>
 
-      {/* INTERACTION OVERLAYS */}
-      
-      {/* 1. Explanation Card (Teacher explaining something) */}
-      {isExplanation && (
-          <div className="absolute top-24 right-4 max-w-sm w-full bg-slate-800/90 backdrop-blur-md border-l-4 border-blue-500 p-4 rounded-lg shadow-2xl animate-fade-in-right z-30">
-              <h4 className="text-blue-300 font-bold text-sm uppercase mb-2 flex items-center gap-2">
-                  <span className="text-lg">💡</span> Teacher Note
-              </h4>
-              <p className="text-white text-lg leading-relaxed">{lesson.activeAction?.text}</p>
-              <div className="mt-2 flex justify-end">
-                  {/* Visual cue that audio is playing for explanation */}
-                  {isPlaying && <div className="flex gap-1 h-3 items-end"><div className="w-1 bg-blue-400 h-full animate-pulse"></div><div className="w-1 bg-blue-400 h-2/3 animate-pulse delay-75"></div><div className="w-1 bg-blue-400 h-full animate-pulse delay-150"></div></div>}
-              </div>
+      {/* Interactive Overlays */}
+      {lesson.activeAction?.type === 'explanation' && (
+          <div className="absolute top-24 right-10 max-w-sm w-full z-50 animate-fade-in-right">
+              <Card className="!bg-blue-600 text-white border-blue-400 shadow-2xl">
+                  <h4 className="font-black text-[10px] uppercase tracking-[0.2em] mb-2 opacity-80">Teacher Insight</h4>
+                  <p className="text-lg font-bold leading-tight">{lesson.activeAction.text}</p>
+              </Card>
           </div>
       )}
 
-      {/* 2. Active Action Overlay (Poll/Question) */}
       {showOverlay && (
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm z-40 flex items-end pb-24 sm:items-center sm:pb-0 justify-center">
-              <div className="w-full max-w-md bg-slate-800/90 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl p-6 mx-4 animate-fade-in-up relative overflow-hidden">
-                  {/* Glowing Border Effect */}
-                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
-                  
-                  <h3 className="text-center text-2xl font-bold text-white mb-2">
-                      {isDirectTarget ? `📢 ${userProfile.name}, question for you!` : "Quick Check"}
-                  </h3>
-                  <p className="text-center text-slate-300 text-lg mb-8 font-medium leading-relaxed">
-                      {lesson.activeAction?.text}
-                  </p>
-
-                  {confusionMode ? (
-                      <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                          <p className="text-sm text-center text-gray-400 mb-2">Tap the part you find confusing:</p>
-                          {parsedConfusionItems.map((item, idx) => (
-                              <button 
-                                key={idx}
-                                onClick={() => handleResponse('No', item)}
-                                className="w-full text-left p-3 bg-slate-700/50 hover:bg-red-900/30 border border-slate-600 hover:border-red-500 rounded-lg text-sm transition-all text-slate-200"
-                              >
-                                  {item}
-                              </button>
-                          ))}
-                          <button onClick={() => handleResponse('No', 'General Confusion')} className="w-full p-2 text-center text-slate-400 text-xs hover:text-white mt-2 underline decoration-slate-600">I'm confused about everything</button>
-                      </div>
-                  ) : (
-                      <div className="grid grid-cols-2 gap-4">
-                          {lesson.activeAction?.options ? (
-                              lesson.activeAction.options.map(opt => (
-                                  <Button key={opt} onClick={() => opt === 'No' ? handleNoClick() : handleResponse(opt)} variant={opt === 'No' ? 'secondary' : 'primary'} className="py-4 text-lg shadow-lg">
-                                      {opt}
-                                  </Button>
-                              ))
-                          ) : (
-                              // Default Yes/No if no options provided
-                              <>
-                                <Button onClick={() => handleResponse('Yes')} className="bg-green-600 hover:bg-green-500 py-4 text-lg shadow-lg shadow-green-900/20">Yes, I get it 👍</Button>
-                                <Button onClick={handleNoClick} variant="secondary" className="py-4 text-lg shadow-lg">No, I'm lost 👎</Button>
-                              </>
-                          )}
-                      </div>
-                  )}
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+              <div className="w-full max-w-lg bg-slate-900 rounded-[2.5rem] border border-white/10 shadow-3xl p-10 relative overflow-hidden animate-fade-in-up">
+                  <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600"></div>
+                  <h3 className="text-center text-3xl font-black text-white mb-3 tracking-tight">CLASS CHECK-IN</h3>
+                  <p className="text-center text-slate-300 text-xl mb-10 font-medium">"{lesson.activeAction?.text}"</p>
+                  <div className="grid grid-cols-2 gap-4">
+                      {lesson.activeAction?.options?.map(opt => (
+                          <button key={opt} onClick={() => handleResponse(opt)} className="py-5 px-6 bg-slate-800 hover:bg-blue-600 border border-white/5 rounded-2xl text-xl font-black transition-all shadow-xl hover:scale-[1.03] uppercase tracking-wider">{opt}</button>
+                      )) || (
+                          <>
+                            <button onClick={() => handleResponse('Yes')} className="py-5 px-6 bg-emerald-600 hover:bg-emerald-500 rounded-2xl text-xl font-black transition-all shadow-xl uppercase tracking-wider">Yes, Clear!</button>
+                            <button onClick={() => handleResponse('No')} className="py-5 px-6 bg-slate-800 hover:bg-rose-600 rounded-2xl text-xl font-black transition-all shadow-xl uppercase tracking-wider">Not Yet</button>
+                          </>
+                      )}
+                  </div>
               </div>
           </div>
       )}
-
-      {/* 3. Celebration Overlay */}
-      {lesson.activeAction?.type === 'celebration' && (
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-50">
-              <div className="text-6xl animate-bounce drop-shadow-lg">🎉</div>
-              {/* Simple CSS confetti effect could be added here */}
-          </div>
-      )}
-
     </div>
   );
 };
