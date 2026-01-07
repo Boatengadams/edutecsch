@@ -1,219 +1,72 @@
-
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-
-    // ===========================================================
-    // HELPER FUNCTIONS
-    // ===========================================================
-
+    
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Emergency / Bootstrap Super Admin
-    function isSuperAdmin() {
-      return isSignedIn()
-        && request.auth.uid == 'WsDstQ5ufSW49i0Pc5sJWWyDVk22';
+    function getUserData() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
     }
 
-    function callerDoc() {
-      return get(/databases/(default)/documents/users/$(request.auth.uid));
+    function isApproved() {
+      let data = getUserData();
+      return data.status == 'approved' || data.role == 'admin';
     }
 
-    function callerExists() {
-      return isSignedIn() && callerDoc().exists();
+    function isTeacher() {
+      return getUserData().role == 'teacher';
     }
 
-    function isCallerApproved() {
-      return isSignedIn()
-        && (
-          isSuperAdmin() ||
-          (callerExists() && (callerDoc().data.status == 'approved' || callerDoc().data.role == 'admin'))
-        );
+    function isAdmin() {
+      let data = getUserData();
+      return data.role == 'admin' || data.get('isAlsoAdmin', false) == true;
     }
 
-    function isCallerAdmin() {
-      return isSignedIn()
-        && (
-          isSuperAdmin() ||
-          (callerExists() && (
-            callerDoc().data.role == 'admin' ||
-            callerDoc().data.get('isAlsoAdmin', false) == true
-          ))
-        );
+    // Individual Profiles: Owners only
+    match /users/{userId}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId && 
+                    request.resource.size < 5 * 1024 * 1024 &&
+                    request.resource.contentType.matches('image/.*');
     }
 
-    // -------------------------
-    // File Validation
-    // -------------------------
-    function fileSizeMB(limit) {
-      return request.resource.size < limit * 1024 * 1024;
+    // DM Attachments: Participant-Only Access
+    match /direct_messages/{convoId}/{allPaths=**} {
+      allow read, write: if isApproved() && 
+        request.auth.uid in firestore.get(/databases/(default)/documents/conversations/$(convoId)).data.participantUids;
     }
 
-    function mimeTypeOK() {
-      return request.resource.contentType.matches('image/.*')
-        || request.resource.contentType.matches('video/.*')
-        || request.resource.contentType.matches('application/pdf');
+    // Classroom Assets: Teachers and Admins
+    match /teachingMaterials/{allPaths=**} {
+      allow read: if isApproved();
+      allow write: if isApproved() && (isTeacher() || isAdmin());
     }
 
-    function isImage() {
-      return request.resource.contentType.matches('image/.*');
+    match /assignments/{id}/{allPaths=**} {
+      allow read: if isApproved();
+      allow write: if isApproved() && isTeacher();
     }
 
-    // ===========================================================
-    // 1. SCHOOL CONFIG / BRANDING
-    // ===========================================================
+    // Broadcast Flyers: School-Wide Read, Admin-Only Write
+    match /flyers/{allPaths=**} {
+      allow read: if isApproved();
+      allow write: if isApproved() && isAdmin() &&
+                    request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // System Config: Admin Only
     match /schoolConfig/{allPaths=**} {
       allow read: if true;
-      allow write: if isCallerAdmin() && fileSizeMB(5) && isImage();
-      allow delete: if isCallerAdmin();
+      allow write: if isApproved() && isAdmin();
     }
 
-    // ===========================================================
-    // 2. FLYERS (Public Read)
-    // ===========================================================
-    match /flyers/{allPaths=**} {
-      allow read: if true;
-      allow write: if isCallerApproved()
-        && (isSuperAdmin() ||
-            callerDoc().data.role == 'admin' ||
-            callerDoc().data.role == 'teacher')
-        && fileSizeMB(10)
-        && isImage();
-    }
-
-    // ===========================================================
-    // 3. USER PROFILE FILES (Optimized)
-    // ===========================================================
-    match /users/{userId}/{allPaths=**} {
-      allow read: if isCallerApproved();
-
-      // Self upload (fast, no DB read)
-      allow write: if isSignedIn()
-        && userId == request.auth.uid
-        && fileSizeMB(5)
-        && isImage();
-
-      // Admin / Teacher upload for others
-      allow write: if isCallerApproved()
-        && (isCallerAdmin() || callerDoc().data.role == 'teacher')
-        && fileSizeMB(5)
-        && isImage();
-    }
-
-    // ===========================================================
-    // 4. TEACHING MATERIALS
-    // ===========================================================
-    match /teachingMaterials/{materialId}/{fileName} {
-      allow read: if isSignedIn();
-
-      allow write: if isCallerApproved()
-        && (callerDoc().data.role == 'teacher' || isCallerAdmin())
-        && fileSizeMB(20)
-        && mimeTypeOK();
-
-      allow delete: if isCallerAdmin()
-        || (
-          callerDoc().data.role == 'teacher'
-          && resource.metadata.uploaderId == request.auth.uid
-        );
-    }
-
-    // ===========================================================
-    // 5. ASSIGNMENTS & MATERIALS
-    // ===========================================================
-    match /assignments/{assignmentId}/materials/{fileName} {
-      allow read: if isCallerApproved();
-
-      allow write: if isCallerApproved()
-        && callerDoc().data.role == 'teacher'
-        && fileSizeMB(20)
-        && mimeTypeOK();
-
-      allow delete: if isCallerAdmin()
-        || callerDoc().data.role == 'teacher';
-    }
-
-    // ===========================================================
-    // 6. STUDENT SUBMISSIONS
-    // ===========================================================
-    match /submissions/{submissionId}/{studentId}/{fileName} {
-      allow read: if isSignedIn();
-
-      allow write: if isCallerApproved()
-        && callerDoc().data.role == 'student'
-        && studentId == request.auth.uid
-        && fileSizeMB(20)
-        && mimeTypeOK();
-
-      allow delete: if isCallerAdmin()
-        || callerDoc().data.role == 'teacher';
-    }
-
-    // ===========================================================
-    // 7. GROUPS & DIRECT MESSAGES
-    // ===========================================================
-    match /groups/{allPaths=**} {
-      allow read, write: if isSignedIn()
-        && fileSizeMB(10)
-        && mimeTypeOK();
-    }
-
-    match /direct_messages/{allPaths=**} {
-      allow read, write: if isSignedIn()
-        && fileSizeMB(10)
-        && mimeTypeOK();
-    }
-
-    // ===========================================================
-    // 8. LIVE LESSON IMAGES
-    // ===========================================================
-    match /liveLessons/{lessonId}/images/{fileName} {
-      allow read: if isSignedIn();
-
-      allow write: if isCallerApproved()
-        && (callerDoc().data.role == 'teacher' || isCallerAdmin())
-        && fileSizeMB(10)
-        && isImage();
-
-      allow delete: if isCallerAdmin()
-        || callerDoc().data.role == 'teacher';
-    }
-
-    // ===========================================================
-    // 9. VIDEO CONTENT
-    // ===========================================================
-    match /videoContent/{creatorId}/{videoId}/{fileName} {
-      allow read: if isSignedIn();
-
-      allow write: if isCallerApproved()
-        && creatorId == request.auth.uid
-        && (callerDoc().data.role == 'teacher' || isCallerAdmin())
-        && fileSizeMB(100)
-        && mimeTypeOK();
-
-      allow delete: if isCallerAdmin()
-        || creatorId == request.auth.uid;
-    }
-
-    // ===========================================================
-    // 10. CORRECTION ATTACHMENTS
-    // ===========================================================
-    match /corrections/{submissionId}/{userId}/{fileName} {
-      allow read: if isSignedIn();
-
-      allow write: if isSignedIn()
-        && userId == request.auth.uid
-        && fileSizeMB(10)
-        && mimeTypeOK();
-    }
-
-    // ===========================================================
-    // DEFAULT DENY (CRITICAL)
-    // ===========================================================
-    match /{path=**} {
-      allow read, write: if false;
+    // Video Storage: Size restricted high-bandwidth content
+    match /videoContent/{userId}/{allPaths=**} {
+      allow read: if isApproved();
+      allow write: if isApproved() && (request.auth.uid == userId) && (isTeacher() || isAdmin()) &&
+                    request.resource.size < 100 * 1024 * 1024;
     }
   }
 }

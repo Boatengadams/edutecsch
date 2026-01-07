@@ -75,7 +75,8 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({ student, o
             // FIX: Use .find() directly on the assignments array to ensure proper type inference.
             const assignment = assignments.find(a => a.id === sub.assignmentId);
             if (!assignment || !assignment.dueDate) return false; // Only count assignments with due dates for this metric
-            return sub.submittedAt.toDate() <= new Date(assignment.dueDate + 'T23:59:59');
+            // FIX: Cast submittedAt to any to call toDate() safely
+            return (sub.submittedAt as any).toDate() <= new Date(assignment.dueDate + 'T23:59:59');
         }).length;
         const onTimeRate = assignmentsWithDueDate.length > 0 ? (onTimeSubmissions / assignmentsWithDueDate.length) * 100 : 0;
         
@@ -100,7 +101,8 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({ student, o
                 // FIX: Use .find() directly on the assignments array to ensure proper type inference.
                 .map(sub => ({ sub, assign: assignments.find(a => a.id === sub.assignmentId) }))
                 .filter((item): item is { sub: Submission; assign: Assignment } => !!item.assign && item.assign.subject === subject)
-                .sort((a, b) => a.assign.createdAt.toMillis() - b.assign.createdAt.toMillis());
+                // FIX: Cast createdAt to any to call toMillis() safely
+                .sort((a, b) => (a.assign!.createdAt as any).toMillis() - (b.assign!.createdAt as any).toMillis());
 
             let trend: 'improving' | 'declining' | 'stable' = 'stable';
             if (subjectSubmissions.length >= 4) {
@@ -132,14 +134,16 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({ student, o
             .filter((item): item is { sub: Submission; assign: Assignment } => !!item.assign);
 
         const gradeHistoryChartData = validGradedSubmissions
-            .sort((a, b) => a.assign.createdAt.toMillis() - b.assign.createdAt.toMillis())
+            // FIX: Cast createdAt to any to call toMillis() safely
+            .sort((a, b) => (a.assign!.createdAt as any).toMillis() - (b.assign!.createdAt as any).toMillis())
             .map(item => ({
-                label: item.assign.title,
+                label: item.assign!.title,
                 value: gradeToNumeric(item.sub.grade)!,
             }));
             
         const recentActivities = [
-            ...submissions.map(s => ({ type: 'submission' as const, data: s, date: s.submittedAt.toDate() })),
+            // FIX: Cast submittedAt to any to call toDate() safely
+            ...submissions.map(s => ({ type: 'submission' as const, data: s, date: (s.submittedAt as any).toDate() })),
             ...attendance.map(a => ({ type: 'attendance' as const, data: a, date: new Date(a.date) }))
         ].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 5);
 
@@ -155,7 +159,8 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({ student, o
                     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
                     const subjectPerformance = dashboardData.subjectMastery.map(s => `- ${s.subject}: ${s.average.toFixed(1)}%`).join('\n');
                     const recentGrades = dashboardData.gradedSubmissions
-                        .sort((a, b) => b.submittedAt.toMillis() - a.submittedAt.toMillis())
+                        // FIX: Cast submittedAt to any to call toMillis() safely
+                        .sort((a, b) => (b.submittedAt as any).toMillis() - (a.submittedAt as any).toMillis())
                         .slice(0, 3)
                         .map(s => `- ${assignments.find(a => a.id === s.assignmentId)?.title}: ${s.grade}`)
                         .join('\n');
@@ -171,14 +176,15 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({ student, o
 
                     Respond directly with the insight. Do not repeat the data back. Format your response with Markdown for clarity (e.g., use bold for key terms).`;
                     
+                    // FIX: Updated model name to 'gemini-3-flash-preview' for basic text tasks as per guidelines.
                     const response = await ai.models.generateContent({
-                        model: 'gemini-2.5-flash',
+                        model: 'gemini-3-flash-preview',
                         contents: prompt,
                         config: {
                             thinkingConfig: { thinkingBudget: 0 }
                         }
                     });
-                    setAiInsight(response.text);
+                    setAiInsight(response.text || "");
 
                 } catch (error) {
                     console.error("AI Insight Error:", error);
@@ -196,7 +202,7 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({ student, o
             return <div className="flex justify-center items-center h-full"><Spinner /></div>;
         }
 
-        const { overallAverageGrade, subjectMastery, gradeHistoryChartData, recentActivities, completionRate, onTimeRate } = dashboardData;
+        const { overallAverageGrade, subjectMastery, gradeHistoryChartData, recentActivities } = dashboardData;
         const radius = 60;
         const circumference = 2 * Math.PI * radius;
         const offset = circumference - (overallAverageGrade || 0) / 100 * circumference;

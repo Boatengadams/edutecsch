@@ -1,10 +1,8 @@
 {
-  "name": "EDUTECSCH",
-  "description": "A web application for teachers and students to manage assignments. Teachers can create and grade assignments, while students can view and submit their work. The app uses Firebase for authentication, database, and storage.",
+  "name": "EDUTECSCH SECURE",
+  "description": "High-security educational platform for teachers and students with strictly enforced RBAC and input sanitization.",
   "requestFramePermissions": [
     "camera",
-    "microphone",
-    "display-capture",
-    "geolocation"
+    "microphone"
   ]
 }

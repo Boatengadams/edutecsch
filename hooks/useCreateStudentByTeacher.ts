@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { secondaryAuth, db, firebase } from '../services/firebase';
 import { useAuthentication } from './useAuth';
@@ -80,6 +79,8 @@ export const useCreateStudentByTeacher = () => {
         level: 1,
         badges: [],
         portfolioItems: [],
+        attendanceRate: 0,
+        completionRate: 0
       };
       
       const userDocRef = db.collection('users').doc(newUser.uid);

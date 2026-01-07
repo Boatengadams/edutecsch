@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { db, firebase, storage } from '../services/firebase';
-import { UserProfile, Conversation, Message } from '../types';
-import Card from './common/Card';
-import Button from './common/Button';
-import Spinner from './common/Spinner';
-import CameraModal from './common/CameraModal';
+import { db, firebase, storage } from './services/firebase';
+// FIX: Changed import path to './types' as this file is in the root directory next to types.ts.
+import { UserProfile, Conversation, Message } from './types';
+import Card from './components/common/Card';
+import Button from './components/common/Button';
+import Spinner from './components/common/Spinner';
+import CameraModal from './components/common/CameraModal';
 
 // Helper to convert dataURL to File object
 const dataURLtoFile = (dataurl: string, filename: string): File => {

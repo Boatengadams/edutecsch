@@ -1,6 +1,5 @@
 import { useState } from 'react';
-// FIX: Import firebase for FieldValue
-import { db, firebase } from '../services/firebase';
+import { db, firebase, firebaseAuth } from '../services/firebase';
 import { UserProfile, UserRole } from '../types';
 import type firebase_app from 'firebase/compat/app';
 
@@ -17,7 +16,6 @@ export const useSelfRegister = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // FIX: Use firebase.User type from compat library.
   const registerProfile = async (user: firebase_app.User, data: SelfRegisterData): Promise<boolean> => {
     setLoading(true);
     setError(null);
@@ -28,15 +26,20 @@ export const useSelfRegister = () => {
         email: user.email,
         name: data.name.trim(),
         role: data.role,
-        status: 'pending', // All self-registrations are pending
-        // FIX: Cast serverTimestamp to Timestamp to match the UserProfile type.
+        status: 'pending',
         createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
+        xp: 0,
+        level: 1,
+        badges: [],
+        portfolioItems: [],
+        attendanceRate: 0,
+        completionRate: 0
       };
 
       let finalProfileData: any = { ...baseProfileData };
 
       if (data.role === 'student') {
-        finalProfileData = { ...finalProfileData, class: data.studentClass, xp: 0, level: 1, badges: [], portfolioItems: [] };
+        finalProfileData.class = data.studentClass;
       } else if (data.role === 'teacher') {
         finalProfileData.classesTaught = data.teacherClasses;
         finalProfileData.subjectsTaught = data.teacherSubjects;
@@ -46,7 +49,6 @@ export const useSelfRegister = () => {
 
         const childUids: string[] = [];
         for (const email of emails) {
-          // FIX: Use v8 compat query syntax
           const q = db.collection('users').where('email', '==', email).where('role', '==', 'student');
           const qSnapshot = await q.get();
           if (qSnapshot.empty) throw new Error(`No student found with email: ${email}`);
@@ -55,12 +57,21 @@ export const useSelfRegister = () => {
         finalProfileData.childUids = childUids;
       }
       
-      // FIX: Use v8 compat setDoc syntax
+      // Atomic profile creation
       await db.collection('users').doc(user.uid).set(finalProfileData, { merge: true });
+
+      // ASDP CRITICAL: Force immediate token refresh
+      // This forces Firebase to fetch a new ID token which contains the newly created 
+      // Firestore data context used by the security rules, solving "Permission Denied" 
+      // errors immediately after registration.
+      if (firebaseAuth.currentUser) {
+          await firebaseAuth.currentUser.getIdToken(true);
+      }
+
       return true;
     } catch (e: any) {
       setError(e.message);
-      console.error("Error in self-registration profile creation:", e);
+      console.error("ASDP Registration Fault:", e);
       return false;
     } finally {
       setLoading(false);

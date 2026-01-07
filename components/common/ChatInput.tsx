@@ -95,8 +95,9 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isSending }) => {
         setIsFixing(true);
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            // FIX: Updated model name to 'gemini-3-flash-preview' for basic text tasks as per guidelines.
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3-flash-preview',
                 contents: `Correct the grammar and spelling of the following text. Maintain the original meaning and tone. Return ONLY the corrected text.\n\nText: "${text}"`,
             });
             if (response.text) {
@@ -235,7 +236,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isSending }) => {
                                 onClick={() => setIsMenuOpen(!isMenuOpen)}
                                 className={`p-3 rounded-full bg-slate-800 text-slate-400 hover:text-white transition-transform duration-200 ${isMenuOpen ? 'rotate-45 bg-slate-700' : ''}`}
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" /></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5z" /></svg>
                             </button>
                             
                             {/* Mobile Popup Menu */}

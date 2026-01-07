@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { secondaryAuth, db, firebase } from '../services/firebase';
 import type { UserRole, UserProfile } from '../types';
@@ -109,6 +108,8 @@ export const useCreateUser = () => {
         level: 1,
         badges: [],
         portfolioItems: [],
+        attendanceRate: 0,
+        completionRate: 0
       };
       if (data.role === 'student' && data.classId) profileData.class = data.classId;
       if (data.role === 'parent' && data.childUids) profileData.childUids = data.childUids;

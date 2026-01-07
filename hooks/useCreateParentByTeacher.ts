@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { secondaryAuth, db, firebase } from '../services/firebase';
 import type { UserProfile } from '../types';
@@ -78,6 +77,12 @@ export const useCreateParentByTeacher = () => {
         childUids: [data.childUid],
         status: 'pending',
         createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
+        xp: 0,
+        level: 1,
+        badges: [],
+        portfolioItems: [],
+        attendanceRate: 0,
+        completionRate: 0
       };
 
       await db.collection('users').doc(newUser.uid).set(profileData);

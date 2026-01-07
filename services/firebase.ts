@@ -27,20 +27,15 @@ if (!firebase.apps.length) {
 const firebaseAuth = firebase.auth();
 const db = firebase.firestore();
 
-// ENHANCED: Apply strict connectivity settings to bypass proxy/firewall delays
+// ENHANCED: Applied settings to handle connectivity issues in restricted networks
 try {
   db.settings({
-    experimentalForceLongPolling: true, 
-    merge: true,
-    cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED
-  });
-  // Enable offline persistence for better UX when connection is spotty
-  db.enablePersistence().catch((err) => {
-      if (err.code === 'failed-precondition') {
-          console.warn("Persistence failed: Multiple tabs open.");
-      } else if (err.code === 'unimplemented') {
-          console.warn("Persistence failed: Browser not supported.");
-      }
+    cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED,
+    // Helps with "Could not reach backend" errors by using a more compatible protocol
+    experimentalAutoDetectLongPolling: true,
+    // Ensure it points to the correct global endpoint
+    host: "firestore.googleapis.com",
+    ssl: true,
   });
 } catch (err) {
   console.warn("Firestore settings could not be applied:", err);

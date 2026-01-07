@@ -33,8 +33,9 @@ const AIReportGenerator: React.FC = () => {
             
             The remark should be concise (2-4 sentences), constructive, and encouraging. Avoid repetition. Use professional educational language.`;
 
+            // FIX: Updated model name to 'gemini-3-flash-preview' for basic text tasks as per guidelines.
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3-flash-preview',
                 contents: prompt
             });
 

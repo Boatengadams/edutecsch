@@ -1,6 +1,5 @@
-
 import { useState, useEffect, useRef } from 'react';
-import { LiveLesson, UserProfile, LiveAction } from '../types';
+import { UserProfile, LiveAction } from '../types';
 import { GoogleGenAI, Modality } from '@google/genai';
 
 // Helper functions for audio decoding
@@ -42,7 +41,7 @@ const stripHtml = (html: string) => {
 export const useLiveLessonAudio = (
     htmlContent: string | undefined, 
     teacherProfile: UserProfile | null,
-    currentAudioUrl?: string | null, // Updated type
+    currentAudioUrl?: string | null,
     activeAction?: LiveAction | null
 ) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -71,8 +70,9 @@ export const useLiveLessonAudio = (
         activeAudioRef.current.currentTime = 0; // Reset
     }
     // Stop browser fallback playback
-    if (window.speechSynthesis && window.speechSynthesis.speaking) {
-        window.speechSynthesis.cancel();
+    // FIX: Cast window to any for SpeechSynthesis
+    if ((window as any).speechSynthesis && (window as any).speechSynthesis.speaking) {
+        (window as any).speechSynthesis.cancel();
     }
     setIsPlaying(false);
   };
@@ -153,12 +153,13 @@ export const useLiveLessonAudio = (
         
         const playWithBrowserTTS = (txt: string) => {
             console.warn("Falling back to browser's native TTS.");
+            // FIX: Cast window to any for SpeechSynthesis
             if ('speechSynthesis' in window) {
                 stopPlayback();
-                const utterance = new SpeechSynthesisUtterance(txt);
+                const utterance = new (window as any).SpeechSynthesisUtterance(txt);
                 utterance.onstart = () => setIsPlaying(true);
                 utterance.onend = () => setIsPlaying(false);
-                window.speechSynthesis.speak(utterance);
+                (window as any).speechSynthesis.speak(utterance);
             } else {
                 setIsPlaying(false);
             }
@@ -166,7 +167,8 @@ export const useLiveLessonAudio = (
 
         try {
             // Use 'Kore' as default if profile isn't ready, or use teacher's preference
-            const preferredVoice = teacherProfile?.preferredVoice || 'Kore';
+            // FIX: Added any cast for preferredVoice
+            const preferredVoice = (teacherProfile as any)?.preferredVoice || 'Kore';
             // Check if it's a custom voice ID (simple UUID check) or a prebuilt name
             const isCustomVoice = /^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(preferredVoice);
             const voiceToUse = isCustomVoice ? 'Kore' : preferredVoice;
@@ -186,8 +188,9 @@ export const useLiveLessonAudio = (
             });
             
             const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-            if (!base64Audio) throw new Error("No audio data received from API.");
+            if (!base64Audio) throw new Error("No audio data received.");
 
+            // FIX: Cast window to any for webkitAudioContext
             if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
                 audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
             }

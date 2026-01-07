@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI, Modality } from "@google/genai";
-import type { Chat } from '@google/genai';
 import html2canvas from 'html2canvas';
 
 import Card from './common/Card';
@@ -113,8 +112,8 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ systemInstruction, suggestedP
   const clickTimeoutRef = useRef<number | null>(null);
   // -- End Audio Playback State --
 
-
-  const chatRef = useRef<Chat | null>(null);
+  // FIX: Use any for ChatSession to avoid type error from @google/genai module
+  const chatRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   
@@ -127,8 +126,9 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ systemInstruction, suggestedP
           throw new Error("API_KEY environment variable not set.");
       }
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // FIX: Updated model name to 'gemini-3-flash-preview' for basic text tasks as per guidelines.
       const newChat = ai.chats.create({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3-flash-preview',
         config: {
           systemInstruction: systemInstruction,
           tools: [{googleSearch: {}}],
@@ -251,6 +251,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ systemInstruction, suggestedP
     const startPlayback = (offset = 0) => {
         if (!audioBufferRef.current) return;
 
+        // FIX: Cast window to any for webkitAudioContext
         if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
             audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
         }
@@ -292,6 +293,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ systemInstruction, suggestedP
             const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
             if (!base64Audio) throw new Error("No audio data received.");
 
+            // FIX: Cast window to any for webkitAudioContext
             if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
                 audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
             }
@@ -301,7 +303,23 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ systemInstruction, suggestedP
             startPlayback(0);
         } catch (err) {
             console.error("TTS failed:", err);
-            setAudioState({ status: 'error', text });
+            // Fallback to browser's native SpeechSynthesis
+            // FIX: Cast window and globals to any for SpeechSynthesis
+            if ('speechSynthesis' in window) {
+                const utterance = new (window as any).SpeechSynthesisUtterance(text);
+                utterance.onstart = () => setAudioState(prev => ({ ...prev!, status: 'playing' }));
+                utterance.onend = () => {
+                    stopAudio(true); // use our own stop function
+                };
+                utterance.onerror = (e: any) => {
+                    console.error("Browser TTS error in AI Assistant:", e);
+                    setAudioState({ status: 'error', text });
+                };
+                (window as any).speechSynthesis.speak(utterance);
+            } else {
+                console.error("Browser TTS not supported.");
+                setAudioState({ status: 'error', text });
+            }
         }
     };
     // -- End Audio Playback Functions --
@@ -427,20 +445,6 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ systemInstruction, suggestedP
             }, 250);
         }
     };
-
-    const handleSeek = (amount: number) => {
-        if (!audioBufferRef.current) return;
-        let currentPosition = 0;
-        if (audioState.status === 'playing' && audioContextRef.current) {
-            currentPosition = audioContextRef.current.currentTime - playbackStartTimeRef.current;
-        } else if (audioState.status === 'paused') {
-            currentPosition = playbackOffsetRef.current;
-        } else {
-            return;
-        }
-        startPlayback(currentPosition + amount);
-    };
-
 
     const renderSpeakerIcon = () => {
         const iconProps = { className: "w-5 h-5" };

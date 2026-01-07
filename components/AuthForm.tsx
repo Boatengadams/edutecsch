@@ -14,18 +14,21 @@ const AuthForm: React.FC = () => {
   const [settings, setSettings] = useState<SchoolSettings | null>(null);
 
   useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const docRef = db.collection('schoolConfig').doc('settings');
-        const docSnap = await docRef.get();
+    // FIX: Changed from .get() to .onSnapshot() to be resilient to initial offline states
+    const docRef = db.collection('schoolConfig').doc('settings');
+    const unsubscribe = docRef.onSnapshot(
+      (docSnap) => {
         if (docSnap.exists) {
           setSettings(docSnap.data() as SchoolSettings);
         }
-      } catch (error) {
-        console.error("Error fetching school settings:", error);
+      },
+      (error) => {
+        // Silently log or provide fallback. Do not throw fatal error to user
+        console.warn("School settings sync status:", error.message);
       }
-    };
-    fetchSettings();
+    );
+    
+    return () => unsubscribe();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -76,7 +79,7 @@ const AuthForm: React.FC = () => {
                     <img src={settings.schoolLogoUrl} alt="Logo" className="w-12 h-12 object-contain rounded-lg shadow-lg" />
                 ) : (
                     <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="white" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 0 0-.491 6.347A48.627 48.627 0 0 1 12 20.904a48.627 48.627 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.57 50.57 0 0 0-2.658-.813A59.905 59.905 0 0 1 12 3.493a59.902 59.902 0 0 1 10.499 5.221 69.17 69.17 0 0 0-2.692.813m-15.482 0a50.553 50.553 0 0 1 9.566-5.382m5.916 5.382a50.572 50.572 0 0 0 9.566-5.382" /></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="white" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 0 0-.491 6.347A48.627 48.627 0 0 1 12 20.904a48.627 48.627 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.57 50.57 0 0 0-2.658-.813A59.905 59.905 0 0 1 12 3.493a59.902 59.902 0 0 1 10.499 5.221 69.17 69.17 0 0 0-2.692.813m-15.482 0a50.553 50.553 0 1 9.566-5.382m5.916 5.382a50.572 50.572 0 0 0 9.566-5.382" /></svg>
                     </div>
                 )}
                 <span className="text-xl font-bold text-slate-200 tracking-wide uppercase">EduTec Platform</span>

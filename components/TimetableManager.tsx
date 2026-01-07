@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { db, firebase } from '../services/firebase';
 import { Timetable, TimetablePeriod, GES_STANDARD_CURRICULUM, GES_CLASSES, TimetableData } from '../types';
@@ -218,8 +217,9 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
                 `;
 
                 try {
+                    // FIX: Updated model name to 'gemini-3-pro-preview' for complex timetable generation tasks as per guidelines.
                     const response = await ai.models.generateContent({
-                        model: 'gemini-2.5-flash',
+                        model: 'gemini-3-pro-preview',
                         contents: prompt,
                         config: {
                             responseMimeType: 'application/json',
@@ -241,7 +241,8 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ classId, readOnly =
 
                     // Update Global Teacher Schedule for the next iteration
                     Object.entries(generatedData).forEach(([day, periods]) => {
-                        periods.forEach(p => {
+                        // FIX: Added explicit type cast to resolve 'Property forEach does not exist on type unknown' error.
+                        (periods as TimetablePeriod[]).forEach(p => {
                             if (p.teacher && p.teacher !== 'N/A' && p.subject !== 'Break') {
                                 if (!globalTeacherSchedule[p.teacher]) {
                                     globalTeacherSchedule[p.teacher] = {};

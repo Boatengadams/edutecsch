@@ -1,8 +1,7 @@
-
 import React from 'react';
 
 export interface FlyerData {
-  style: 'Modern' | 'Classic' | 'Bold' | 'Playful' | 'Urgent';
+  style: 'Modern' | 'Classic' | 'Bold' | 'Playful' | 'Urgent' | 'Brutalist' | 'Glass' | 'Elite';
   headline: string;
   subheadline: string;
   details: string[];
@@ -10,26 +9,24 @@ export interface FlyerData {
   location: string;
   emoji: string;
   footer: string;
-  generatedImageUrl?: string; // Support for AI generated images
+  generatedImageUrl?: string;
 }
 
 interface FlyerCardProps {
-  data: FlyerData | string; // Can handle legacy string content, new JSON, or raw text
+  data: FlyerData | string;
   onClick?: () => void;
   className?: string;
-  imageUrl?: string; // Direct override
+  imageUrl?: string;
 }
 
 const FlyerCard: React.FC<FlyerCardProps> = ({ data, onClick, className = '', imageUrl }) => {
-  // Safe parsing for backward compatibility
   let content: FlyerData;
   let isLegacy = false;
 
   if (typeof data === 'string') {
     try {
       content = JSON.parse(data);
-      // Basic validation to ensure it's our structure
-      if (!content.headline && !content.generatedImageUrl) throw new Error("Not structured flyer");
+      if (!content.headline && !content.generatedImageUrl) throw new Error("Not structured");
     } catch (e) {
       isLegacy = true;
       content = {
@@ -47,93 +44,83 @@ const FlyerCard: React.FC<FlyerCardProps> = ({ data, onClick, className = '', im
     content = data;
   }
   
-  // Prioritize passed prop, then internal data
   const displayImage = imageUrl || content.generatedImageUrl;
 
-  // If it's a purely image-based flyer (AI Generated)
   if (displayImage) {
       return (
-          <div onClick={onClick} className={`relative overflow-hidden rounded-xl shadow-xl transition-all duration-300 hover:scale-[1.02] cursor-pointer bg-slate-900 border border-slate-700 group ${className}`}>
-              <img src={displayImage} alt="Flyer" className="w-full h-auto object-cover" />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors"></div>
+          <div onClick={onClick} className={`relative overflow-hidden rounded-[2rem] shadow-2xl transition-all duration-500 hover:scale-[1.02] cursor-pointer bg-slate-900 border-4 border-white/5 group ${className}`}>
+              <img src={displayImage} alt="Event Flyer" className="w-full h-auto object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-8">
+                  <p className="text-white font-black uppercase tracking-widest text-xs">View Full Announcement</p>
+              </div>
           </div>
       );
   }
 
-  const baseStyles = "relative overflow-hidden rounded-xl shadow-xl transition-all duration-300 hover:scale-[1.02] cursor-pointer flex flex-col";
+  const baseStyles = "relative overflow-hidden rounded-[2.5rem] shadow-2xl transition-all duration-500 hover:scale-[1.03] cursor-pointer flex flex-col min-h-[320px]";
   
   const themeStyles: Record<string, string> = {
-      Modern: "bg-gradient-to-br from-slate-900 to-slate-800 text-white border border-slate-700",
-      Classic: "bg-[#fdfbf7] text-slate-900 border-t-4 border-blue-900 font-serif",
-      Bold: "bg-blue-600 text-white border-none",
-      Playful: "bg-gradient-to-tr from-yellow-400 to-orange-500 text-slate-900",
-      Urgent: "bg-red-600 text-white border-2 border-red-400"
+      Modern: "bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white border border-white/10",
+      Classic: "bg-[#fffcf5] text-slate-900 border-t-[12px] border-blue-900 font-serif",
+      Bold: "bg-blue-600 text-white border-none shadow-[0_20px_50px_rgba(37,99,235,0.3)]",
+      Playful: "bg-gradient-to-tr from-yellow-400 via-orange-500 to-pink-500 text-slate-950",
+      Urgent: "bg-red-600 text-white border-4 border-red-400 animate-pulse",
+      Brutalist: "bg-yellow-400 text-black border-[6px] border-black shadow-[12px_12px_0_0_rgba(0,0,0,1)] font-black",
+      Glass: "bg-indigo-950/40 backdrop-blur-3xl text-white border border-white/20 shadow-[0_0_30px_rgba(99,102,241,0.2)]",
+      Elite: "bg-gradient-to-br from-black via-slate-900 to-[#022c22] text-white border-l-[10px] border-emerald-500"
   };
 
   const currentTheme = themeStyles[content.style] || themeStyles.Modern;
 
-  if (isLegacy) {
-      // Simple render for old text notices
-      return (
-          <div onClick={onClick} className={`p-5 bg-slate-800 border-l-4 border-blue-500 rounded-r-xl shadow-md cursor-pointer hover:bg-slate-750 transition-colors ${className}`}>
-              <h4 className="font-bold text-white mb-2 flex items-center gap-2">📢 Notice</h4>
-              <p className="text-sm text-slate-300 whitespace-pre-wrap">{content.details[0]}</p>
-          </div>
-      );
-  }
-
   return (
-    <div onClick={onClick} className={`${baseStyles} ${currentTheme} ${className} min-h-[220px]`}>
-        {/* Background Patterns */}
-        <div className="absolute top-0 right-0 p-8 opacity-10 text-9xl font-black select-none pointer-events-none transform translate-x-4 -translate-y-4">
+    <div onClick={onClick} className={`${baseStyles} ${currentTheme} ${className}`}>
+        {/* Background Text Decor */}
+        <div className="absolute top-0 right-0 p-6 opacity-[0.03] text-[12rem] font-black select-none pointer-events-none transform translate-x-12 -translate-y-12">
             {content.emoji}
         </div>
-        
-        {content.style === 'Playful' && (
-            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/confetti.png')] opacity-20"></div>
-        )}
-        {content.style === 'Classic' && (
-            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cream-paper.png')] opacity-50"></div>
-        )}
 
-        <div className="relative z-10 p-6 flex flex-col h-full">
-            {/* Header */}
-            <div className="mb-4">
-                <div className="flex justify-between items-start">
-                    <span className="text-4xl shadow-sm filter drop-shadow-lg">{content.emoji}</span>
-                    {content.date && (
-                        <span className={`text-xs font-bold uppercase tracking-widest px-2 py-1 rounded ${content.style === 'Classic' || content.style === 'Playful' ? 'bg-black/10 text-black' : 'bg-white/20 text-white'}`}>
-                            {content.date}
-                        </span>
-                    )}
+        <div className="relative z-10 p-8 flex flex-col h-full">
+            <div className="flex justify-between items-start mb-6">
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-4xl shadow-xl ${content.style === 'Brutalist' ? 'bg-white border-4 border-black' : 'bg-white/10 backdrop-blur-md'}`}>
+                    {content.emoji}
                 </div>
-                <h3 className={`text-2xl font-black mt-2 leading-tight ${content.style === 'Classic' ? 'font-serif tracking-tight' : 'font-sans tracking-tight'}`}>
+                {content.date && (
+                    <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-lg ${content.style === 'Brutalist' ? 'bg-black text-white' : 'bg-white/20 text-white'}`}>
+                        {content.date}
+                    </div>
+                )}
+            </div>
+
+            <div className="space-y-2 mb-6">
+                <h3 className={`text-4xl font-black leading-[0.9] tracking-tighter uppercase ${content.style === 'Classic' ? 'font-serif normal-case' : ''}`}>
                     {content.headline}
                 </h3>
                 {content.subheadline && (
-                    <p className={`text-sm font-medium mt-1 ${content.style === 'Classic' || content.style === 'Playful' ? 'text-slate-700' : 'text-blue-100'}`}>
+                    <p className={`text-sm font-bold opacity-80 tracking-wide uppercase ${content.style === 'Brutalist' ? 'bg-black text-yellow-400 px-2 py-0.5 inline-block' : ''}`}>
                         {content.subheadline}
                     </p>
                 )}
             </div>
 
-            {/* Details Body */}
-            <div className={`flex-grow space-y-2 text-sm ${content.style === 'Classic' || content.style === 'Playful' ? 'text-slate-800' : 'text-slate-100'}`}>
+            <div className="flex-grow space-y-3">
                 {content.details.map((point, idx) => (
-                    <div key={idx} className="flex items-start gap-2">
-                        <span className="mt-1">•</span>
-                        <span>{point}</span>
+                    <div key={idx} className="flex items-start gap-3">
+                        <div className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${content.style === 'Brutalist' ? 'bg-black' : 'bg-current opacity-50'}`}></div>
+                        <p className="text-sm font-medium leading-relaxed">{point}</p>
                     </div>
                 ))}
             </div>
 
-            {/* Footer / Location */}
-            {(content.location || content.footer) && (
-                <div className={`mt-6 pt-3 border-t flex justify-between items-end text-xs font-bold uppercase tracking-wider ${content.style === 'Classic' || content.style === 'Playful' ? 'border-black/10 text-slate-600' : 'border-white/20 text-white/80'}`}>
-                    <span>📍 {content.location}</span>
-                    <span>{content.footer}</span>
+            <div className={`mt-8 pt-6 border-t flex justify-between items-end ${content.style === 'Brutalist' ? 'border-black' : 'border-white/10'}`}>
+                <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase opacity-50 tracking-widest">Location</p>
+                    <p className="text-xs font-bold uppercase tracking-wider">📍 {content.location || 'Campus Wide'}</p>
                 </div>
-            )}
+                <div className="text-right">
+                    <p className="text-[9px] font-black uppercase opacity-40 tracking-tighter mb-1">Official Notice</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest">{content.footer || 'Edutec Schools'}</p>
+                </div>
+            </div>
         </div>
     </div>
   );

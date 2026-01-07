@@ -54,8 +54,9 @@ const LabAssistant: React.FC<LabAssistantProps> = ({ activeLab, level }) => {
                 Keep it under 60 words. Use a supportive tone.
             `;
             
+            // FIX: Updated model name to 'gemini-3-flash-preview' for basic text tasks as per guidelines.
             const res = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3-flash-preview',
                 contents: prompt
             });
             

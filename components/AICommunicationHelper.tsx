@@ -33,8 +33,9 @@ const AICommunicationHelper: React.FC = () => {
             
             Ensure the language is appropriate for a school setting. If it's a WhatsApp message, keep it brief. If it's an email, include a subject line.`;
 
+            // FIX: Updated model name to 'gemini-3-flash-preview' for basic text tasks as per guidelines.
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3-flash-preview',
                 contents: prompt
             });
 

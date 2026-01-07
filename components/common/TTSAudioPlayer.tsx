@@ -54,8 +54,9 @@ const TTSAudioPlayer: React.FC<TTSAudioPlayerProps> = ({ textToSpeak }) => {
       audioSourceRef.current.disconnect();
       audioSourceRef.current = null;
     }
-    if (window.speechSynthesis.speaking) {
-        window.speechSynthesis.cancel();
+    // FIX: Cast window to any for SpeechSynthesis
+    if ((window as any).speechSynthesis && (window as any).speechSynthesis.speaking) {
+        (window as any).speechSynthesis.cancel();
     }
     setIsPlaying(false);
   };
@@ -91,6 +92,7 @@ const TTSAudioPlayer: React.FC<TTSAudioPlayerProps> = ({ textToSpeak }) => {
         throw new Error("No audio data received from API.");
       }
 
+      // FIX: Cast window to any for webkitAudioContext
       if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       }
@@ -119,16 +121,17 @@ const TTSAudioPlayer: React.FC<TTSAudioPlayerProps> = ({ textToSpeak }) => {
     } catch (err: any) {
       console.warn("TTS Error, falling back to browser synthesis:", err.message);
       // Fallback to browser's native SpeechSynthesis
+      // FIX: Cast window and globals to any for SpeechSynthesis
       if ('speechSynthesis' in window) {
-          const utterance = new SpeechSynthesisUtterance(textToSpeak);
+          const utterance = new (window as any).SpeechSynthesisUtterance(textToSpeak);
           utterance.onstart = () => setIsPlaying(true);
           utterance.onend = () => setIsPlaying(false);
-          utterance.onerror = (e) => {
+          utterance.onerror = (e: any) => {
               console.error("Browser TTS Error:", e);
               setError('Could not play audio'); 
               setIsPlaying(false);
           };
-          window.speechSynthesis.speak(utterance);
+          (window as any).speechSynthesis.speak(utterance);
       } else {
           console.error("Audio playback not supported.");
           setError('Not supported');

@@ -1,6 +1,5 @@
 
 import { useState } from 'react';
-// FIX: Import firebase for FieldValue
 import { secondaryAuth, db, firebase } from '../services/firebase';
 import type { ParsedUser, UserProfile, UserRole } from '../types';
 
@@ -41,12 +40,10 @@ export const useBatchCreateUsers = () => {
         }
 
         try {
-            // FIX: Changed to v8 compat syntax.
             const userCredential = await secondaryAuth.createUserWithEmailAndPassword(email, password);
             const newUser = userCredential.user;
             if (!newUser) throw new Error("Auth creation failed.");
             
-            // FIX: Changed to v8 compat syntax.
             await newUser.updateProfile({ displayName: user.name });
 
             const profileData: Partial<UserProfile> = {
@@ -55,12 +52,13 @@ export const useBatchCreateUsers = () => {
                 name: user.name,
                 role,
                 status: 'pending',
-                // FIX: Cast serverTimestamp to Timestamp to match the UserProfile type.
                 createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
                 xp: 0,
                 level: 1,
                 badges: [],
                 portfolioItems: [],
+                attendanceRate: 0,
+                completionRate: 0
             };
             if (role === "student" && classId) {
                 profileData.class = classId;
@@ -69,7 +67,6 @@ export const useBatchCreateUsers = () => {
                 profileData.childUids = [user.linkedStudentId];
             }
 
-            // FIX: Use v8 compat setDoc syntax
             await db.collection('users').doc(newUser.uid).set(profileData);
             
             // Handle Parent-Child Linking Reverse Side (Update Student)
@@ -79,7 +76,6 @@ export const useBatchCreateUsers = () => {
                 });
             }
 
-            // FIX: Changed to v8 compat syntax.
             await secondaryAuth.signOut();
             creationResults.push({ name: user.name, email: user.email!, success: true, password });
 

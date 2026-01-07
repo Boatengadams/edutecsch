@@ -1,5 +1,3 @@
-
-// ... existing imports ...
 import React, { useState, useEffect, useRef } from 'react';
 import { db, storage, functions, firebase } from '../services/firebase';
 import { SchoolEvent, SchoolEventType, SchoolEventAudience, EVENT_TYPES, EVENT_AUDIENCE, PublishedFlyer, UserRole } from '../types';
@@ -7,12 +5,10 @@ import Card from './common/Card';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
 import { useToast } from './common/Toast';
-import { GoogleGenAI, Modality } from '@google/genai';
-import FlyerCard from './common/FlyerCard';
+import { GoogleGenAI } from '@google/genai';
 import { useAuthentication } from '../hooks/useAuth';
 import ConfirmationModal from './common/ConfirmationModal';
 
-// ... existing helper functions (blobToBase64, dataURItoBlob) ...
 interface GeneratedOption {
     id: number;
     imageUrl: string;
@@ -65,7 +61,7 @@ const AdminCalendar: React.FC = () => {
     const [type, setType] = useState<SchoolEventType>('Event');
     const [audience, setAudience] = useState<SchoolEventAudience>('All');
     
-    // Professional Flyer State
+    // Designer State
     const [showFlyerDesigner, setShowFlyerDesigner] = useState(false);
     const [flyerStep, setFlyerStep] = useState<'idle' | 'searching' | 'generating' | 'selecting' | 'editing'>('idle');
     const [generatedOptions, setGeneratedOptions] = useState<GeneratedOption[]>([]);
@@ -95,8 +91,6 @@ const AdminCalendar: React.FC = () => {
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
-            
-            // SECURITY: Basic Validation
             if (file.size > 5 * 1024 * 1024) {
                 showToast("File size too large. Please upload an image under 5MB.", "error");
                 return;
@@ -105,20 +99,18 @@ const AdminCalendar: React.FC = () => {
                 showToast("Invalid file type. Please upload a valid image (JPG, PNG).", "error");
                 return;
             }
-
             setUploadedImage(file);
             setUploadedImagePreview(URL.createObjectURL(file));
         }
     };
     
-    // ... (rest of the component logic remains unchanged: handleGenerateOptions, handleEditImage, handleSaveAll, etc.)
     const handleGenerateOptions = async () => {
         if (!title) {
             showToast("Please enter an event title first.", "error");
             return;
         }
         setFlyerStep('searching');
-        setGenerationProgress("AI Engine: Analyzing trends & branding...");
+        setGenerationProgress("Synthesizing Design Intelligence...");
         setGeneratedOptions([]);
 
         try {
@@ -127,37 +119,21 @@ const AdminCalendar: React.FC = () => {
             const motto = schoolSettings?.schoolMotto || "Excellence";
             
             const systemInstruction = `
-                Build an advanced AI Flyer Generator Engine that produces studio-quality, professional, modern, and outstanding school flyers that eliminate the need for any traditional flyer designer.
-
-                The system must automatically search across multiple platforms (Google Images, Pinterest, Instagram, Behance, Dribbble, Facebook) for top-tier flyer inspirations in education, branding, design, and event promotion.
-
-                Use these references to understand:
-                • modern layout structures
-                • color harmony & visual balance
-                • premium typography styles
-                • contrast & composition rules
-                • high-impact educational flyer trends
-                • branding integration techniques
-
-                Using this intelligence, generate three (3) unique world-class flyer PROMPTS (for an image generation model) each time.
+                You are a senior world-class graphic designer specializing in high-end academic and luxury branding. 
+                Generate three unique, distinct, and professional flyer concepts.
+                Styles to produce: 
+                1. Neo-Brutalist (Bold yellow/black, thick borders)
+                2. Glassmorphism (Frosty indigo/white, elegant)
+                3. Modern Premium (Sleek dark theme, high saturation accents)
+                Return a JSON object with a "prompts" array.
             `;
 
             const userPrompt = `
-                Generate 3 prompts for the event: "${title}".
-                Type: ${type}.
+                Create 3 prompts for the event: "${title}".
                 Details: ${description}.
-                School Name: "${schoolName}".
-                Motto: "${motto}".
-                Target Audience: ${audience}.
-                ${uploadedImage ? "NOTE: The user has uploaded a photo to be integrated. The prompt must explicitly instruct the image generator to seamlessly blend a user-provided photo into the layout." : ""}
-
-                Required Styles:
-                1. Modern Premium (sleek, minimal, luxury-class)
-                2. Creative Vibrant (colorful, energetic, youth-focused)
-                3. Professional Academic (formal, clean, institutional)
-
-                Output a JSON object with a "prompts" array. Each item should have "style" (string) and "prompt" (string).
-                The prompt string must be extremely detailed for an image generator (like Imagen 3), specifying lighting, resolution (4k), typography style, and composition.
+                School: "${schoolName}". Motto: "${motto}".
+                Target: ${audience}.
+                Output format: { "prompts": [ { "style": "string", "prompt": "very detailed image prompt here" } ] }
             `;
 
             const textResponse = await ai.models.generateContent({
@@ -165,7 +141,6 @@ const AdminCalendar: React.FC = () => {
                 contents: userPrompt,
                 config: { 
                     systemInstruction: systemInstruction,
-                    tools: [{ googleSearch: {} }],
                     responseMimeType: 'application/json' 
                 }
             });
@@ -173,13 +148,9 @@ const AdminCalendar: React.FC = () => {
             const result = JSON.parse(textResponse.text || '{}');
             const prompts: {style: string, prompt: string}[] = result.prompts || [];
 
-            if (prompts.length === 0) throw new Error("Failed to generate design prompts.");
-
-            // Step B: Generate Images in Parallel (Nano Banana)
             setFlyerStep('generating');
-            setGenerationProgress("Studio Engine: Rendering 3 high-fidelity concepts...");
+            setGenerationProgress("Neural Rendering 4K Concepts...");
             
-            // Prepare uploaded image if exists
             let imagePart: { inlineData: { mimeType: string, data: string } } | null = null;
             if (uploadedImage) {
                 const base64 = await blobToBase64(uploadedImage);
@@ -188,22 +159,13 @@ const AdminCalendar: React.FC = () => {
 
             const imagePromises = prompts.map(async (item, index) => {
                 try {
-                    const promptText = `
-                        ${item.prompt}. 
-                        Ensure the text "${title}" and "${schoolName}" is legible and professional. 
-                        High resolution, 8k, photorealistic, graphic design masterpiece.
-                    `;
-
+                    const promptText = `${item.prompt}. Ensure the text "${title}" and "${schoolName}" is extremely crisp, legible, and part of the professional design.`;
                     const contents: any[] = [{ text: promptText }];
-                    if (imagePart) {
-                        contents.push(imagePart);
-                        contents[0].text += " Use the provided image as the central focal point, blended professionally with the background.";
-                    }
+                    if (imagePart) contents.push(imagePart);
 
                     const imageRes = await ai.models.generateContent({
                         model: 'gemini-2.5-flash-image',
-                        contents: contents,
-                        // config: { responseModalities: [Modality.IMAGE] } 
+                        contents: contents
                     });
                     
                     const part = imageRes?.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
@@ -216,386 +178,214 @@ const AdminCalendar: React.FC = () => {
                         };
                     }
                 } catch (e) {
-                    console.error(`Failed to generate image ${index}`, e);
+                    console.error(`Render failed ${index}`, e);
                 }
                 return null;
             });
 
             const images = (await Promise.all(imagePromises)).filter(Boolean) as GeneratedOption[];
-            
-            if (images.length === 0) throw new Error("Image generation failed.");
+            if (images.length === 0) throw new Error("Neural engine rejected the prompt.");
             
             setGeneratedOptions(images);
             setFlyerStep('selecting');
 
         } catch (err: any) {
-            console.error(err);
-            showToast(`Design failed: ${err.message}`, 'error');
+            showToast(`Engine Fault: ${err.message}`, 'error');
             setFlyerStep('idle');
         }
     };
 
-    const handleEditImage = async () => {
-        if (!selectedOption || !editPrompt.trim()) return;
-        
-        setIsEditingImage(true);
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const base64Data = selectedOption.imageUrl.split(',')[1];
-            
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash-image', 
-                contents: [
-                    {
-                        role: 'user',
-                        parts: [
-                            { text: `Refine this flyer design. Instruction: ${editPrompt}. Maintain high resolution and text legibility. Keep the school branding.` },
-                            { inlineData: { mimeType: 'image/png', data: base64Data } }
-                        ]
-                    }
-                ]
-            });
-
-            const part = response?.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-            if (part && part.inlineData) {
-                const newImageUrl = `data:image/png;base64,${part.inlineData.data}`;
-                setSelectedOption({
-                    ...selectedOption,
-                    imageUrl: newImageUrl
-                });
-                setEditPrompt('');
-                showToast("Design refined successfully!", "success");
-            } else {
-                throw new Error("No image returned from edit.");
-            }
-        } catch (err: any) {
-            console.error(err);
-            showToast("Edit failed. Try a different prompt.", "error");
-        } finally {
-            setIsEditingImage(false);
-        }
-    };
-
-    const handleSaveAll = async () => {
+    const handleBroadcast = async () => {
         if (!title || !date) {
-            showToast("Please complete event details.", "error");
+            showToast("Required: Title and Date.", "error");
             return;
         }
         
         setIsSaving(true);
         try {
-            // A. Save Calendar Event
-            const newEvent: Omit<SchoolEvent, 'id'> = {
+            // 1. Create the Calendar Record
+            const eventRef = db.collection('calendarEvents').doc();
+            await eventRef.set({
                 title,
                 description,
                 date,
                 type,
                 audience,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
-                createdBy: 'admin',
-                createdByName: 'Administrator'
-            };
-            
-            const eventPromise = db.collection('calendarEvents').add(newEvent);
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                createdBy: 'admin'
+            });
 
-            // B. Upload & Save Flyer
-            let flyerPromise = Promise.resolve(null as any);
-            
+            // 2. Process and Broadcast Flyer
             if (selectedOption) {
                 const blob = dataURItoBlob(selectedOption.imageUrl);
+                if (!blob) throw new Error("Image buffer corrupted.");
                 
-                if (!blob) throw new Error("Failed to process image data.");
-                
-                const fileName = `flyers/${Date.now()}_${title.replace(/\s+/g, '_')}.png`;
+                const fileName = `flyers/${eventRef.id}.png`;
                 const storageRef = storage.ref(fileName);
+                await storageRef.put(blob);
+                const downloadURL = await storageRef.getDownloadURL();
+
+                const flyerData: Omit<PublishedFlyer, 'id'> = {
+                    title: `Broadcast: ${title}`,
+                    content: description || title,
+                    imageUrl: downloadURL,
+                    targetAudience: audience === 'All' ? 'all' : 'role',
+                    publisherId: 'admin',
+                    publisherName: 'School Executive Command',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp() as any,
+                    targetRoles: audience === 'All' ? ['student', 'teacher', 'parent'] : 
+                                 audience === 'Students' ? ['student'] : 
+                                 audience === 'Teachers' ? ['teacher'] : ['parent']
+                };
+
+                await db.collection('publishedFlyers').add(flyerData);
                 
-                flyerPromise = storageRef.put(blob)
-                    .then(async (snapshot) => {
-                         const downloadURL = await snapshot.ref.getDownloadURL();
-                         
-                         let targetRoles: UserRole[] = [];
-                         if (audience === 'Students') targetRoles = ['student'];
-                         else if (audience === 'Parents') targetRoles = ['parent'];
-                         else if (audience === 'Teachers') targetRoles = ['teacher'];
-
-                         const flyerData: Omit<PublishedFlyer, 'id'> = {
-                             title: `📢 ${title}`,
-                             content: description || `Upcoming ${type}: ${title}`,
-                             imageUrl: downloadURL,
-                             targetAudience: audience === 'All' ? 'all' : 'role',
-                             publisherId: 'admin-auto',
-                             publisherName: 'School Admin',
-                             createdAt: firebase.firestore.FieldValue.serverTimestamp() as firebase.firestore.Timestamp,
-                             ...(targetRoles.length > 0 ? { targetRoles } : {})
-                         };
-
-                         await db.collection('publishedFlyers').add(flyerData);
-                         
-                         const broadcastFn = functions.httpsCallable('sendBroadcastNotification');
-                         
-                         broadcastFn({
-                             title: `New Flyer: ${title}`,
-                             message: description || "Check the notice board for details.",
-                             targetAudience: audience === 'All' ? 'all' : 'role',
-                             targetRoles: targetRoles
-                         }).catch(err => console.error("Notification broadcast failed:", err));
-
-                         return true;
-                    })
-                    .catch((error) => {
-                         console.error("Storage upload failed:", error);
-                         throw new Error("Failed to upload flyer image. Please try again.");
-                    });
+                // 3. Trigger Global Alerts via Cloud Function
+                const broadcastFn = functions.httpsCallable('sendBroadcastNotification');
+                broadcastFn({
+                    title: `📢 New School Broadcast`,
+                    message: title,
+                    targetAudience: flyerData.targetAudience,
+                    targetRoles: flyerData.targetRoles
+                }).catch(err => console.warn("Broadcast alert failed:", err));
             }
 
-            await Promise.all([eventPromise, flyerPromise]);
-
-            showToast('Event and Flyer published successfully!', 'success');
+            showToast('Global Broadcast Successfully Deployed 🚀', 'success');
             resetForm();
 
         } catch (err: any) {
-            console.error(err);
-            showToast(`Error: ${err.message}`, 'error');
+            showToast(`Broadcast Interrupted: ${err.message}`, 'error');
         } finally {
             setIsSaving(false);
         }
     };
 
     const resetForm = () => {
-        setTitle('');
-        setDescription('');
-        setDate('');
-        setShowFlyerDesigner(false);
-        setFlyerStep('idle');
-        setGeneratedOptions([]);
-        setSelectedOption(null);
-        setUploadedImage(null);
-        setUploadedImagePreview(null);
-    };
-
-    const handleDelete = async () => {
-        if (!eventToDelete) return;
-        setIsDeleting(true);
-        try {
-            await db.collection('calendarEvents').doc(eventToDelete).delete();
-            showToast('Event deleted successfully', 'success');
-        } catch (err: any) {
-            showToast(`Error deleting event: ${err.message}`, 'error');
-        } finally {
-            setIsDeleting(false);
-            setEventToDelete(null);
-        }
+        setTitle(''); setDescription(''); setDate('');
+        setShowFlyerDesigner(false); setFlyerStep('idle');
+        setGeneratedOptions([]); setSelectedOption(null);
+        setUploadedImage(null); setUploadedImagePreview(null);
     };
 
     return (
-        <div className="space-y-6">
-            <h2 className="text-3xl font-bold">School Calendar & Events</h2>
+        <div className="space-y-8 animate-fade-in-up">
+            <div className="flex justify-between items-end">
+                <div>
+                    <h2 className="text-4xl font-black text-white tracking-tighter uppercase">School <span className="text-blue-500">Notice Board</span></h2>
+                    <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.4em] mt-2">Executive Broadcast Terminal</p>
+                </div>
+            </div>
             
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* ... UI structure is mostly unchanged, referencing the updated handlers ... */}
-                <div className="lg:col-span-1">
-                    <Card>
-                        <h3 className="text-lg font-bold mb-4">Add New Event</h3>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div className="lg:col-span-4 space-y-6">
+                    <Card className="!bg-slate-900/60 border-white/5">
+                        <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] mb-6">Dispatch Details</h3>
                         <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm text-gray-400 mb-1">Title</label>
-                                <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-700" placeholder="e.g. Science Fair 2025" />
-                            </div>
-                            <div>
-                                <label className="block text-sm text-gray-400 mb-1">Date</label>
-                                <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-2 bg-slate-800 rounded border border-slate-700" />
-                            </div>
+                            <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-slate-950 border border-white/10 rounded-2xl p-4 text-sm outline-none focus:border-blue-500" placeholder="Headline" />
+                            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full bg-slate-950 border border-white/10 rounded-2xl p-4 text-sm text-white" />
                             <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm text-gray-400 mb-1">Type</label>
-                                    <select value={type} onChange={e => setType(e.target.value as SchoolEventType)} className="w-full p-2 bg-slate-800 rounded border border-slate-700">
-                                        {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm text-gray-400 mb-1">Audience</label>
-                                    <select value={audience} onChange={e => setAudience(e.target.value as SchoolEventAudience)} className="w-full p-2 bg-slate-800 rounded border border-slate-700">
-                                        {EVENT_AUDIENCE.map(a => <option key={a} value={a}>{a}</option>)}
-                                    </select>
-                                </div>
+                                <select value={type} onChange={e => setType(e.target.value as any)} className="bg-slate-950 border border-white/10 rounded-2xl p-4 text-xs font-bold uppercase">
+                                    {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                                <select value={audience} onChange={e => setAudience(e.target.value as any)} className="bg-slate-950 border border-white/10 rounded-2xl p-4 text-xs font-bold uppercase">
+                                    {EVENT_AUDIENCE.map(a => <option key={a} value={a}>{a}</option>)}
+                                </select>
                             </div>
-                            <div>
-                                <label className="block text-sm text-gray-400 mb-1">Details (Optional)</label>
-                                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className="w-full p-2 bg-slate-800 rounded border border-slate-700" placeholder="Additional info..." />
-                            </div>
+                            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className="w-full bg-slate-950 border border-white/10 rounded-2xl p-4 text-sm outline-none resize-none" placeholder="Announcement details..." />
                             
-                            {!showFlyerDesigner && (
-                                <Button variant="secondary" onClick={() => setShowFlyerDesigner(true)} className="w-full bg-gradient-to-r from-purple-900/40 to-blue-900/40 text-white hover:from-purple-900/60 hover:to-blue-900/60 border border-purple-500/30">
-                                    ✨ Open Flyer Studio
-                                </Button>
-                            )}
-
-                            {showFlyerDesigner && (
-                                <div className="bg-slate-900 p-4 rounded-xl border border-purple-500/50 animate-fade-in-down shadow-2xl">
-                                    <div className="flex justify-between items-center mb-3 border-b border-purple-500/20 pb-2">
-                                        <h4 className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 flex items-center gap-2">
-                                            <span className="text-lg">🎨</span> AI Flyer Engine
-                                        </h4>
-                                        <button onClick={() => setShowFlyerDesigner(false)} className="text-slate-500 hover:text-white">&times;</button>
-                                    </div>
-                                    
+                            {!showFlyerDesigner ? (
+                                <button onClick={() => setShowFlyerDesigner(true)} className="w-full py-4 rounded-2xl border-2 border-dashed border-blue-500/30 text-blue-400 font-black uppercase text-[10px] tracking-widest hover:bg-blue-500/5 transition-all">
+                                    ✨ Start Flyer Designer
+                                </button>
+                            ) : (
+                                <div className="bg-slate-950 p-6 rounded-3xl border border-blue-500/50 space-y-6">
                                     {flyerStep === 'idle' && (
-                                        <div className="space-y-4">
-                                            <div className="bg-slate-800/50 p-3 rounded-lg border border-dashed border-slate-600">
-                                                <p className="text-xs text-slate-400 mb-2 font-bold uppercase">Optional: Add Photo</p>
-                                                <div className="flex items-center gap-3">
-                                                    <button 
-                                                        onClick={() => fileInputRef.current?.click()} 
-                                                        className="w-16 h-16 bg-slate-800 rounded-lg flex items-center justify-center border border-slate-600 hover:bg-slate-700 transition-colors"
-                                                    >
-                                                        {uploadedImagePreview ? (
-                                                            <img src={uploadedImagePreview} className="w-full h-full object-cover rounded-lg" alt="Preview" />
-                                                        ) : (
-                                                            <span className="text-2xl">📷</span>
-                                                        )}
-                                                    </button>
-                                                    <div className="flex-1">
-                                                        <p className="text-[10px] text-slate-500">
-                                                            Upload a picture to integrate into the design (e.g. school building, logo, or students). Max 5MB.
-                                                        </p>
-                                                        <input 
-                                                            type="file" 
-                                                            ref={fileInputRef} 
-                                                            className="hidden" 
-                                                            accept="image/*"
-                                                            onChange={handleImageUpload}
-                                                        />
-                                                    </div>
-                                                    {uploadedImage && (
-                                                        <button onClick={() => { setUploadedImage(null); setUploadedImagePreview(null); }} className="text-red-400 hover:text-red-300">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
-                                                        </button>
-                                                    )}
-                                                </div>
+                                        <>
+                                            <div className="flex items-center gap-4">
+                                                <button onClick={() => fileInputRef.current?.click()} className="w-20 h-20 bg-slate-900 rounded-2xl border border-dashed border-slate-700 flex items-center justify-center overflow-hidden">
+                                                    {uploadedImagePreview ? <img src={uploadedImagePreview} className="w-full h-full object-cover" /> : <span className="text-2xl">📸</span>}
+                                                </button>
+                                                <div className="flex-1"><p className="text-[10px] text-slate-500 font-bold uppercase leading-tight">Add Visual Asset (Optional)</p></div>
+                                                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
                                             </div>
-
-                                            <Button onClick={handleGenerateOptions} className="w-full bg-gradient-to-r from-purple-600 to-blue-600 py-3 font-bold shadow-lg shadow-purple-900/30">
-                                                🚀 Generate Professional Concepts
-                                            </Button>
-                                            <p className="text-[10px] text-center text-slate-500">
-                                                Powered by Google Search & Imagen 3
-                                            </p>
-                                        </div>
+                                            <Button onClick={handleGenerateOptions} className="w-full py-4 text-[10px] font-black tracking-widest uppercase">Generate Design Concepts</Button>
+                                        </>
                                     )}
 
                                     {(flyerStep === 'searching' || flyerStep === 'generating') && (
-                                        <div className="text-center py-8">
+                                        <div className="text-center py-10 space-y-4">
                                             <Spinner />
-                                            <p className="text-xs text-purple-300 mt-4 animate-pulse font-mono">{generationProgress}</p>
+                                            <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em] animate-pulse">{generationProgress}</p>
                                         </div>
                                     )}
 
                                     {flyerStep === 'selecting' && (
-                                        <div className="space-y-4">
-                                            <p className="text-xs text-slate-400 font-bold uppercase">Select a Design:</p>
-                                            <div className="grid grid-cols-3 gap-3">
-                                                {generatedOptions.map(opt => (
-                                                    <div 
-                                                        key={opt.id} 
-                                                        onClick={() => { setSelectedOption(opt); setFlyerStep('editing'); }}
-                                                        className="aspect-[3/4] rounded-lg overflow-hidden border-2 border-transparent hover:border-purple-500 cursor-pointer relative group transition-all hover:scale-105 shadow-md"
-                                                    >
-                                                        <img src={opt.imageUrl} alt="Option" className="w-full h-full object-cover" />
-                                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2 text-center">
-                                                            <span className="text-white font-bold text-xs">{opt.style}</span>
-                                                            <span className="text-[10px] text-purple-300 mt-1">Click to Select</span>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                            <Button size="sm" variant="secondary" onClick={handleGenerateOptions} className="w-full text-xs">
-                                                ↻ Regenerate All
-                                            </Button>
+                                        <div className="grid grid-cols-3 gap-3">
+                                            {generatedOptions.map(opt => (
+                                                <button key={opt.id} onClick={() => { setSelectedOption(opt); setFlyerStep('editing'); }} className="aspect-[3/4] rounded-xl overflow-hidden border-2 border-transparent hover:border-blue-500 transition-all hover:scale-105 shadow-2xl">
+                                                    <img src={opt.imageUrl} className="w-full h-full object-cover" />
+                                                </button>
+                                            ))}
                                         </div>
                                     )}
 
                                     {flyerStep === 'editing' && selectedOption && (
-                                        <div className="space-y-3">
-                                            <div className="relative rounded-lg overflow-hidden border border-purple-500/50 shadow-lg group">
-                                                <img src={selectedOption.imageUrl} alt="Selected" className="w-full h-auto" />
-                                                <button 
-                                                    onClick={() => setFlyerStep('selecting')} 
-                                                    className="absolute top-2 left-2 bg-black/60 text-white px-3 py-1 rounded-full text-xs hover:bg-black backdrop-blur-md transition-opacity opacity-0 group-hover:opacity-100"
-                                                >
-                                                    ← Change Design
-                                                </button>
-                                                <div className="absolute top-2 right-2 bg-black/60 text-white px-2 py-1 rounded text-[10px] backdrop-blur-md font-mono">
-                                                    {selectedOption.style}
-                                                </div>
+                                        <div className="space-y-4">
+                                            <div className="relative rounded-2xl overflow-hidden shadow-2xl group">
+                                                <img src={selectedOption.imageUrl} className="w-full h-auto" />
+                                                <button onClick={() => setFlyerStep('selecting')} className="absolute top-4 left-4 bg-black/60 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity">Change Design</button>
                                             </div>
-                                            
-                                            <div className="bg-slate-800 p-2 rounded-lg">
-                                                <p className="text-[10px] text-slate-400 mb-1 uppercase font-bold">AI Editor</p>
-                                                <div className="flex gap-2">
-                                                    <input 
-                                                        type="text" 
-                                                        value={editPrompt} 
-                                                        onChange={e => setEditPrompt(e.target.value)} 
-                                                        placeholder="E.g. Make the title text larger..." 
-                                                        className="flex-grow p-2 bg-slate-900 rounded border border-slate-700 text-xs text-white focus:border-purple-500 outline-none"
-                                                    />
-                                                    <button 
-                                                        onClick={handleEditImage} 
-                                                        disabled={isEditingImage || !editPrompt}
-                                                        className="bg-purple-600 text-white px-3 rounded hover:bg-purple-500 disabled:opacity-50 transition-colors"
-                                                    >
-                                                        {isEditingImage ? <Spinner /> : '✨'}
-                                                    </button>
-                                                </div>
-                                            </div>
+                                            <Button onClick={() => setFlyerStep('idle')} variant="secondary" className="w-full py-2 !text-[9px] uppercase">Discard Visuals</Button>
                                         </div>
                                     )}
                                 </div>
                             )}
 
-                            <Button onClick={handleSaveAll} disabled={isSaving || (showFlyerDesigner && flyerStep !== 'editing' && flyerStep !== 'selecting' && flyerStep !== 'idle' && !selectedOption)} className="w-full mt-4 shadow-lg shadow-green-900/20 bg-green-600 hover:bg-green-500">
-                                {isSaving ? 'Publishing...' : (selectedOption ? 'Publish Event & Flyer' : 'Publish Event Only')}
+                            <Button onClick={handleBroadcast} disabled={isSaving} className="w-full py-5 text-[12px] font-black uppercase tracking-[0.3em] shadow-2xl shadow-blue-900/50 rounded-[2rem]">
+                                {isSaving ? 'Broadcasting...' : '🚀 DEPLOY GLOBAL BROADCAST'}
                             </Button>
                         </div>
                     </Card>
                 </div>
 
-                <div className="lg:col-span-2">
-                    <Card className="h-full">
-                        <h3 className="text-lg font-bold mb-4">Upcoming Events</h3>
-                        {loading ? <Spinner /> : (
-                            <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-                                {events.length === 0 ? <p className="text-gray-500">No events scheduled.</p> : 
-                                events.map(event => (
-                                    <div key={event.id} className="flex justify-between items-center p-4 bg-slate-800 rounded-lg border-l-4 border-blue-500 hover:bg-slate-700 transition-colors group">
+                <div className="lg:col-span-8">
+                    <Card className="h-full !p-8">
+                        <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] mb-8">Active Dispatches</h3>
+                        <div className="space-y-4 max-h-[800px] overflow-y-auto pr-4 custom-scrollbar">
+                            {events.length === 0 ? (
+                                <div className="text-center py-40 opacity-20"><span className="text-8xl">📡</span><p className="mt-4 font-black uppercase tracking-[0.5em]">No transmissions</p></div>
+                            ) : events.map(event => (
+                                <div key={event.id} className="flex justify-between items-center p-6 bg-slate-950 border border-white/5 rounded-[2rem] hover:bg-slate-900 transition-all group">
+                                    <div className="flex gap-6 items-center">
+                                        <div className="w-14 h-14 rounded-2xl bg-blue-500/10 flex items-center justify-center text-2xl border border-blue-500/20">{event.type === 'Holiday' ? '🌴' : '📅'}</div>
                                         <div>
-                                            <h4 className="font-bold text-white group-hover:text-blue-400 transition-colors">{event.title}</h4>
-                                            <div className="flex gap-3 text-sm text-gray-400 mt-1">
-                                                <span>📅 {new Date(event.date).toLocaleDateString()}</span>
-                                                <span>🏷️ {event.type}</span>
-                                                <span>👥 {event.audience}</span>
+                                            <h4 className="text-lg font-black text-white uppercase tracking-tight group-hover:text-blue-400 transition-colors">{event.title}</h4>
+                                            <div className="flex gap-4 text-[10px] font-bold text-slate-500 uppercase mt-2">
+                                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> {event.date}</span>
+                                                <span className="opacity-40">|</span>
+                                                <span>Target: {event.audience}</span>
                                             </div>
-                                            {event.description && <p className="text-sm text-slate-500 mt-2">{event.description}</p>}
                                         </div>
-                                        <button onClick={() => setEventToDelete(event.id)} className="p-2 text-slate-500 hover:text-red-400 transition-colors bg-slate-900/50 rounded-lg opacity-0 group-hover:opacity-100" title="Delete Event">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                                        </button>
                                     </div>
-                                ))}
-                            </div>
-                        )}
+                                    <button onClick={() => setEventToDelete(event.id)} className="p-3 text-slate-700 hover:text-red-500 bg-white/5 rounded-xl transition-colors opacity-0 group-hover:opacity-100"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg></button>
+                                </div>
+                            ))}
+                        </div>
                     </Card>
                 </div>
             </div>
 
             <ConfirmationModal 
-                isOpen={!!eventToDelete}
-                onClose={() => setEventToDelete(null)}
-                onConfirm={handleDelete}
-                title="Delete Event"
-                message="Are you sure you want to delete this event? This action cannot be undone."
-                confirmButtonText="Yes, Delete"
-                isLoading={isDeleting}
+                isOpen={!!eventToDelete} onClose={() => setEventToDelete(null)}
+                onConfirm={async () => {
+                    setIsDeleting(true);
+                    await db.collection('calendarEvents').doc(eventToDelete!).delete();
+                    setIsDeleting(false); setEventToDelete(null);
+                    showToast('Transmission Revoked', 'success');
+                }}
+                title="Revoke Transmission"
+                message="Are you sure? This will remove the event from all student and staff calendars."
+                confirmButtonText="Yes, Revoke" isLoading={isDeleting}
             />
         </div>
     );

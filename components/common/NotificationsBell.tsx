@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuthentication } from '../../hooks/useAuth';
-// FIX: Import firebase for FieldValue and use v8 compat syntax
 import { db, firebase } from '../../services/firebase';
 import type { Notification, UserProfile } from '../../types';
 import Spinner from './Spinner';
@@ -14,7 +13,11 @@ const NotificationsBell: React.FC = () => {
 
 
     useEffect(() => {
-        if (!user || !userProfile || userProfile.role === 'admin' || userProfile.status !== 'approved') {
+        // PERMISSION GUARD: Only listen if user is signed in and profile exists.
+        // We allow reading notifications even for pending users so they get approval alerts,
+        // BUT the rules currently require isCallerApproved for list.
+        // Checking status strictly to prevent Uncaught Firebase Errors.
+        if (!user || !userProfile || (userProfile.status !== 'approved' && userProfile.role !== 'admin')) {
             setLoading(false);
             setNotifications([]);
             return;
@@ -22,7 +25,6 @@ const NotificationsBell: React.FC = () => {
 
         setLoading(true);
         
-        // FIX: Use v8 compat query syntax
         const q = db.collection('notifications')
             .where('userId', '==', user.uid)
             .orderBy('createdAt', 'desc')
@@ -33,12 +35,15 @@ const NotificationsBell: React.FC = () => {
             setNotifications(fetchedNotifications);
             setLoading(false);
         }, err => {
-            console.error("Error fetching notifications:", err.message);
+            if (err.code !== 'permission-denied') {
+                console.error("Notifications vault access fault:", err.message);
+            }
+            setNotifications([]);
             setLoading(false);
         });
 
         return () => unsubscribe();
-    }, [user, userProfile]);
+    }, [user?.uid, userProfile?.status, userProfile?.role]);
     
      useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -53,14 +58,13 @@ const NotificationsBell: React.FC = () => {
 
     const markAsRead = (id: string) => {
         if (!user) return;
-        // FIX: Use v8 compat update syntax with FieldValue
         const notifRef = db.collection('notifications').doc(id);
         notifRef.update({
             readBy: firebase.firestore.FieldValue.arrayUnion(user.uid)
         });
     };
 
-    if (userProfile?.role === 'admin') return null;
+    if (!userProfile || userProfile.role === 'admin') return null;
     
     const unreadCount = notifications.filter(n => !n.readBy.includes(user?.uid || '')).length;
 

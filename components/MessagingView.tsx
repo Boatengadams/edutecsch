@@ -40,7 +40,10 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
         const convos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Conversation));
         setConversations(convos);
         setLoadingConversations(false);
-    }, () => setLoadingConversations(false));
+    }, err => {
+        console.warn("Conversations listener error:", err.message);
+        setLoadingConversations(false);
+    });
 
     return () => unsubscribe();
   }, [userProfile.uid]);
@@ -70,7 +73,10 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
         if (convDoc.exists && (convDoc.data() as Conversation).unreadCount?.[userProfile.uid] > 0) {
             await convRef.update({ [`unreadCount.${userProfile.uid}`]: 0 });
         }
-      }, () => setLoadingMessages(false));
+      }, err => {
+          console.warn("Messages listener error:", err.message);
+          setLoadingMessages(false);
+      });
 
     return () => unsubscribe();
   }, [activeConversationId, userProfile.uid]);
@@ -189,7 +195,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ userProfile, contacts }) 
           const prompt = `Summarize the following conversation history between ${userProfile.name} and the other participant. Highlight key points, questions asked, or pending tasks. Keep it concise and bulleted.\n\nConversation:\n${conversationText}`;
           
           const response = await ai.models.generateContent({
-              model: 'gemini-2.5-flash',
+              model: 'gemini-3-flash-preview',
               contents: prompt
           });
           
