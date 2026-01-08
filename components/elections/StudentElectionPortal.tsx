@@ -9,6 +9,7 @@ import VotingFlow from './VotingFlow';
 import CampaignDesigner from './CampaignDesigner';
 import CampaignWall from './CampaignWall';
 import ElectionResults from './ElectionResults';
+import ElectoralGuide from './ElectoralGuide';
 
 const StudentElectionPortal: React.FC<{ userProfile: UserProfile }> = ({ userProfile }) => {
     const { showToast } = useToast();
@@ -18,6 +19,7 @@ const StudentElectionPortal: React.FC<{ userProfile: UserProfile }> = ({ userPro
     const [hasVoted, setHasVoted] = useState(false);
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState<'hub' | 'campaign_wall' | 'results' | 'designer'>('hub');
+    const [showGuide, setShowGuide] = useState(false);
 
     const role = userProfile.role;
     const isStudent = role === 'student';
@@ -88,6 +90,13 @@ const StudentElectionPortal: React.FC<{ userProfile: UserProfile }> = ({ userPro
 
         setLoading(false);
 
+        // First-time UX: Trigger guide automatically
+        const guideSeen = localStorage.getItem('edutec_election_guide_seen');
+        if (!guideSeen) {
+            const timer = setTimeout(() => setShowGuide(true), 1500);
+            return () => clearTimeout(timer);
+        }
+
         return () => { 
             unsubConfig(); 
             unsubPos(); 
@@ -140,7 +149,7 @@ const StudentElectionPortal: React.FC<{ userProfile: UserProfile }> = ({ userPro
         if (viewMode === 'results' && (config.status === 'results' || config.publishedResults)) {
             return <ElectionResults config={config} positions={positions} isAdmin={userProfile.role === 'admin'} />;
         }
-        if (viewMode === 'campaign_wall' && (config.status === 'campaigning' || config.status === 'cooling' || config.status === 'voting' || config.status === 'results' || config.status === 'audit')) {
+        if (viewMode === 'campaign_wall' && (['campaigning', 'cooling', 'voting', 'results', 'audit'].includes(config.status))) {
             return <CampaignWall userProfile={userProfile} positions={positions} />;
         }
         if (viewMode === 'designer' && isStudent && myApp?.status === 'approved' && config.status === 'campaigning') {
@@ -227,6 +236,28 @@ const StudentElectionPortal: React.FC<{ userProfile: UserProfile }> = ({ userPro
     return (
         <div className="p-2 sm:p-4 md:p-10 h-full overflow-y-auto max-w-7xl mx-auto font-sans relative custom-scrollbar">
             {renderContent()}
+            
+            {/* FLOATING PROTOCOL INTEL TRIGGER */}
+            <button 
+                onClick={() => setShowGuide(true)}
+                className="fixed bottom-8 right-8 z-[100] w-14 h-14 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-full flex items-center justify-center text-white shadow-[0_15px_35px_rgba(59,130,246,0.6)] hover:scale-110 hover:shadow-blue-500/50 transition-all active:scale-95 border-2 border-white/20 group"
+                title="Portal Intelligence & Help"
+            >
+                <span className="text-2xl font-bold group-hover:rotate-12 transition-transform">💡</span>
+                {/* Sonar Pulse Effect */}
+                <div className="absolute inset-0 bg-blue-400 rounded-full animate-ping opacity-30 pointer-events-none scale-150"></div>
+                <div className="absolute -top-12 right-0 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-2xl pointer-events-none">
+                   Protocol Intel
+                </div>
+            </button>
+
+            {showGuide && (
+                <ElectoralGuide 
+                    onClose={() => setShowGuide(false)} 
+                    context={config.status === 'voting' && !hasVoted ? 'voting' : viewMode}
+                    isTriggeredManually={true} 
+                />
+            )}
         </div>
     );
 };

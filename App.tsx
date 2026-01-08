@@ -124,31 +124,32 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
         }
     }
 
-    const roleToRender = activeRoleOverride || userProfile.role;
     const verifiedRole = (activeRoleOverride && isOmniUser) ? activeRoleOverride : userProfile.role;
 
     return (
-        <div className="h-[100dvh] flex flex-col font-sans text-slate-200 bg-slate-950 overflow-hidden">
+        <div className="h-[100dvh] flex flex-col font-sans text-slate-200 bg-slate-950 overflow-hidden w-full max-w-full">
             <CursorFollower />
-            <header className="sticky top-0 z-20 flex items-center justify-between p-4 bg-slate-900/90 backdrop-blur-md border-b border-white/5 h-[70px] flex-shrink-0 no-print">
-                <div className="flex items-center gap-3">
+            <header className="sticky top-0 z-20 flex items-center justify-between p-3 md:p-4 bg-slate-900/90 backdrop-blur-md border-b border-white/5 h-auto md:h-[70px] flex-shrink-0 no-print w-full">
+                <div className="flex items-center gap-2 md:gap-3 overflow-hidden">
                     <button onClick={() => setIsSidebarExpanded(!isSidebarExpanded)} className="p-2 rounded-lg text-slate-400 hover:text-white transition-all">
                         <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
                     </button>
-                    <h1 className="text-sm md:text-base font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 uppercase tracking-[0.2em]">{schoolSettings?.schoolName}</h1>
+                    <h1 className="text-xs md:text-base font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 uppercase tracking-[0.1em] md:tracking-[0.2em] truncate">
+                        {schoolSettings?.schoolName || 'EDUTEC'}
+                    </h1>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 md:gap-2">
                     {isOmniUser && (
                         <button onClick={() => {
                             const roles: UserRole[] = ['admin', 'teacher', 'student', 'parent'];
                             setActiveRoleOverride(roles[(roles.indexOf(verifiedRole) + 1) % roles.length]);
-                        }} className="px-3 py-1.5 rounded-lg bg-purple-600/10 border border-purple-500/30 text-[10px] font-black uppercase text-purple-400">Role: {verifiedRole}</button>
+                        }} className="hidden sm:block px-3 py-1.5 rounded-lg bg-purple-600/10 border border-purple-500/30 text-[10px] font-black uppercase text-purple-400">Role: {verifiedRole}</button>
                     )}
                     <NotificationsBell />
-                    <Button size="sm" variant="ghost" onClick={() => firebaseAuth.signOut()} className="text-red-400">Sign Out</Button>
+                    <Button size="sm" variant="ghost" onClick={() => firebaseAuth.signOut()} className="text-red-400 px-2 py-1 md:px-3 md:py-1.5 text-xs">Sign Out</Button>
                 </div>
             </header>
-            <div className="flex-1 flex overflow-hidden relative z-10">
+            <div className="flex-1 flex overflow-hidden relative z-10 w-full max-w-full">
                 {verifiedRole === 'teacher' && <TeacherView isSidebarExpanded={isSidebarExpanded} setIsSidebarExpanded={setIsSidebarExpanded} />}
                 {verifiedRole === 'student' && <StudentView isSidebarExpanded={isSidebarExpanded} setIsSidebarExpanded={setIsSidebarExpanded} />}
                 {verifiedRole === 'admin' && <AdminView isSidebarExpanded={isSidebarExpanded} setIsSidebarExpanded={setIsSidebarExpanded} />}
@@ -161,6 +162,20 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
 
 export const App: React.FC = () => {
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(window.innerWidth >= 1024);
+    
+    // Auto-collapse sidebar on resize for smaller screens
+    useEffect(() => {
+        const handleResize = () => {
+            if (window.innerWidth < 1024) {
+                setIsSidebarExpanded(false);
+            } else {
+                setIsSidebarExpanded(true);
+            }
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
   return (
     <AuthenticationProvider>
         <ToastProvider>

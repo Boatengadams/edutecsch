@@ -6,6 +6,7 @@ import Button from '../common/Button';
 import Spinner from '../common/Spinner';
 import { useToast } from '../common/Toast';
 import ElectionResults from './ElectionResults';
+import ElectoralGuide from './ElectoralGuide';
 
 const ELECTION_PHASES: { status: ElectionStatus; label: string; icon: string; description: string }[] = [
     { status: 'setup', label: 'Setup', icon: '⚙️', description: 'Configure roles and thresholds' },
@@ -41,6 +42,7 @@ const AdminElectionManagement: React.FC<{ allUsers: UserProfile[] }> = ({ allUse
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [viewMode, setViewMode] = useState<'management' | 'results' | 'vetting' | 'timeline'>('management');
+    const [showGuide, setShowGuide] = useState(false);
     
     // Form State
     const [editingPosId, setEditingPosId] = useState<string | null>(null);
@@ -225,7 +227,7 @@ const AdminElectionManagement: React.FC<{ allUsers: UserProfile[] }> = ({ allUse
     };
 
     return (
-        <div className="space-y-6 animate-fade-in font-sans pb-32 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="space-y-6 animate-fade-in font-sans pb-32 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
             {/* Phase Stepper - Mobile Scrollable */}
             <Card className="!bg-slate-900 border-white/5 !p-4 sm:!p-8">
                 <div className="flex justify-between items-start overflow-x-auto custom-scrollbar gap-4 sm:gap-8 pb-4">
@@ -559,6 +561,28 @@ const AdminElectionManagement: React.FC<{ allUsers: UserProfile[] }> = ({ allUse
 
             {viewMode === 'results' && config && (
                 <ElectionResults config={config} positions={positions} isAdmin={true} />
+            )}
+            
+            {/* FLOATING PROTOCOL INTEL TRIGGER */}
+            <button 
+                onClick={() => setShowGuide(true)}
+                className="fixed bottom-8 right-8 z-[100] w-14 h-14 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-full flex items-center justify-center text-white shadow-[0_15px_35px_rgba(59,130,246,0.6)] hover:scale-110 hover:shadow-blue-500/50 transition-all active:scale-95 border-2 border-white/20 group"
+                title="Portal Intelligence & Help"
+            >
+                <span className="text-2xl font-bold group-hover:rotate-12 transition-transform">💡</span>
+                {/* Sonar Pulse Effect */}
+                <div className="absolute inset-0 bg-blue-400 rounded-full animate-ping opacity-30 pointer-events-none scale-150"></div>
+                <div className="absolute -top-12 right-0 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-2xl pointer-events-none">
+                   System Intel
+                </div>
+            </button>
+
+            {showGuide && (
+                <ElectoralGuide 
+                    onClose={() => setShowGuide(false)} 
+                    context={viewMode === 'management' ? 'management' : viewMode}
+                    isTriggeredManually={true} 
+                />
             )}
         </div>
     );
