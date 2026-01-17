@@ -128,21 +128,8 @@
     /* Fluid typography for small screens */
     html { font-size: 14px; }
     
-    /* Standardize padding for mobile */
-    .p-4, .p-5, .p-6, .p-8, .p-10, .p-12 { padding: 1rem !important; }
-    .px-4, .px-6, .px-8, .px-10, .px-12 { padding-left: 1rem !important; padding-right: 1rem !important; }
-    .py-4, .py-6, .py-8, .py-10, .py-12 { padding-top: 1rem !important; padding-bottom: 1rem !important; }
-    
-    /* Scale down large headings */
-    .text-5xl { font-size: 2.25rem !important; line-height: 2.5rem !important; }
-    .text-6xl { font-size: 2.5rem !important; line-height: 2.75rem !important; }
-    .text-7xl { font-size: 2.75rem !important; line-height: 3rem !important; }
-    .text-8xl { font-size: 3rem !important; line-height: 1 !important; }
-    
     /* Force stack on typical layout structures if not already handled */
-    .grid-cols-2, .grid-cols-3, .grid-cols-4, .lg\:grid-cols-3, .md\:grid-cols-3 { 
-      grid-template-columns: repeat(1, minmax(0, 1fr)) !important; 
-    }
+    /* REMOVED AGGRESSIVE GRID-COLS-X !IMPORTANT OVERRIDE HERE */
     
     /* Fix for smaller items that should stay side-by-side (2 cols) */
     .grid-cols-2.gap-4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
@@ -155,19 +142,8 @@
     .fixed.inset-0 { padding: 0.5rem !important; }
     .fixed.inset-0 > div { max-height: 98vh !important; }
     
-    /* Science Lab specific mobile fix */
-    .w-\[300\%\] { width: 1000px !important; } /* Limit 3D workbench width on mobile */
-    .h-\[200\%\] { height: 1000px !important; }
-    
     /* Sidebar touch optimizations */
     .w-72 { width: 85vw !important; max-width: 320px !important; }
-    
-    /* Navigation bars */
-    header { padding: 0.75rem !important; height: auto !important; min-height: 60px; flex-wrap: wrap; }
-    header h1 { font-size: 0.75rem !important; }
-
-    /* Floating buttons */
-    .fixed.bottom-8.right-8 { bottom: 1.5rem !important; right: 1.5rem !important; }
   }
 
   /* Prevent horizontal scrolling on body */

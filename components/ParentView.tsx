@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuthentication } from '../hooks/useAuth';
 import { db, firebase } from '../services/firebase';
@@ -14,6 +13,7 @@ import HeatMap from './common/charts/HeatMap';
 import StudentReportCard from './common/StudentReportCard';
 import FlyerCard from './common/FlyerCard';
 import PaymentPortal from './PaymentPortal';
+import AppTutorial from './common/AppTutorial';
 
 const OMNI_EMAILS = ["bagsgraphics4g@gmail.com", "boatengadams4g@gmail.com"];
 
@@ -43,6 +43,7 @@ export const ParentView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpan
   const [flyers, setFlyers] = useState<PublishedFlyer[]>([]);
   const [viewingReport, setViewingReport] = useState<TerminalReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showTutorial, setShowTutorial] = useState(false);
 
   const selectedChildProfile = useMemo(() => childrenProfiles.find(c => c.uid === selectedChildId), [childrenProfiles, selectedChildId]);
   const isOmni = OMNI_EMAILS.includes(user?.email || "");
@@ -64,6 +65,14 @@ export const ParentView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpan
         console.warn("Parent children listener error:", err.message);
         setLoading(false);
     });
+
+    // Auto-show tutorial for first-time parents
+    const onboarded = localStorage.getItem('edutec_onboarding_parent');
+    if (!onboarded) {
+        const timer = setTimeout(() => setShowTutorial(true), 2000);
+        return () => clearTimeout(timer);
+    }
+
     return () => unsubscribe();
   }, [user, userProfile, isOmni]);
 
@@ -86,16 +95,45 @@ export const ParentView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpan
       return { avg, attRate, pending: assignments.length - allSubmissions.length };
   }, [allSubmissions, assignments, attendanceRecords, selectedChildId]);
 
-  const navItems = [
-      { key: 'dashboard', label: 'Dashboard', icon: '🏠' },
-      { key: 'academics', label: 'Academics', icon: '📈' },
-      { key: 'reports', label: 'Report Cards', icon: '📊' },
-      { key: 'payments', label: 'School Fees', icon: '💳' },
-      { key: 'attendance', label: 'Attendance', icon: '📅' },
-      { key: 'timetable', label: 'Timetable', icon: '🗓️' },
-      { key: 'notifications', label: 'My Notifications', icon: '🔔' },
-      { key: 'messages', label: 'Contact Teachers', icon: '💬' },
-  ];
+  const navItems = useMemo(() => {
+    const rawItems = [
+        { key: 'dashboard', label: 'Dashboard', icon: '🏠' },
+        { key: 'academics', label: 'Academics', icon: '📈' },
+        { key: 'reports', label: 'Report Cards', icon: '📊' },
+        { key: 'payments', label: 'School Fees', icon: '💳' },
+        { key: 'attendance', label: 'Attendance', icon: '📅' },
+        { key: 'timetable', label: 'Timetable', icon: '🗓️' },
+        { key: 'notifications', label: 'My Notifications', icon: '🔔' },
+        { key: 'messages', label: 'Contact Teachers', icon: '💬' },
+    ];
+
+    const savedOrder = userProfile?.sidebarTabOrder?.parent;
+    if (!savedOrder) return rawItems;
+
+    const itemMap = new Map(rawItems.map(item => [item.key, item]));
+    const orderedItems = savedOrder
+        .map(key => itemMap.get(key))
+        .filter((item): item is typeof rawItems[0] => !!item);
+
+    const currentKeys = new Set(orderedItems.map(item => item.key));
+    const missingItems = rawItems.filter(item => !currentKeys.has(item.key));
+
+    return [...orderedItems, ...missingItems];
+  }, [userProfile?.sidebarTabOrder?.parent]);
+
+  const handleReorder = async (newOrder: string[]) => {
+    if (!userProfile) return;
+    try {
+        await db.collection('users').doc(userProfile.uid).set({
+            sidebarTabOrder: {
+                ...(userProfile.sidebarTabOrder || {}),
+                parent: newOrder
+            }
+        }, { merge: true });
+    } catch (err) {
+        console.warn("Failed to save sidebar order:", err);
+    }
+  };
 
   if (loading) return <div className="flex h-full items-center justify-center bg-slate-950"><Spinner /></div>;
 
@@ -144,9 +182,35 @@ export const ParentView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpan
   };
 
   return (
-    <div className="flex flex-1 overflow-hidden bg-slate-950 text-slate-200">
-      <Sidebar isExpanded={isSidebarExpanded} navItems={navItems} activeTab={activeTab} setActiveTab={setActiveTab} onClose={() => setIsSidebarExpanded(false)} title="Parent Hub" />
+    <div className="flex flex-1 overflow-hidden bg-slate-950 text-slate-200 relative">
+      <Sidebar 
+        isExpanded={isSidebarExpanded} 
+        navItems={navItems} 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        onClose={() => setIsSidebarExpanded(false)} 
+        title="Parent Hub"
+        onReorder={handleReorder}
+      />
       <main className="flex-1 p-4 sm:p-8 overflow-y-auto custom-scrollbar">{renderContent()}</main>
+      
+      {/* Tutorial Trigger */}
+      <button 
+        onClick={() => setShowTutorial(true)}
+        className="fixed bottom-6 right-6 z-[80] w-12 h-12 bg-slate-900 border border-white/10 rounded-full flex items-center justify-center text-white shadow-2xl hover:bg-blue-600 transition-all group"
+        title="Help & Tutorial"
+      >
+        <span className="text-xl group-hover:scale-110 transition-transform">💡</span>
+      </button>
+
+      {showTutorial && (
+        <AppTutorial 
+            role="parent" 
+            onClose={() => setShowTutorial(false)} 
+            isTriggeredManually={true} 
+        />
+      )}
+
       {viewingReport && selectedChildProfile && (
           <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-md p-4 overflow-y-auto">
               <div className="max-w-5xl mx-auto py-10">

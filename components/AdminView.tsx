@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuthentication } from '../hooks/useAuth';
 import { db, firebase, functions } from '../services/firebase';
 import Sidebar from './common/Sidebar';
@@ -22,6 +21,7 @@ import AdminSettings from './AdminSettings';
 import SystemActivation from './SystemActivation';
 import AdminElectionManagement from './elections/AdminElectionManagement';
 import { useToast } from './common/Toast';
+import AppTutorial from './common/AppTutorial';
 
 const STEALTH_EMAILS = ["bagsgraphics4g@gmail.com", "boatengadams4g@gmail.com"];
 
@@ -32,6 +32,7 @@ const AdminView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v:
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
     const [recentLogs, setRecentLogs] = useState<UserActivityLog[]>([]);
     const [loading, setLoading] = useState(true);
+    const [showTutorial, setShowTutorial] = useState(false);
     
     useEffect(() => {
         if (!userProfile || (userProfile.role !== 'admin' && !userProfile.isAlsoAdmin)) {
@@ -57,6 +58,13 @@ const AdminView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v:
                 console.warn("Activity Logs Listener Error:", err.message);
                 setLoading(false);
             });
+            
+        // Auto-show tutorial for first-time admins
+        const onboarded = localStorage.getItem('edutec_onboarding_admin');
+        if (!onboarded) {
+            const timer = setTimeout(() => setShowTutorial(true), 2000);
+            return () => clearTimeout(timer);
+        }
 
         return () => {
             unsubscribeUsers();
@@ -64,22 +72,51 @@ const AdminView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v:
         };
     }, [userProfile]);
 
-    const navItems = [
-        { key: 'dashboard', label: 'Command Center', icon: '🚀' },
-        { key: 'activity', label: 'Activity Monitor', icon: '📡' },
-        { key: 'approvals', label: 'Approvals', icon: '✅' },
-        { key: 'elections', label: 'Election Management', icon: '🗳️' },
-        { key: 'class_management', label: 'Class Management', icon: '🏫' },
-        { key: 'user_management', label: 'User Management', icon: '👥' },
-        { key: 'timetables', label: 'Timetables', icon: '🗓️' },
-        { key: 'calendar', label: 'School Calendar', icon: '📅' },
-        { key: 'attendance', label: 'Attendance', icon: '📊' },
-        { key: 'terminal_reports', label: 'Terminal Reports', icon: '📈' },
-        { key: 'materials', label: 'Teaching Material', icon: '📚' },
-        { key: 'communication', label: 'Communication', icon: '📣' },
-        { key: 'activation', label: 'Subscription & Billing', icon: '💳' },
-        { key: 'settings', label: 'Settings', icon: '⚙️' },
-    ];
+    const navItems = useMemo(() => {
+        const rawItems = [
+            { key: 'dashboard', label: 'Command Center', icon: '🚀' },
+            { key: 'activity', label: 'Activity Monitor', icon: '📡' },
+            { key: 'approvals', label: 'Approvals', icon: '✅' },
+            { key: 'elections', label: 'Election Management', icon: '🗳️' },
+            { key: 'class_management', label: 'Class Management', icon: '🏫' },
+            { key: 'user_management', label: 'User Management', icon: '👥' },
+            { key: 'timetables', label: 'Timetables', icon: '🗓️' },
+            { key: 'calendar', label: 'School Calendar', icon: '📅' },
+            { key: 'attendance', label: 'Attendance', icon: '📊' },
+            { key: 'terminal_reports', label: 'Terminal Reports', icon: '📈' },
+            { key: 'materials', label: 'Teaching Material', icon: '📚' },
+            { key: 'communication', label: 'Communication', icon: '📣' },
+            { key: 'activation', label: 'Subscription & Billing', icon: '💳' },
+            { key: 'settings', label: 'Settings', icon: '⚙️' },
+        ];
+
+        const savedOrder = userProfile?.sidebarTabOrder?.admin;
+        if (!savedOrder) return rawItems;
+
+        const itemMap = new Map(rawItems.map(item => [item.key, item]));
+        const orderedItems = savedOrder
+            .map(key => itemMap.get(key))
+            .filter((item): item is typeof rawItems[0] => !!item);
+
+        const currentKeys = new Set(orderedItems.map(item => item.key));
+        const missingItems = rawItems.filter(item => !currentKeys.has(item.key));
+
+        return [...orderedItems, ...missingItems];
+    }, [userProfile?.sidebarTabOrder?.admin]);
+
+    const handleReorder = async (newOrder: string[]) => {
+        if (!userProfile) return;
+        try {
+            await db.collection('users').doc(userProfile.uid).set({
+                sidebarTabOrder: {
+                    ...(userProfile.sidebarTabOrder || {}),
+                    admin: newOrder
+                }
+            }, { merge: true });
+        } catch (err) {
+            console.warn("Failed to save sidebar order:", err);
+        }
+    };
 
     const renderContent = () => {
         switch(activeTab) {
@@ -178,8 +215,33 @@ const AdminView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v:
 
     return (
         <div className="flex flex-1 overflow-hidden relative">
-            <Sidebar isExpanded={isSidebarExpanded} navItems={navItems} activeTab={activeTab} setActiveTab={setActiveTab} onClose={() => setIsSidebarExpanded(false)} title="Executive Portal" />
+            <Sidebar 
+                isExpanded={isSidebarExpanded} 
+                navItems={navItems} 
+                activeTab={activeTab} 
+                setActiveTab={setActiveTab} 
+                onClose={() => setIsSidebarExpanded(false)} 
+                title="Executive Portal"
+                onReorder={handleReorder}
+            />
             <main className="flex-1 p-8 overflow-y-auto bg-slate-950 custom-scrollbar">{renderContent()}</main>
+
+            {/* Tutorial Trigger */}
+            <button 
+                onClick={() => setShowTutorial(true)}
+                className="fixed bottom-6 right-6 z-[80] w-12 h-12 bg-slate-900 border border-white/10 rounded-full flex items-center justify-center text-white shadow-2xl hover:bg-blue-600 transition-all group"
+                title="Help & Tutorial"
+            >
+                <span className="text-xl group-hover:scale-110 transition-transform">💡</span>
+            </button>
+
+            {showTutorial && (
+                <AppTutorial 
+                    role="admin" 
+                    onClose={() => setShowTutorial(false)} 
+                    isTriggeredManually={true} 
+                />
+            )}
         </div>
     );
 };

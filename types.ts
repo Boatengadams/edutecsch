@@ -142,6 +142,7 @@ export interface UserProfile {
   preferredVoice?: string;
   customVoices?: CustomVoice[];
   learningStyle?: 'visual' | 'auditory' | 'kinesthetic' | 'reading/writing';
+  sidebarTabOrder?: Record<string, string[]>; // Stores key-based order for different views (e.g. 'teacher', 'admin')
 }
 
 // --- LIVE LESSON ---

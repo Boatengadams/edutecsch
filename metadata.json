@@ -1,5 +1,5 @@
 {
-  "name": "EDUTECSCH SECURE",
+  "name": "EDUTECSCH ",
   "description": "High-security educational platform for teachers and students with strictly enforced RBAC and input sanitization.",
   "requestFramePermissions": [
     "camera",

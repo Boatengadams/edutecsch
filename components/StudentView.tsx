@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuthentication } from '../hooks/useAuth';
 import { db, firebase } from '../services/firebase';
@@ -21,12 +20,14 @@ import StudentAttendanceLog from './StudentAttendanceLog';
 import FlyerCard from './common/FlyerCard';
 import StudentElectionPortal from './elections/StudentElectionPortal';
 import PaymentPortal from './PaymentPortal';
+import AppTutorial from './common/AppTutorial';
 
 export const StudentView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: (v: boolean) => void; }> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
   const { user, userProfile, schoolSettings } = useAuthentication();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
+  const [showTutorial, setShowTutorial] = useState(false);
 
   // Data State
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -87,24 +88,61 @@ export const StudentView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExp
     }, handleError("ElectionConfig")));
 
     setLoading(false);
+
+    // Auto-show tutorial for first-time students
+    const onboarded = localStorage.getItem('edutec_onboarding_student');
+    if (!onboarded) {
+        const timer = setTimeout(() => setShowTutorial(true), 2000);
+        return () => clearTimeout(timer);
+    }
+
     return () => unsubscribers.forEach(unsub => unsub());
   }, [user?.uid, userProfile?.status, userProfile?.class]);
 
-  const navItems = [
-      { key: 'dashboard', label: 'Dashboard', icon: '🚀' },
-      { key: 'assignments', label: 'Assignments', icon: '📝' },
-      { key: 'elections', label: 'Election Portal', icon: '🗳️' },
-      { key: 'live_lesson', label: <span className="flex items-center">Live Class {liveLesson && <span className="ml-2 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: '📡' },
-      { key: 'science_lab', label: 'Virtual Lab', icon: '🧪' },
-      { key: 'study_mode', label: 'Study Mode', icon: '🧠' },
-      { key: 'materials', label: 'Study Materials', icon: '📚' },
-      { key: 'messages', label: 'Messages', icon: '💬' },
-      { key: 'reports', label: 'Reports', icon: '📊' },
-      { key: 'payments', label: 'Payments', icon: '💳' },
-      { key: 'profile', label: 'Profile', icon: '👤' },
-      { key: 'timetable', label: 'Timetable', icon: '🗓️' },
-      { key: 'attendance', label: 'Attendance', icon: '📅' },
-  ];
+  const navItems = useMemo(() => {
+    const rawItems = [
+        { key: 'dashboard', label: 'Dashboard', icon: '🚀' },
+        { key: 'assignments', label: 'Assignments', icon: '📝' },
+        { key: 'elections', label: 'Election Portal', icon: '🗳️' },
+        { key: 'live_lesson', label: <span className="flex items-center">Live Class {liveLesson && <span className="ml-2 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: '📡' },
+        { key: 'science_lab', label: 'Virtual Lab', icon: '🧪' },
+        { key: 'study_mode', label: 'Study Mode', icon: '🧠' },
+        { key: 'materials', label: 'Study Materials', icon: '📚' },
+        { key: 'messages', label: 'Messages', icon: '💬' },
+        { key: 'reports', label: 'Reports', icon: '📊' },
+        { key: 'payments', label: 'Payments', icon: '💳' },
+        { key: 'profile', label: 'Profile', icon: '👤' },
+        { key: 'timetable', label: 'Timetable', icon: '🗓️' },
+        { key: 'attendance', label: 'Attendance', icon: '📅' },
+    ];
+
+    const savedOrder = userProfile?.sidebarTabOrder?.student;
+    if (!savedOrder) return rawItems;
+
+    const itemMap = new Map(rawItems.map(item => [item.key, item]));
+    const orderedItems = savedOrder
+        .map(key => itemMap.get(key))
+        .filter((item): item is typeof rawItems[0] => !!item);
+
+    const currentKeys = new Set(orderedItems.map(item => item.key));
+    const missingItems = rawItems.filter(item => !currentKeys.has(item.key));
+
+    return [...orderedItems, ...missingItems];
+  }, [liveLesson, userProfile?.sidebarTabOrder?.student]);
+
+  const handleReorder = async (newOrder: string[]) => {
+    if (!userProfile) return;
+    try {
+        await db.collection('users').doc(userProfile.uid).set({
+            sidebarTabOrder: {
+                ...(userProfile.sidebarTabOrder || {}),
+                student: newOrder
+            }
+        }, { merge: true });
+    } catch (err) {
+        console.warn("Failed to save sidebar order:", err);
+    }
+  };
 
   const renderContent = () => {
       if (loading) return <div className="flex justify-center items-center h-full"><Spinner /></div>;
@@ -193,11 +231,36 @@ export const StudentView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExp
   };
 
   return (
-    <div className="flex flex-1 overflow-hidden h-full">
-      <Sidebar isExpanded={isSidebarExpanded} navItems={navItems} activeTab={activeTab} setActiveTab={setActiveTab} onClose={() => setIsSidebarExpanded(false)} title="Student Portal" />
+    <div className="flex flex-1 overflow-hidden h-full relative">
+      <Sidebar 
+        isExpanded={isSidebarExpanded} 
+        navItems={navItems} 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        onClose={() => setIsSidebarExpanded(false)} 
+        title="Student Portal"
+        onReorder={handleReorder}
+      />
       <main className={`flex-1 overflow-y-auto bg-slate-950 ${['science_lab', 'study_mode', 'live_lesson', 'elections'].includes(activeTab) ? 'p-0' : 'p-6'}`}>
         {renderContent()}
       </main>
+
+      {/* Tutorial Trigger */}
+      <button 
+        onClick={() => setShowTutorial(true)}
+        className="fixed bottom-6 right-6 z-[80] w-12 h-12 bg-slate-900 border border-white/10 rounded-full flex items-center justify-center text-white shadow-2xl hover:bg-blue-600 transition-all group"
+        title="Help & Tutorial"
+      >
+        <span className="text-xl group-hover:scale-110 transition-transform">💡</span>
+      </button>
+
+      {showTutorial && (
+        <AppTutorial 
+            role="student" 
+            onClose={() => setShowTutorial(false)} 
+            isTriggeredManually={true} 
+        />
+      )}
     </div>
   );
 };

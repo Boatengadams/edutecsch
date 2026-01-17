@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import WeatherWidget from './WeatherWidget';
 
 interface SidebarProps {
@@ -8,11 +8,13 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   onClose: () => void;
   title: string;
+  onReorder?: (newOrder: string[]) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ isExpanded, navItems, activeTab, setActiveTab, onClose, title }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isExpanded, navItems, activeTab, setActiveTab, onClose, title, onReorder }) => {
   const sidebarRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  const [draggedKey, setDraggedKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (isExpanded) {
@@ -36,6 +38,42 @@ const Sidebar: React.FC<SidebarProps> = ({ isExpanded, navItems, activeTab, setA
     }
   }, [isExpanded, onClose]);
 
+  const handleDragStart = (e: React.DragEvent, key: string) => {
+    setDraggedKey(key);
+    e.dataTransfer.effectAllowed = 'move';
+    // Small delay to hide the original item being dragged for a better visual effect
+    setTimeout(() => {
+        const target = e.target as HTMLElement;
+        target.style.opacity = '0.4';
+    }, 0);
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    setDraggedKey(null);
+    const target = e.target as HTMLElement;
+    target.style.opacity = '1';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, targetKey: string) => {
+    e.preventDefault();
+    if (!draggedKey || draggedKey === targetKey || !onReorder) return;
+
+    const currentOrder = navItems.map(item => item.key);
+    const draggedIdx = currentOrder.indexOf(draggedKey);
+    const targetIdx = currentOrder.indexOf(targetKey);
+
+    const newOrder = [...currentOrder];
+    newOrder.splice(draggedIdx, 1);
+    newOrder.splice(targetIdx, 0, draggedKey);
+
+    onReorder(newOrder);
+  };
+
   return (
     <>
       {/* Overlay */}
@@ -56,7 +94,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isExpanded, navItems, activeTab, setA
       >
         {/* Header */}
         <div className="flex items-center justify-between p-5 md:p-6 border-b border-slate-800/50 flex-shrink-0">
-          <h2 className="text-lg md:text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 truncate">{title}</h2>
+          <div className="flex flex-col">
+            <h2 className="text-lg md:text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 truncate">{title}</h2>
+            {onReorder && <span className="text-[8px] uppercase tracking-widest text-slate-600 font-bold">Drag to Reorder</span>}
+          </div>
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-white transition-colors lg:hidden p-2 rounded-full hover:bg-slate-800"
@@ -73,8 +114,17 @@ const Sidebar: React.FC<SidebarProps> = ({ isExpanded, navItems, activeTab, setA
             <ul className="flex flex-col space-y-1">
               {navItems.map(item => {
                 const isActive = activeTab === item.key;
+                const isDraggingOver = draggedKey && draggedKey !== item.key;
                 return (
-                <li key={item.key}>
+                <li 
+                  key={item.key}
+                  draggable={!!onReorder}
+                  onDragStart={(e) => handleDragStart(e, item.key)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, item.key)}
+                  className={`transition-all duration-200 ${isDraggingOver ? 'scale-95 opacity-50' : ''}`}
+                >
                   <button
                     onClick={() => {
                       setActiveTab(item.key);

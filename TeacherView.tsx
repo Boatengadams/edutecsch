@@ -17,6 +17,12 @@ import AdminTerminalReports from './components/AdminTerminalReports';
 import Toast from './components/common/Toast';
 import TeacherProgressDashboard from './components/TeacherProgressDashboard';
 import StudentElectionPortal from './components/elections/StudentElectionPortal';
+import TeacherStudentsList from './components/TeacherStudentsList';
+import TeacherAssignments from './components/TeacherAssignments';
+import TeacherAttendance from './components/TeacherAttendance';
+import TeacherLibrary from './components/TeacherLibrary';
+import TeacherGroupWork from './components/TeacherGroupWork';
+import AppTutorial from './components/common/AppTutorial';
 
 const OMNI_EMAILS = ["bagsgraphics4g@gmail.com", "boatengadams4g@gmail.com"];
 
@@ -24,6 +30,7 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
     const { user, userProfile, schoolSettings } = useAuthentication();
     const [activeTab, setActiveTab] = useState('dashboard');
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+    const [showTutorial, setShowTutorial] = useState(false);
   
     const isOmni = useMemo(() => OMNI_EMAILS.includes(user?.email || ""), [user]);
 
@@ -41,8 +48,6 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
     }, [userProfile, isOmni]);
 
     useEffect(() => {
-        // SECURITY GUARD: Only proceed if user is approved. Pending users don't have access to these collections.
-        // We also check for OMNI status as they bypass the approval check in rules.
         if (!user || !userProfile || (userProfile.status !== 'approved' && !isOmni)) { 
             if (userProfile && userProfile.status === 'pending') setLoading(false);
             return; 
@@ -52,25 +57,22 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
 
         const handleErr = (name: string) => (err: any) => {
             if (err.code === 'permission-denied') {
-                console.warn(`${name} access restricted. Profile status: ${userProfile?.status}`);
+                console.warn(`${name} access restricted.`);
             } else {
                 console.error(`${name} stream error:`, err.message);
             }
         };
 
-        // Fetch assignments
         unsubscribers.push(db.collection('assignments').where('teacherId', '==', user.uid).onSnapshot(
             snap => setAssignments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Assignment))),
             handleErr("Assignments")
         ));
 
-        // Fetch submissions
         unsubscribers.push(db.collection('submissions').where('teacherId', '==', user.uid).onSnapshot(
             snap => setSubmissions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Submission))),
             handleErr("Submissions")
         ));
         
-        // Fetch students
         const studentsQuery = isOmni 
             ? db.collection('users').where('role', '==', 'student')
             : (teacherClasses.length > 0 ? db.collection('users').where('class', 'in', teacherClasses).where('role', '==', 'student') : null);
@@ -82,29 +84,67 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
             ));
         }
         
-        // Fetch active lesson
         unsubscribers.push(db.collection('liveLessons').where('teacherId', '==', user.uid).where('status', '==', 'active').onSnapshot(
             snap => setActiveLiveLesson(snap.empty ? null : {id: snap.docs[0].id, ...snap.docs[0].data()} as LiveLesson),
             handleErr("LiveLessons")
         ));
         
         setLoading(false);
+
+        const onboarded = localStorage.getItem('edutec_onboarding_teacher');
+        if (!onboarded) {
+            const timer = setTimeout(() => setShowTutorial(true), 2000);
+            return () => clearTimeout(timer);
+        }
+
         return () => unsubscribers.forEach(unsub => unsub());
     }, [user?.uid, userProfile?.status, teacherClasses, isOmni]);
 
-    const navItems = [
-        { key: 'dashboard', label: 'Command Hub', icon: '🚀' },
-        { key: 'my_students', label: 'My Students', icon: '👨‍🎓' },
-        { key: 'assignments', label: 'Academic Tasks', icon: '📝' },
-        { key: 'live_lesson', label: <span className="flex items-center">Live Class {activeLiveLesson && <span className="ml-2 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: '📡' },
-        { key: 'ai_tools', label: 'AI Copilot', icon: '🤖' },
-        { key: 'my_voice', label: 'My Voice', icon: '🎙️' },
-        { key: 'bece_questions', label: 'BECE Library', icon: '📚' },
-        { key: 'elections', label: 'Elections', icon: '🗳️' },
-        { key: 'terminal_reports', label: 'Master Reports', icon: '📊' },
-        { key: 'progress', label: 'Intelligence', icon: '📈' },
-        { key: 'messages', label: `Messages`, icon: '💬' },
-    ];
+    const navItems = useMemo(() => {
+        const rawItems = [
+            { key: 'dashboard', label: 'Command Hub', icon: '🚀' },
+            { key: 'my_students', label: 'My Students', icon: '👨‍🎓' },
+            { key: 'assignments', label: 'Academic Tasks', icon: '📝' },
+            { key: 'attendance', label: 'Attendance', icon: '📅' },
+            { key: 'live_lesson', label: <span className="flex items-center">Live Class {activeLiveLesson && <span className="ml-2 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: '📡' },
+            { key: 'library', label: 'Resource Library', icon: '📚' },
+            { key: 'group_work', label: 'Group Work', icon: '👥' },
+            { key: 'ai_tools', label: 'AI Copilot', icon: '🤖' },
+            { key: 'my_voice', label: 'My Voice', icon: '🎙️' },
+            { key: 'bece_questions', label: 'BECE Library', icon: '🎓' },
+            { key: 'elections', label: 'Election Portal', icon: '🗳️' },
+            { key: 'terminal_reports', label: 'Master Reports', icon: '📊' },
+            { key: 'progress', label: 'Intelligence', icon: '📈' },
+            { key: 'messages', label: `Messages`, icon: '💬' },
+        ];
+
+        const savedOrder = userProfile?.sidebarTabOrder?.teacher;
+        if (!savedOrder) return rawItems;
+
+        const itemMap = new Map(rawItems.map(item => [item.key, item]));
+        const orderedItems = savedOrder
+            .map(key => itemMap.get(key))
+            .filter((item): item is typeof rawItems[0] => !!item);
+
+        const currentKeys = new Set(orderedItems.map(item => item.key));
+        const missingItems = rawItems.filter(item => !currentKeys.has(item.key));
+
+        return [...orderedItems, ...missingItems];
+    }, [activeLiveLesson, userProfile?.sidebarTabOrder?.teacher]);
+
+    const handleReorder = async (newOrder: string[]) => {
+        if (!userProfile) return;
+        try {
+            await db.collection('users').doc(userProfile.uid).set({
+                sidebarTabOrder: {
+                    ...(userProfile.sidebarTabOrder || {}),
+                    teacher: newOrder
+                }
+            }, { merge: true });
+        } catch (err) {
+            console.warn("Failed to save sidebar order:", err);
+        }
+    };
 
     const renderContent = () => {
         if (loading) return <div className="flex justify-center items-center h-full"><Spinner /></div>;
@@ -139,28 +179,73 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
                         <TeacherStudentActivity teacherClasses={teacherClasses} />
                     </div>
                 );
-            case 'ai_tools': return <TeacherAITools students={students} userProfile={userProfile!} />;
-            case 'my_voice': return <TeacherMyVoice userProfile={userProfile!} />;
-            case 'bece_questions': return <BECEPastQuestionsView />;
-            case 'elections': return <StudentElectionPortal userProfile={userProfile!} />;
-            case 'live_lesson': return activeLiveLesson ? <TeacherLiveClassroom lessonId={activeLiveLesson.id} onClose={() => setActiveTab('dashboard')} userProfile={userProfile!} setToast={setToast} /> : (
+            case 'my_students':
+                return <TeacherStudentsList students={students} assignments={assignments} submissions={submissions} />;
+            case 'assignments':
+                return <TeacherAssignments user={user!} userProfile={userProfile!} teacherClasses={teacherClasses} />;
+            case 'attendance':
+                return <TeacherAttendance teacherClasses={teacherClasses} students={students} />;
+            case 'library':
+                return <TeacherLibrary user={user!} userProfile={userProfile!} teacherClasses={teacherClasses} onStartLiveLesson={() => setActiveTab('live_lesson')} />;
+            case 'group_work':
+                return <TeacherGroupWork teacherClasses={teacherClasses} students={students} />;
+            case 'ai_tools': 
+                return <TeacherAITools students={students} userProfile={userProfile!} />;
+            case 'my_voice': 
+                return <TeacherMyVoice userProfile={userProfile!} />;
+            case 'bece_questions': 
+                return <BECEPastQuestionsView />;
+            case 'live_lesson': 
+                return activeLiveLesson ? <TeacherLiveClassroom lessonId={activeLiveLesson.id} onClose={() => setActiveTab('dashboard')} userProfile={userProfile!} setToast={setToast} /> : (
                 <div className="flex flex-col items-center justify-center p-20 text-slate-500 italic h-full">
                     <span className="text-7xl mb-6 opacity-20">📡</span>
                     <h3 className="text-xl font-bold text-white mb-2 not-italic">No Active Classroom Signal</h3>
-                    <p className="max-w-xs text-center mb-8">Ready to teach? You can launch a quick test session or go to your library to start a planned lesson.</p>
+                    <p className="max-w-xs text-center mb-8">Ready to teach? You can launch a session from your Resource Library or start a dynamic plan.</p>
+                    <Button onClick={() => setActiveTab('library')}>Go to Library</Button>
                 </div>
             );
-            case 'terminal_reports': return <AdminTerminalReports schoolSettings={schoolSettings} user={user} userProfile={userProfile} teacherMode allowedClasses={teacherClasses} allStudents={students} assignments={assignments} submissions={submissions} />;
-            case 'progress': return <TeacherProgressDashboard students={students} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} />;
-            case 'messages': return <MessagingView userProfile={userProfile!} contacts={students} />;
-            default: return <div className="p-20 text-center text-slate-600 italic">This sector is online and operational.</div>;
+            case 'elections':
+                return <StudentElectionPortal userProfile={userProfile!} />;
+            case 'terminal_reports': 
+                return <AdminTerminalReports schoolSettings={schoolSettings} user={user} userProfile={userProfile} teacherMode allowedClasses={teacherClasses} allStudents={students} assignments={assignments} submissions={submissions} />;
+            case 'progress': 
+                return <TeacherProgressDashboard students={students} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} />;
+            case 'messages': 
+                return <MessagingView userProfile={userProfile!} contacts={students} />;
+            default: 
+                return <div className="p-20 text-center text-slate-600 italic">This sector is online and operational.</div>;
         }
     };
 
     return (
-        <div className="flex flex-1 overflow-hidden h-full">
-            <Sidebar isExpanded={isSidebarExpanded} navItems={navItems} activeTab={activeTab} setActiveTab={setActiveTab} onClose={() => setIsSidebarExpanded(false)} title="Command Center" />
+        <div className="flex flex-1 overflow-hidden h-full relative">
+            <Sidebar 
+                isExpanded={isSidebarExpanded} 
+                navItems={navItems} 
+                activeTab={activeTab} 
+                setActiveTab={setActiveTab} 
+                onClose={() => setIsSidebarExpanded(false)} 
+                title="Command Center"
+                onReorder={handleReorder}
+            />
             <main className={`flex-1 overflow-y-auto bg-slate-950 ${activeTab === 'live_lesson' ? 'p-0' : 'p-6'}`}>{renderContent()}</main>
+            
+            <button 
+                onClick={() => setShowTutorial(true)}
+                className="fixed bottom-6 right-6 z-[80] w-12 h-12 bg-slate-900 border border-white/10 rounded-full flex items-center justify-center text-white shadow-2xl hover:bg-blue-600 transition-all group"
+                title="Help & Tutorial"
+            >
+                <span className="text-xl group-hover:scale-110 transition-transform">💡</span>
+            </button>
+
+            {showTutorial && (
+                <AppTutorial 
+                    role="teacher" 
+                    onClose={() => setShowTutorial(false)} 
+                    isTriggeredManually={true} 
+                />
+            )}
+
             {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         </div>
     );

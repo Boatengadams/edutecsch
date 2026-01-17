@@ -1,4 +1,3 @@
-
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
 import 'firebase/compat/firestore';
@@ -25,15 +24,28 @@ if (!firebase.apps.length) {
 }
 
 const firebaseAuth = firebase.auth();
+
+// FIX: Ensure persistence doesn't throw a blocking error in restricted environments
+// Using immediate execution for better reliability in frame contexts
+(async () => {
+    try {
+        await firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+    } catch (e) {
+        console.warn("Local storage restricted, trying Session persistence...");
+        try {
+            await firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+        } catch (e2) {
+            console.warn("Persistence fully disabled by environment. Auth may not persist across refreshes.");
+        }
+    }
+})();
+
 const db = firebase.firestore();
 
-// ENHANCED: Applied settings to handle connectivity issues in restricted networks
 try {
   db.settings({
     cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED,
-    // Helps with "Could not reach backend" errors by using a more compatible protocol
     experimentalAutoDetectLongPolling: true,
-    // Ensure it points to the correct global endpoint
     host: "firestore.googleapis.com",
     ssl: true,
   });
