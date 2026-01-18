@@ -1,72 +1,122 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    
+
+    /* ==============================
+       CORE HELPERS
+    ============================== */
+
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function getUserData() {
-      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    function userDoc(uid) {
+      return firestore.get(/databases/(default)/documents/users/$(uid));
     }
 
-    function isApproved() {
-      let data = getUserData();
-      return data.status == 'approved' || data.role == 'admin';
+    function userExists(uid) {
+      return firestore.exists(/databases/(default)/documents/users/$(uid));
     }
 
-    function isTeacher() {
-      return getUserData().role == 'teacher';
+    function isSuperAdmin() {
+      return request.auth.token.email in [
+        'bagsgraphics4g@gmail.com',
+        'boatengadams4g@gmail.com'
+      ];
     }
 
     function isAdmin() {
-      let data = getUserData();
-      return data.role == 'admin' || data.get('isAlsoAdmin', false) == true;
+      return isSuperAdmin() ||
+        (userExists(request.auth.uid) &&
+         userDoc(request.auth.uid).data.role == 'admin');
     }
 
-    // Individual Profiles: Owners only
+    function isApproved() {
+      return isSignedIn() &&
+        (isSuperAdmin() ||
+         (userExists(request.auth.uid) &&
+          userDoc(request.auth.uid).data.status == 'approved'));
+    }
+
+    /* ==============================
+       USER UPLOADS (AVATARS, FILES)
+    ============================== */
+
     match /users/{userId}/{allPaths=**} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.uid == userId && 
-                    request.resource.size < 5 * 1024 * 1024 &&
-                    request.resource.contentType.matches('image/.*');
+
+      allow write: if request.auth.uid == userId
+        && request.resource.size < 5 * 1024 * 1024;
     }
 
-    // DM Attachments: Participant-Only Access
-    match /direct_messages/{convoId}/{allPaths=**} {
-      allow read, write: if isApproved() && 
-        request.auth.uid in firestore.get(/databases/(default)/documents/conversations/$(convoId)).data.participantUids;
-    }
+    /* ==============================
+       SCHOOL CONFIG FILES
+    ============================== */
 
-    // Classroom Assets: Teachers and Admins
-    match /teachingMaterials/{allPaths=**} {
-      allow read: if isApproved();
-      allow write: if isApproved() && (isTeacher() || isAdmin());
-    }
-
-    match /assignments/{id}/{allPaths=**} {
-      allow read: if isApproved();
-      allow write: if isApproved() && isTeacher();
-    }
-
-    // Broadcast Flyers: School-Wide Read, Admin-Only Write
-    match /flyers/{allPaths=**} {
-      allow read: if isApproved();
-      allow write: if isApproved() && isAdmin() &&
-                    request.resource.size < 10 * 1024 * 1024;
-    }
-
-    // System Config: Admin Only
     match /schoolConfig/{allPaths=**} {
       allow read: if true;
-      allow write: if isApproved() && isAdmin();
+      allow write: if isAdmin();
     }
 
-    // Video Storage: Size restricted high-bandwidth content
+    /* ==============================
+       DIRECT MESSAGE MEDIA
+    ============================== */
+
+    match /direct_messages/{conversationId}/{allPaths=**} {
+      allow read, write: if isApproved()
+        && request.auth.uid in
+          firestore.get(
+            /databases/(default)/documents/conversations/$(conversationId)
+          ).data.participantUids;
+    }
+
+    /* ==============================
+       FLYERS / PUBLIC ASSETS
+    ============================== */
+
+    match /flyers/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    /* ==============================
+       VIDEO CONTENT
+    ============================== */
+
     match /videoContent/{userId}/{allPaths=**} {
       allow read: if isApproved();
-      allow write: if isApproved() && (request.auth.uid == userId) && (isTeacher() || isAdmin()) &&
-                    request.resource.size < 100 * 1024 * 1024;
+
+      allow write: if isApproved()
+        && request.auth.uid == userId
+        && request.resource.size < 50 * 1024 * 1024;
+    }
+
+    /* ==============================
+       TEACHING MATERIALS
+    ============================== */
+
+    match /teachingMaterials/{allPaths=**} {
+      allow read: if isApproved();
+      allow write: if isApproved()
+        && request.resource.size < 20 * 1024 * 1024;
+    }
+
+    /* ==============================
+       ASSIGNMENT FILES
+    ============================== */
+
+    match /assignments/{allPaths=**} {
+      allow read: if isApproved();
+      allow write: if isApproved()
+        && request.resource.size < 20 * 1024 * 1024;
+    }
+
+    /* ==============================
+       DEFAULT DENY
+    ============================== */
+
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }

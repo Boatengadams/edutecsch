@@ -22,6 +22,20 @@ import TeacherAssignments from './components/TeacherAssignments';
 import TeacherAttendance from './components/TeacherAttendance';
 import TeacherLibrary from './components/TeacherLibrary';
 import TeacherGroupWork from './components/TeacherGroupWork';
+import { 
+  RocketIcon, 
+  GraduationIcon, 
+  ClipboardIcon, 
+  AttendanceIcon, 
+  BroadcastIcon, 
+  LibraryIcon, 
+  UserMatrixIcon, 
+  NeuralIcon, 
+  MicIcon, 
+  BallotIcon, 
+  AnalyticsIcon, 
+  ChatIcon 
+} from './components/common/PremiumIcons';
 
 const OMNI_EMAILS = ["bagsgraphics4g@gmail.com", "boatengadams4g@gmail.com"];
 
@@ -45,26 +59,81 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
         return Array.from(new Set([...(userProfile.classesTaught || []), ...(userProfile.classTeacherOf ? [userProfile.classTeacherOf] : [])])).sort();
     }, [userProfile, isOmni]);
 
+    // --- SEQUENTIAL ALERT ONBOARDING ---
     useEffect(() => {
-        const storageKey = `onboarding_alert_teacher_${activeTab}`;
+        const storageKey = `onboarding_teacher_${activeTab}`;
         if (!localStorage.getItem(storageKey)) {
-            const messages: Record<string, string> = {
-                dashboard: "🚀 Command Hub: Your executive overview.\n\n• Statistics Cards: Show active students, accessible classes, and pending submission alerts.\n• Launch Test Class: Starts an immediate synchronized interactive session.\n• Activity Feed: Monitors real-time student engagement logs.",
-                my_students: "👨‍🎓 My Students: Central registry of your assigned learners.\n\n• Student Cards: Display individual averages and assignment completion rates.\n• View Profile: Opens deep academic analytics and personal portfolio.\n• Add Student/Parent: Manual account deployment tools.",
-                assignments: "📝 Academic Tasks: Homework and assessment manager.\n\n• Create Assignment: Manual builder or AI quiz generator.\n• Task Cards: Detail subject links, due dates, and submission types (Theory/Objective).\n• Action Icons: Edit or terminate existing task protocols.",
-                attendance: "📅 Attendance: Official daily roll call terminal.\n\n• Class Selector: Switch between your assigned sections.\n• Date Picker: Historical or current logging.\n• Status Radios: Mark 'Present', 'Absent', or 'Late' for each student.",
-                live_lesson: "📡 Live Class: Real-time immersive classroom.\n\n• The Board: Central visual presentation stage.\n• Toolbox: Whiteboard, Laser Pointer, and Eraser controls.\n• Roster: Live student presence and 'Raise Hand' notification center.",
-                library: "📚 Resource Library: Your teaching asset vault.\n\n• Slide Decks: Manage AI-generated presentations.\n• Video Lessons: Repository for pre-recorded instructional content.\n• Generate Button: Synthesis gateway for new content.",
-                group_work: "👥 Group Work: Orchestrate student collaborations.\n\n• Form Group: Select members and define project topics.\n• Status Tracker: Monitor team submission lifecycle in real-time.",
-                ai_tools: "🤖 AI Copilot: Suite of neural teaching assistants.\n\n• Lesson Designer: Curates curriculum plans.\n• Quiz Master: Synthesizes assessment batteries.\n• Report Assistant: Drafts professional terminal remarks.",
-                terminal_reports: "📊 Master Reports: Official grading terminal.\n\n• Data Entry: Input terminal exam scores.\n• Auto-fill: Sync class assignment grades with the final ledger.\n• Print Mode: Generate high-fidelity report cards.",
-                progress: "📈 Intelligence: Longitudinal academic analytics.\n\n• Distributions: Statistical spread of class grades.\n• Trends: Longitudinal mastery tracking across subjects.",
-                messages: "💬 Messages: Secure internal transmission matrix.\n\n• Contact List: Searchable student and staff registry.\n• Chat Input: Send text, imagery, or voice transmissions."
+            const steps: Record<string, string[]> = {
+                dashboard: [
+                    "🚀 Command Hub: Your executive operations center.",
+                    "📊 Statistics Cards: Monitor 'Active Students' in your jurisdiction, 'Classes Accessible' as assigned, and 'Alerts' for pending grading tasks.",
+                    "⚡ Launch Test Class: Instantly initialize a secure demo session for system testing.",
+                    "📡 Activity Feed: Track real-time engagement logs for all students in your assigned sections."
+                ],
+                my_students: [
+                    "👨‍🎓 Student Registry: Centralized learner database for your assigned classes.",
+                    "🔍 View Profile: Access deep-dive analytics for any student, including grade history and artifacts.",
+                    "➕ Add Student/Parent: Manually authorize and deploy new user accounts.",
+                    "💬 Message Icon: Initiate an encrypted transmission with specific students or guardians."
+                ],
+                assignments: [
+                    "📝 Academic Tasks: Manage the lifecycle of all homework and examinations.",
+                    "➕ Create Assignment: Deploy new tasks using the manual builder or AI Assistant generator.",
+                    "📋 Task Filter: Toggle between Theory (manual) and Objective (auto-graded) assessments.",
+                    "✏️/🗑️ Action Tools: Update existing protocols or terminate obsolete tasks instantly."
+                ],
+                live_lesson: [
+                    "📡 Live Class: High-fidelity immersive teaching environment with real-time sync.",
+                    "🖥️ The Board: Your primary presentation stage. Supports real-time whiteboard annotations.",
+                    "✏️ Toolbox: Switch between Pen, Laser Pointer, and Eraser for dynamic classroom demonstrations.",
+                    "👥 Roster Sidebar: Monitor student connection status and respond to prioritized 'Raise Hand' alerts."
+                ],
+                attendance: [
+                    "📅 Attendance: Official daily roll call terminal.",
+                    "📍 Selector: Toggle between classes and historical dates.",
+                    "🔘 Status Radios: Mark students as Present, Absent, or Late with one tap.",
+                    "💾 Save Button: Commits current session logs to the permanent school database."
+                ],
+                library: [
+                    "📚 Resource Library: Your teaching asset vault.",
+                    "📄 Slide Decks: Manage and launch pre-generated AI presentations.",
+                    "🎥 Video Lessons: View, delete, or create high-fidelity recorded instructions.",
+                    "✨ Generate: The gateway to the neural content creation engine."
+                ],
+                ai_tools: [
+                    "🤖 AI Copilot: Neural teaching assistants powered by Gemini.",
+                    "📝 Lesson Designer: Draft comprehensive curriculum plans including timings and objectives.",
+                    "🧠 Quiz Master: Synthesize high-fidelity assessment batteries for any topic.",
+                    "📊 Report Assistant: Generate professional remarks based on student behavioral traits."
+                ],
+                progress: [
+                    "📈 Intelligence: Longitudinal academic analytics and mastery tracking.",
+                    "📉 Distributions: Statistical spread of grades across your classes.",
+                    "🧬 Longitudinal Track: Monitor performance trends over time to identify struggling students."
+                ],
+                terminal_reports: [
+                    "📊 Master Reports: The official academic grading terminal for term results.",
+                    "📋 Data Entry: Input terminal exam scores and final professional remarks.",
+                    "🔄 Auto-fill: Instantly sync class assignment grades with the final termly ledger.",
+                    "🖨️ Print Mode: Generate and certify high-fidelity printable report cards."
+                ],
+                messages: [
+                    "💬 Messages: Secure internal school transmission matrix.",
+                    "📱 Contacts: Searchable registry of all students and staff.",
+                    "✨ AI Summarize: Use the 'Catch Me Up' tool to summarize long message threads instantly."
+                ]
             };
 
-            const msg = messages[activeTab];
-            if (msg) {
-                alert(msg);
+            const currentSteps = steps[activeTab];
+            if (currentSteps) {
+                let aborted = false;
+                for (let i = 0; i < currentSteps.length; i++) {
+                    const proceed = confirm(`[SYSTEM INTEL - ${activeTab.replace('_', ' ').toUpperCase()}]\n\nTip ${i + 1}/${currentSteps.length}:\n${currentSteps[i]}\n\n(Click OK for next, Cancel to Skip All)`);
+                    if (!proceed) {
+                        aborted = true;
+                        break;
+                    }
+                }
                 localStorage.setItem(storageKey, 'true');
             }
         }
@@ -78,39 +147,18 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
 
         const unsubscribers: (() => void)[] = [];
 
-        const handleErr = (name: string) => (err: any) => {
-            if (err.code === 'permission-denied') {
-                console.warn(`${name} access restricted.`);
-            } else {
-                console.error(`${name} stream error:`, err.message);
-            }
-        };
-
-        unsubscribers.push(db.collection('assignments').where('teacherId', '==', user.uid).onSnapshot(
-            snap => setAssignments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Assignment))),
-            handleErr("Assignments")
-        ));
-
-        unsubscribers.push(db.collection('submissions').where('teacherId', '==', user.uid).onSnapshot(
-            snap => setSubmissions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Submission))),
-            handleErr("Submissions")
-        ));
+        unsubscribers.push(db.collection('assignments').where('teacherId', '==', user.uid).onSnapshot(snap => setAssignments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Assignment))), err => console.warn("Assignments listener error:", err.message)));
+        unsubscribers.push(db.collection('submissions').where('teacherId', '==', user.uid).onSnapshot(snap => setSubmissions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Submission))), err => console.warn("Submissions listener error:", err.message)));
         
         const studentsQuery = isOmni 
             ? db.collection('users').where('role', '==', 'student')
             : (teacherClasses.length > 0 ? db.collection('users').where('class', 'in', teacherClasses).where('role', '==', 'student') : null);
             
         if (studentsQuery) {
-            unsubscribers.push(studentsQuery.onSnapshot(
-                snap => setStudents(snap.docs.map(doc => doc.data() as UserProfile)),
-                handleErr("Students")
-            ));
+            unsubscribers.push(studentsQuery.onSnapshot(snap => setStudents(snap.docs.map(doc => doc.data() as UserProfile)), err => console.warn("Students listener error:", err.message)));
         }
         
-        unsubscribers.push(db.collection('liveLessons').where('teacherId', '==', user.uid).where('status', '==', 'active').onSnapshot(
-            snap => setActiveLiveLesson(snap.empty ? null : {id: snap.docs[0].id, ...snap.docs[0].data()} as LiveLesson),
-            handleErr("LiveLessons")
-        ));
+        unsubscribers.push(db.collection('liveLessons').where('teacherId', '==', user.uid).where('status', '==', 'active').onSnapshot(snap => setActiveLiveLesson(snap.empty ? null : {id: snap.docs[0].id, ...snap.docs[0].data()} as LiveLesson), err => console.warn("LiveLessons listener error:", err.message)));
         
         setLoading(false);
         return () => unsubscribers.forEach(unsub => unsub());
@@ -132,13 +180,6 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
                         options: ["Yes, absolutely!", "I need a minute", "I have a question"],
                         correctAnswer: "Yes, absolutely!"
                     }
-                },
-                {
-                    title: "The Architecture of Learning",
-                    boardContent: "<h2>Our Digital Environment</h2><p>This classroom synchronizes all participants instantly across the Edutec secure network.</p>",
-                    imageUrl: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=800&q=80",
-                    teacherScript: "Let's test the drawing tools. I'll highlight the key points on this slide.",
-                    question: null
                 }
             ];
             
@@ -170,20 +211,20 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
 
     const navItems = useMemo(() => {
         const rawItems = [
-            { key: 'dashboard', label: 'Command Hub', icon: '🚀' },
-            { key: 'my_students', label: 'My Students', icon: '👨‍🎓' },
-            { key: 'assignments', label: 'Academic Tasks', icon: '📝' },
-            { key: 'attendance', label: 'Attendance', icon: '📅' },
-            { key: 'live_lesson', label: <span className="flex items-center">Live Class {activeLiveLesson && <span className="ml-2 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: '📡' },
-            { key: 'library', label: 'Resource Library', icon: '📚' },
-            { key: 'group_work', label: 'Group Work', icon: '👥' },
-            { key: 'ai_tools', label: 'AI Copilot', icon: '🤖' },
-            { key: 'my_voice', label: 'My Voice', icon: '🎙️' },
-            { key: 'bece_questions', label: 'BECE Library', icon: '🎓' },
-            { key: 'elections', label: 'Election Portal', icon: '🗳️' },
-            { key: 'terminal_reports', label: 'Master Reports', icon: '📊' },
-            { key: 'progress', label: 'Intelligence', icon: '📈' },
-            { key: 'messages', label: `Messages`, icon: '💬' },
+            { key: 'dashboard', label: 'Command Hub', icon: <RocketIcon size={20} active={activeTab === 'dashboard'} /> },
+            { key: 'my_students', label: 'My Students', icon: <GraduationIcon size={20} active={activeTab === 'my_students'} /> },
+            { key: 'assignments', label: 'Academic Tasks', icon: <ClipboardIcon size={20} active={activeTab === 'assignments'} /> },
+            { key: 'attendance', label: 'Attendance', icon: <AttendanceIcon size={20} active={activeTab === 'attendance'} /> },
+            { key: 'live_lesson', label: <span className="flex items-center">Live Class {activeLiveLesson && <span className="ml-2 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: <BroadcastIcon size={20} active={activeTab === 'live_lesson'} /> },
+            { key: 'library', label: 'Resource Library', icon: <LibraryIcon size={20} active={activeTab === 'library'} /> },
+            { key: 'group_work', label: 'Group Work', icon: <UserMatrixIcon size={20} active={activeTab === 'group_work'} /> },
+            { key: 'ai_tools', label: 'AI Copilot', icon: <NeuralIcon size={20} active={activeTab === 'ai_tools'} /> },
+            { key: 'my_voice', label: 'My Voice', icon: <MicIcon size={20} active={activeTab === 'my_voice'} /> },
+            { key: 'bece_questions', label: 'BECE Library', icon: <GraduationIcon size={20} active={activeTab === 'bece_questions'} /> },
+            { key: 'elections', label: 'Election Portal', icon: <BallotIcon size={20} active={activeTab === 'elections'} /> },
+            { key: 'terminal_reports', label: 'Master Reports', icon: <AnalyticsIcon size={20} active={activeTab === 'terminal_reports'} /> },
+            { key: 'progress', label: 'Intelligence', icon: <AnalyticsIcon size={20} active={activeTab === 'progress'} /> },
+            { key: 'messages', label: `Messages`, icon: <ChatIcon size={20} active={activeTab === 'messages'} /> },
         ];
 
         const savedOrder = userProfile?.sidebarTabOrder?.teacher;
@@ -198,7 +239,7 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
         const missingItems = rawItems.filter(item => !currentKeys.has(item.key));
 
         return [...orderedItems, ...missingItems];
-    }, [activeLiveLesson, userProfile?.sidebarTabOrder?.teacher]);
+    }, [activeLiveLesson, userProfile?.sidebarTabOrder?.teacher, activeTab]);
 
     const handleReorder = async (newOrder: string[]) => {
         if (!userProfile) return;
@@ -221,8 +262,8 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
             return (
                 <div className="p-20 text-center animate-fade-in">
                     <div className="text-6xl mb-6">📝</div>
-                    <h2 className="text-2xl font-bold text-white mb-2">Staff Profile Verification</h2>
-                    <p className="text-slate-400 max-w-md mx-auto italic">Your teaching credentials are being verified by school administrators. You will be able to manage your classes and create content shortly.</p>
+                    <h2 className="text-2xl font-bold text-white mb-2 text-slate-800">Staff Profile Verification</h2>
+                    <p className="text-slate-500 max-w-md mx-auto italic">Your teaching credentials are being verified by school administrators. You will be able to manage your classes and create content shortly.</p>
                 </div>
             );
         }
@@ -235,7 +276,7 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
                     <div className="space-y-8 animate-fade-in-up">
                         <div className="flex justify-between items-end">
                             <div>
-                                <h1 className="text-4xl font-black text-white tracking-tight">Executive <span className="text-blue-500">Teacher</span></h1>
+                                <h1 className="text-4xl font-black text-white dark:text-white tracking-tight">Executive <span className="text-blue-500">Teacher</span></h1>
                                 <p className="text-slate-400 mt-1 uppercase text-[10px] font-black tracking-widest">Logged: {teacherName} {isOmni && <span className="ml-2 text-blue-500 font-black">[MASTER ACCESS]</span>}</p>
                             </div>
                             {!activeLiveLesson && (
@@ -244,7 +285,7 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
                                 </Button>
                             )}
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-slate-200 dark:text-slate-200">
                             <Card className="!bg-blue-900/10 border-blue-500/20 text-center"><p className="text-xs font-bold text-blue-400 uppercase">Active Students</p><p className="text-3xl font-black text-white">{students.length}</p></Card>
                             <Card className="!bg-purple-900/10 border-purple-500/20 text-center"><p className="text-xs font-bold text-purple-400 uppercase">Classes Accessible</p><p className="text-3xl font-black text-white">{teacherClasses.length}</p></Card>
                             <Card className="!bg-orange-900/10 border-orange-500/20 text-center"><p className="text-xs font-bold text-orange-400 uppercase">Alerts</p><p className="text-3xl font-black text-white">{submissions.filter(s => s.status === 'Submitted').length}</p></Card>
@@ -252,24 +293,15 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
                         <TeacherStudentActivity teacherClasses={teacherClasses} />
                     </div>
                 );
-            case 'my_students':
-                return <TeacherStudentsList students={students} assignments={assignments} submissions={submissions} />;
-            case 'assignments':
-                return <TeacherAssignments user={user!} userProfile={userProfile!} teacherClasses={teacherClasses} />;
-            case 'attendance':
-                return <TeacherAttendance teacherClasses={teacherClasses} students={students} />;
-            case 'library':
-                return <TeacherLibrary user={user!} userProfile={userProfile!} teacherClasses={teacherClasses} onStartLiveLesson={() => setActiveTab('live_lesson')} />;
-            case 'group_work':
-                return <TeacherGroupWork teacherClasses={teacherClasses} students={students} />;
-            case 'ai_tools': 
-                return <TeacherAITools students={students} userProfile={userProfile!} />;
-            case 'my_voice': 
-                return <TeacherMyVoice userProfile={userProfile!} />;
-            case 'bece_questions': 
-                return <BECEPastQuestionsView />;
-            case 'live_lesson': 
-                return activeLiveLesson ? <TeacherLiveClassroom lessonId={activeLiveLesson.id} onClose={() => setActiveTab('dashboard')} userProfile={userProfile!} setToast={setToast} /> : (
+            case 'my_students': return <TeacherStudentsList students={students} assignments={assignments} submissions={submissions} />;
+            case 'assignments': return <TeacherAssignments user={user!} userProfile={userProfile!} teacherClasses={teacherClasses} />;
+            case 'attendance': return <TeacherAttendance teacherClasses={teacherClasses} students={students} />;
+            case 'library': return <TeacherLibrary user={user!} userProfile={userProfile!} teacherClasses={teacherClasses} onStartLiveLesson={() => setActiveTab('live_lesson')} />;
+            case 'group_work': return <TeacherGroupWork teacherClasses={teacherClasses} students={students} />;
+            case 'ai_tools': return <TeacherAITools students={students} userProfile={userProfile!} />;
+            case 'my_voice': return <TeacherMyVoice userProfile={userProfile!} />;
+            case 'bece_questions': return <BECEPastQuestionsView />;
+            case 'live_lesson': return activeLiveLesson ? <TeacherLiveClassroom lessonId={activeLiveLesson.id} onClose={() => setActiveTab('dashboard')} userProfile={userProfile!} setToast={setToast} /> : (
                 <div className="flex flex-col items-center justify-center p-20 text-slate-500 italic h-full">
                     <span className="text-7xl mb-6 opacity-20">📡</span>
                     <h3 className="text-xl font-bold text-white mb-2 not-italic">No Active Classroom Signal</h3>
@@ -277,31 +309,18 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
                     <Button onClick={() => setActiveTab('library')}>Go to Library</Button>
                 </div>
             );
-            case 'elections':
-                return <StudentElectionPortal userProfile={userProfile!} />;
-            case 'terminal_reports': 
-                return <AdminTerminalReports schoolSettings={schoolSettings} user={user} userProfile={userProfile} teacherMode allowedClasses={teacherClasses} allStudents={students} assignments={assignments} submissions={submissions} />;
-            case 'progress': 
-                return <TeacherProgressDashboard students={students} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} />;
-            case 'messages': 
-                return <MessagingView userProfile={userProfile!} contacts={students} />;
-            default: 
-                return <div className="p-20 text-center text-slate-600 italic">This sector is online and operational.</div>;
+            case 'elections': return <StudentElectionPortal userProfile={userProfile!} />;
+            case 'terminal_reports': return <AdminTerminalReports schoolSettings={schoolSettings} user={user} userProfile={userProfile} teacherMode allowedClasses={teacherClasses} allStudents={students} assignments={assignments} submissions={submissions} />;
+            case 'progress': return <TeacherProgressDashboard students={students} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} />;
+            case 'messages': return <MessagingView userProfile={userProfile!} contacts={students} />;
+            default: return <div className="p-20 text-center text-slate-600 italic">This sector is online and operational.</div>;
         }
     };
 
     return (
         <div className="flex flex-1 overflow-hidden h-full relative">
-            <Sidebar 
-                isExpanded={isSidebarExpanded} 
-                navItems={navItems} 
-                activeTab={activeTab} 
-                setActiveTab={setActiveTab} 
-                onClose={() => setIsSidebarExpanded(false)} 
-                title="Command Center"
-                onReorder={handleReorder}
-            />
-            <main className={`flex-1 overflow-y-auto bg-slate-950 ${activeTab === 'live_lesson' ? 'p-0' : 'p-6'}`}>{renderContent()}</main>
+            <Sidebar isExpanded={isSidebarExpanded} navItems={navItems} activeTab={activeTab} setActiveTab={setActiveTab} onClose={() => setIsSidebarExpanded(false)} title="Command Center" onReorder={handleReorder} />
+            <main className={`flex-1 overflow-y-auto bg-slate-950 dark:bg-slate-950 ${activeTab === 'live_lesson' ? 'p-0' : 'p-6'}`}>{renderContent()}</main>
             {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         </div>
     );

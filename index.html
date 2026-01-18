@@ -57,11 +57,11 @@
   }
 
   html.light {
-    --bg-main: #f1f5f9;
-    --card-bg: rgba(255, 255, 255, 0.95);
-    --border-color: rgba(15, 23, 42, 0.08);
+    --bg-main: #f8fafc;
+    --card-bg: #ffffff;
+    --border-color: #e2e8f0;
     --text-primary: #0f172a;
-    --text-secondary: #475569;
+    --text-secondary: #64748b;
   }
 
   body {
@@ -89,7 +89,7 @@
   html.light .bg-slate-950, 
   html.light .bg-slate-900,
   html.light .bg-[#020617] { 
-    background-color: #f8fafc !important; 
+    background-color: #f1f5f9 !important; 
   }
 
   html.light .bg-slate-900\/90,
@@ -97,21 +97,23 @@
   html.light .bg-slate-900\/40,
   html.light .bg-slate-800\/50,
   html.light .bg-slate-800\/40 {
-    background-color: rgba(255, 255, 255, 0.85) !important;
+    background-color: rgba(255, 255, 255, 0.8) !important;
     backdrop-filter: blur(16px);
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.03), 0 2px 4px -2px rgb(0 0 0 / 0.03);
+    border: 1px solid #e2e8f0 !important;
   }
 
   html.light .bg-slate-800,
   html.light .bg-slate-700 {
-    background-color: #f1f5f9 !important;
+    background-color: #ffffff !important;
     border: 1px solid #e2e8f0;
+    color: #1e293b !important;
   }
 
   html.light .text-white,
   html.light .text-slate-100,
   html.light .text-slate-200 {
-    color: #1e293b !important;
+    color: #0f172a !important;
   }
 
   html.light .text-slate-400,
@@ -127,12 +129,13 @@
   }
 
   html.light .shadow-2xl {
-    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.05), 0 8px 10px -6px rgb(0 0 0 / 0.05) !important;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02) !important;
   }
 
   html.light header {
     background-color: rgba(255, 255, 255, 0.9) !important;
     border-bottom: 1px solid #e2e8f0 !important;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
   }
 
   html.light .sidebar, 
@@ -145,25 +148,35 @@
   html.light select, 
   html.light textarea {
     background-color: #ffffff !important;
-    color: #1e293b !important;
+    color: #0f172a !important;
     border: 1px solid #cbd5e1 !important;
+  }
+
+  html.light input:focus, 
+  html.light select:focus, 
+  html.light textarea:focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1) !important;
   }
 
   html.light .glow-text {
     text-shadow: none !important;
-    color: #334155 !important;
+    color: #2563eb !important;
   }
 
   html.light .bg-blue-600\/20 {
-    background-color: rgba(37, 99, 235, 0.08) !important;
+    background-color: rgba(37, 99, 235, 0.1) !important;
   }
 
   /* Standard Scrollbar */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    background: rgba(71, 85, 105, 0.3);
+    background: rgba(71, 85, 105, 0.2);
     border-radius: 4px;
+  }
+  html.light ::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.4);
   }
 
   h1, h2, h3, h4, h5, h6 { letter-spacing: -0.02em; font-weight: 700; }

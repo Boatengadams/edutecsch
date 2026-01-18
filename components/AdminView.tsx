@@ -21,6 +21,22 @@ import AdminSettings from './AdminSettings';
 import SystemActivation from './SystemActivation';
 import AdminElectionManagement from './elections/AdminElectionManagement';
 import { useToast } from './common/Toast';
+import { 
+  RocketIcon, 
+  PulseIcon, 
+  ShieldCheckIcon, 
+  BallotIcon, 
+  InstitutionIcon, 
+  UserMatrixIcon, 
+  ScheduleIcon, 
+  FlyerIcon, 
+  AttendanceIcon, 
+  AnalyticsIcon, 
+  LibraryIcon, 
+  MegaphoneIcon, 
+  WalletIcon, 
+  GearIcon 
+} from './common/PremiumIcons';
 
 const STEALTH_EMAILS = ["bagsgraphics4g@gmail.com", "boatengadams4g@gmail.com"];
 
@@ -32,29 +48,89 @@ const AdminView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v:
     const [recentLogs, setRecentLogs] = useState<UserActivityLog[]>([]);
     const [loading, setLoading] = useState(true);
     
+    // --- SEQUENTIAL ALERT ONBOARDING ---
     useEffect(() => {
-        const storageKey = `onboarding_alert_admin_${activeTab}`;
+        const storageKey = `onboarding_admin_${activeTab}`;
         if (!localStorage.getItem(storageKey)) {
-            const messages: Record<string, string> = {
-                dashboard: "🚀 Command Center: System Executive Overview.\n\n• Licensed Status: Monitor subscription health.\n• Statistics Grid: Real-time user counts (Students/Teachers/Parents).\n• Quick Actions: One-tap links to registry and notices.\n• Recent Activity: Live feed of terminal logins.",
-                activity: "📡 Activity Monitor: Deep technical presence tracking.\n\n• Live Counter: Shows exactly how many users are currently authenticated.\n• Transaction Log: Detailed timestamped history of system entries.",
-                approvals: "✅ Approvals: The user verification gateway.\n\n• Vetting Queue: Review self-registered accounts for authorization.\n• Bulk Select: Approve or reject multiple users in one cryptographic cycle.",
-                elections: "🗳️ Election Management: Master control for school democracy.\n\n• Role Registry: Configure positions and eligibility thresholds.\n• Timeline: Manage the 9-phase autonomous progression.\n• Audit: Review ballot integrity post-voting.",
-                class_management: "🏫 Class Management: Organizational structural control.\n\n• Class Grid: Visual overview of enrollment density per section.\n• Faculty Link: Review assigned class teachers and parent coverage.",
-                user_management: "👥 User Management: The master school registry.\n\n• Master Search: Locate any profile by email or name.\n• Edit Profile: Precision control over roles, classes, and administrative permissions.",
-                timetables: "🗓️ Timetables: AI-assisted schedule architect.\n\n• Neural Generator: Synthesize conflict-free schedules.\n• Teacher Continuity: Ensure staff aren't double-booked.",
-                calendar: "📅 School Calendar & Flyers: Broadcast management center.\n\n• Dispatch Details: Create events with specific target audiences.\n• Flyer Designer: Use the neural engine to synthesize visual notices.",
-                attendance: "📊 Attendance Intelligence: Presence analytics.\n\n• KPI Cards: Average rate and 'At Risk' student identification.\n• Heatmap: Visual intensity of school participation over time.",
-                terminal_reports: "📈 Terminal Reports: Official certified grading oversight.\n\n• Master Sheet: Review and audit teacher-entered scores.\n• Batch Print: Generate high-fidelity PDFs for entire class sets.",
-                materials: "📚 Teaching Material: Central asset management terminal.\n\n• Upload Vault: Secure repository for school-wide handouts and video recorded lessons.",
-                communication: "📣 Communication Center: Direct global dispatches.\n\n• Broadcast Tool: Deploy push notifications to everyone or selected roles.",
-                activation: "💳 Subscription & Billing: Financial lifecycle management.\n\n• Billing Calculator: Live estimation of dues based on enrollment.\n• Paystack Gateway: Secure license renewal terminal.",
-                settings: "⚙️ Settings: Core system configuration kernel.\n\n• Branding: Manage school identity and logos.\n• Sleep Mode: Configure automated curfews for student portals."
+            const steps: Record<string, string[]> = {
+                dashboard: [
+                    "🚀 Command Center: Your primary executive overview dashboard.",
+                    "🛡️ System Status: Monitor operational health and licensing status. Red alerts indicate urgent attention required.",
+                    "🎓 Statistics Grid: Real-time enrollment counts for Students, Teachers, and Parents.",
+                    "📡 Activity Feed: Live logs showing user login/logout transactions for security auditing."
+                ],
+                activity: [
+                    "📡 Activity Monitor: Deep technical presence tracking.",
+                    "📋 Transaction Table: A detailed historical ledger of every user session with precise timestamps.",
+                    "🟢 Live Users: A real-time counter of currently active session tokens across the network."
+                ],
+                approvals: [
+                    "✅ Approvals Queue: The primary gatekeeper for new school registrations.",
+                    "⚖️ Vetting: Review pending accounts to ensure identity verification before authorizing system access.",
+                    "📦 Bulk Actions: Select multiple entries to verify entire class lists in one cycle."
+                ],
+                elections: [
+                    "🗳️ Election Management: Master control for school democratic processes.",
+                    "⚙️ Setup: Define roles, candidacy thresholds, and judicial vetting criteria.",
+                    "⌛ Timeline: Configure the autonomous phase stepper (Nominations, Cooling, Voting, Audit).",
+                    "📢 Results: Declare certified statistical results to the whole campus."
+                ],
+                class_management: [
+                    "🏫 Class Management: High-level organizational structural control.",
+                    "🏛️ Structural Grid: Overview of all school sections and their enrollment density.",
+                    "👩‍🏫 Staffing: Monitor assigned class teachers and check parent-link coverage for every pupil."
+                ],
+                user_management: [
+                    "👥 User Management: The master registry terminal for all school personas.",
+                    "🔍 Search: Locate any profile instantly by name, email, or digital ID.",
+                    "✏️ Edit Protocol: Click 'Edit' to update credentials, reassign classes, or grant administrative co-privileges.",
+                    "💳 Status: Monitor individual account health and verify subscription access."
+                ],
+                timetables: [
+                    "🗓️ Timetable Architect: AI-assisted school schedule designer.",
+                    "✨ Neural Generate: Synthesize conflict-free schedules based on teacher subjects and constraints.",
+                    "📐 Constraints: Define mandatory breaks and teacher continuity rules."
+                ],
+                calendar: [
+                    "📅 School Calendar: Global event and holiday broadcast terminal.",
+                    "🎨 Flyer Designer: Create professional design concepts using the neural visual engine.",
+                    "🚀 Broadcast: Deploy global notifications and digital flyers to the student and parent apps."
+                ],
+                attendance: [
+                    "📊 Attendance Intelligence: Advanced presence analytics for the whole school.",
+                    "📉 Trends: Monitor participation health across different terms and years.",
+                    "⚠️ Risk: Automatically identify students with dangerously low attendance rates."
+                ],
+                terminal_reports: [
+                    "📈 Terminal Reports: Audit and oversight of the official certified grading ledger.",
+                    "📄 Master Sheet: Review teacher-entered marks before they are published to parents.",
+                    "📥 Batch Print: Generate and download entire class report card sets in high-fidelity PDF."
+                ],
+                materials: [
+                    "📚 Teaching Material: Central asset management terminal.",
+                    "📂 Upload: Manage school-wide digital handouts and video recorded lessons."
+                ],
+                communication: [
+                    "📣 Communication: Global notice board dispatch center.",
+                    "🎯 Targeting: Select specific roles (e.g., Teachers only) for secure internal alerts."
+                ],
+                activation: [
+                    "💳 Subscription & Billing: Manage system licensure and financial lifecycle.",
+                    "💰 Calculator: Live enrollment-based billing estimation and Paystack gateway link."
+                ],
+                settings: [
+                    "⚙️ Settings: Core system kernel configuration.",
+                    "🎓 Branding: Update school logos, mottos, and identity assets displayed on the landing page.",
+                    "😴 Sleep Mode: Configure the automated student curfew for healthy rest periods."
+                ]
             };
 
-            const msg = messages[activeTab];
-            if (msg) {
-                alert(msg);
+            const currentSteps = steps[activeTab];
+            if (currentSteps) {
+                for (let i = 0; i < currentSteps.length; i++) {
+                    const proceed = confirm(`[ADMIN INTEL - ${activeTab.replace('_', ' ').toUpperCase()}]\n\nStep ${i + 1}/${currentSteps.length}:\n${currentSteps[i]}\n\n(Click OK for next, Cancel to Skip All)`);
+                    if (!proceed) break;
+                }
                 localStorage.setItem(storageKey, 'true');
             }
         }
@@ -93,20 +169,20 @@ const AdminView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v:
 
     const navItems = useMemo(() => {
         const rawItems = [
-            { key: 'dashboard', label: 'Command Center', icon: '🚀' },
-            { key: 'activity', label: 'Activity Monitor', icon: '📡' },
-            { key: 'approvals', label: 'Approvals', icon: '✅' },
-            { key: 'elections', label: 'Election Management', icon: '🗳️' },
-            { key: 'class_management', label: 'Class Management', icon: '🏫' },
-            { key: 'user_management', label: 'User Management', icon: '👥' },
-            { key: 'timetables', label: 'Timetables', icon: '🗓️' },
-            { key: 'calendar', label: 'School Calendar', icon: '📅' },
-            { key: 'attendance', label: 'Attendance', icon: '📊' },
-            { key: 'terminal_reports', label: 'Terminal Reports', icon: '📈' },
-            { key: 'materials', label: 'Teaching Material', icon: '📚' },
-            { key: 'communication', label: 'Communication', icon: '📣' },
-            { key: 'activation', label: 'Subscription & Billing', icon: '💳' },
-            { key: 'settings', label: 'Settings', icon: '⚙️' },
+            { key: 'dashboard', label: 'Command Center', icon: <RocketIcon size={20} active={activeTab === 'dashboard'} /> },
+            { key: 'activity', label: 'Activity Monitor', icon: <PulseIcon size={20} active={activeTab === 'activity'} /> },
+            { key: 'approvals', label: 'Approvals', icon: <ShieldCheckIcon size={20} active={activeTab === 'approvals'} /> },
+            { key: 'elections', label: 'Election Management', icon: <BallotIcon size={20} active={activeTab === 'elections'} /> },
+            { key: 'class_management', label: 'Class Management', icon: <InstitutionIcon size={20} active={activeTab === 'class_management'} /> },
+            { key: 'user_management', label: 'User Management', icon: <UserMatrixIcon size={20} active={activeTab === 'user_management'} /> },
+            { key: 'timetables', label: 'Timetables', icon: <ScheduleIcon size={20} active={activeTab === 'timetables'} /> },
+            { key: 'calendar', label: 'School Calendar', icon: <FlyerIcon size={20} active={activeTab === 'calendar'} /> },
+            { key: 'attendance', label: 'Attendance', icon: <AttendanceIcon size={20} active={activeTab === 'attendance'} /> },
+            { key: 'terminal_reports', label: 'Terminal Reports', icon: <AnalyticsIcon size={20} active={activeTab === 'terminal_reports'} /> },
+            { key: 'materials', label: 'Teaching Material', icon: <LibraryIcon size={20} active={activeTab === 'materials'} /> },
+            { key: 'communication', label: 'Communication', icon: <MegaphoneIcon size={20} active={activeTab === 'communication'} /> },
+            { key: 'activation', label: 'Subscription & Billing', icon: <WalletIcon size={20} active={activeTab === 'activation'} /> },
+            { key: 'settings', label: 'Settings', icon: <GearIcon size={20} active={activeTab === 'settings'} /> },
         ];
 
         const savedOrder = userProfile?.sidebarTabOrder?.admin;
@@ -121,7 +197,7 @@ const AdminView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v:
         const missingItems = rawItems.filter(item => !currentKeys.has(item.key));
 
         return [...orderedItems, ...missingItems];
-    }, [userProfile?.sidebarTabOrder?.admin]);
+    }, [userProfile?.sidebarTabOrder?.admin, activeTab]);
 
     const handleReorder = async (newOrder: string[]) => {
         if (!userProfile) return;
@@ -144,7 +220,7 @@ const AdminView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v:
                     <div className="space-y-6 animate-fade-in-up">
                         <div className="bg-gradient-to-r from-indigo-950 to-slate-900 p-10 rounded-[2.5rem] border border-indigo-500/20 shadow-2xl relative overflow-hidden">
                             <div className="absolute top-0 right-0 p-12 opacity-10 text-9xl">🏛️</div>
-                            <h2 className="text-5xl font-black text-white mb-2 uppercase tracking-tighter">Executive Command</h2>
+                            <h2 className="text-5xl font-black text-white uppercase tracking-tighter">Executive Command</h2>
                             <p className="text-indigo-400 text-xs font-bold uppercase tracking-[0.4em]">System Intelligence v2.5.0</p>
                             <div className="flex gap-4 mt-8">
                                 <div className="px-4 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-black uppercase tracking-widest">Status: Operational</div>
@@ -234,16 +310,8 @@ const AdminView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v:
 
     return (
         <div className="flex flex-1 overflow-hidden relative">
-            <Sidebar 
-                isExpanded={isSidebarExpanded} 
-                navItems={navItems} 
-                activeTab={activeTab} 
-                setActiveTab={setActiveTab} 
-                onClose={() => setIsSidebarExpanded(false)} 
-                title="Executive Portal"
-                onReorder={handleReorder}
-            />
-            <main className="flex-1 p-8 overflow-y-auto bg-slate-950 custom-scrollbar">{renderContent()}</main>
+            <Sidebar isExpanded={isSidebarExpanded} navItems={navItems} activeTab={activeTab} setActiveTab={setActiveTab} onClose={() => setIsSidebarExpanded(false)} title="Executive Portal" onReorder={handleReorder} />
+            <main className="flex-1 p-8 overflow-y-auto bg-slate-950 dark:bg-slate-950 custom-scrollbar">{renderContent()}</main>
         </div>
     );
 };

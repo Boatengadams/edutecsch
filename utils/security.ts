@@ -3,16 +3,20 @@
  * Implements strict validation, sanitization, and rate-limiting logic.
  */
 
-// Simple robust HTML sanitizer to prevent XSS in dangerouslySetInnerHTML regions
 export const sanitizeHTML = (html: string): string => {
   if (!html) return '';
   const div = document.createElement('div');
   div.innerHTML = html;
   
-  // Remove all script, iframe, object, and event handler attributes
+  // Remove all active content
   const scripts = div.getElementsByTagName('script');
   for (let i = scripts.length - 1; i >= 0; i--) {
     scripts[i].parentNode?.removeChild(scripts[i]);
+  }
+  
+  const iframes = div.getElementsByTagName('iframe');
+  for (let i = iframes.length - 1; i >= 0; i--) {
+    iframes[i].parentNode?.removeChild(iframes[i]);
   }
   
   const allElements = div.getElementsByTagName('*');
@@ -21,8 +25,10 @@ export const sanitizeHTML = (html: string): string => {
     const attributes = el.attributes;
     for (let j = attributes.length - 1; j >= 0; j--) {
       const attrName = attributes[j].name.toLowerCase();
-      if (attrName.startsWith('on') || ['src', 'href', 'xlink:href'].includes(attrName) && 
-          attributes[j].value.toLowerCase().startsWith('javascript:')) {
+      // Block all on* handlers and javascript: URIs
+      if (attrName.startsWith('on') || 
+          (['src', 'href', 'xlink:href'].includes(attrName) && 
+           attributes[j].value.toLowerCase().startsWith('javascript:'))) {
         el.removeAttribute(attributes[j].name);
       }
     }
@@ -30,40 +36,25 @@ export const sanitizeHTML = (html: string): string => {
   return div.innerHTML;
 };
 
-// Rate limiting state
 const rateLimits: Record<string, number[]> = {};
 
-/**
- * Validates if an action is permitted under rate limits.
- * @param actionKey - Unique key for the action (e.g., 'ai_gen', 'msg_send')
- * @param limit - Max actions allowed in the window
- * @param windowMs - Time window in milliseconds
- */
 export const checkRateLimit = (actionKey: string, limit: number = 5, windowMs: number = 60000): boolean => {
   const now = Date.now();
   if (!rateLimits[actionKey]) {
     rateLimits[actionKey] = [now];
     return true;
   }
-
-  // Filter out timestamps outside the window
   rateLimits[actionKey] = rateLimits[actionKey].filter(ts => now - ts < windowMs);
-
-  if (rateLimits[actionKey].length >= limit) {
-    return false;
-  }
-
+  if (rateLimits[actionKey].length >= limit) return false;
   rateLimits[actionKey].push(now);
   return true;
 };
 
-/**
- * Strictly validates string inputs to prevent malformed payloads
- */
 export const validateString = (input: any, min: number = 1, max: number = 5000): string => {
-  if (typeof input !== 'string') throw new Error('Invalid input type: Expected string');
+  if (typeof input !== 'string') throw new Error('Security: Expected string input');
   const trimmed = input.trim();
-  if (trimmed.length < min) throw new Error(`Input too short (min ${min})`);
-  if (trimmed.length > max) throw new Error(`Input too long (max ${max})`);
+  if (trimmed.length < min || trimmed.length > max) {
+      throw new Error(`Security: Input violates length constraints (${min}-${max})`);
+  }
   return trimmed;
 };

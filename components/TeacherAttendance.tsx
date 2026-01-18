@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db, firebase } from '../services/firebase';
 import { UserProfile, AttendanceStatus, AttendanceRecord } from '../types';
 import Card from './common/Card';
@@ -7,6 +6,8 @@ import Button from './common/Button';
 import Spinner from './common/Spinner';
 import { useToast } from './common/Toast';
 import { useAuthentication } from '../hooks/useAuth';
+
+const OMNI_EMAILS = ["bagsgraphics4g@gmail.com", "boatengadams4g@gmail.com"];
 
 interface TeacherAttendanceProps {
     teacherClasses: string[];
@@ -22,7 +23,17 @@ const TeacherAttendance: React.FC<TeacherAttendanceProps> = ({ teacherClasses, s
     const [loading, setLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
-    const filteredStudents = students.filter(s => s.class === selectedClass);
+    const isOmni = useMemo(() => OMNI_EMAILS.includes(user?.email || ""), [user]);
+    
+    // AUTHORITY CHECK: Is this teacher the official class teacher for the selected class?
+    const isDesignatedClassTeacher = useMemo(() => {
+        if (isOmni) return true;
+        return userProfile?.classTeacherOf === selectedClass;
+    }, [userProfile, selectedClass, isOmni]);
+
+    const filteredStudents = useMemo(() => 
+        students.filter(s => s.class === selectedClass).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    , [students, selectedClass]);
 
     useEffect(() => {
         const fetchExisting = async () => {
@@ -46,14 +57,18 @@ const TeacherAttendance: React.FC<TeacherAttendanceProps> = ({ teacherClasses, s
             }
         };
         fetchExisting();
-    }, [selectedClass, date, students]);
+    }, [selectedClass, date, filteredStudents]);
 
     const handleUpdate = (uid: string, status: AttendanceStatus) => {
+        if (!isDesignatedClassTeacher) return;
         setRecords(prev => ({ ...prev, [uid]: status }));
     };
 
     const handleSave = async () => {
-        if (!user || !userProfile) return;
+        if (!user || !userProfile || !isDesignatedClassTeacher) {
+            showToast("Unauthorized: You are not the designated class teacher.", "error");
+            return;
+        }
         setIsSaving(true);
         try {
             const docId = `${date}_${selectedClass}`;
@@ -76,62 +91,126 @@ const TeacherAttendance: React.FC<TeacherAttendanceProps> = ({ teacherClasses, s
     };
 
     const markAll = (status: AttendanceStatus) => {
+        if (!isDesignatedClassTeacher) return;
         const newRecords: Record<string, AttendanceStatus> = {};
         filteredStudents.forEach(s => newRecords[s.uid] = status);
         setRecords(newRecords);
     };
 
     return (
-        <div className="space-y-6 animate-fade-in-up">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-800">
-                <div className="flex gap-4">
-                    <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="p-2 bg-slate-800 border border-slate-700 rounded-lg text-sm">
-                        {teacherClasses.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="p-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white" />
+        <div className="space-y-8 animate-fade-in-up pb-20">
+            {/* Header / Controls */}
+            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 bg-slate-900/60 p-6 rounded-[2rem] border border-white/5 shadow-2xl">
+                <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto">
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Class Registry</label>
+                        <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="p-3.5 bg-slate-950 border border-white/10 rounded-2xl text-sm font-bold text-white outline-none focus:border-blue-500">
+                            {teacherClasses.map(c => (
+                                <option key={c} value={c}>
+                                    {c} {userProfile?.classTeacherOf === c ? '(My Class)' : ''}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Registry Date</label>
+                        <input type="date" value={date} onChange={e => setDate(e.target.value)} className="p-3.5 bg-slate-950 border border-white/10 rounded-2xl text-sm font-bold text-white outline-none focus:border-blue-500" />
+                    </div>
                 </div>
-                <div className="flex gap-2">
-                    <Button variant="secondary" size="sm" onClick={() => markAll('Present')}>Mark All Present</Button>
-                    <Button variant="secondary" size="sm" onClick={() => markAll('Absent')}>Mark All Absent</Button>
-                    <Button size="sm" onClick={handleSave} disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Attendance'}</Button>
-                </div>
+
+                {!isDesignatedClassTeacher ? (
+                    <div className="flex items-center gap-3 bg-rose-500/10 border border-rose-500/30 px-6 py-4 rounded-2xl w-full xl:w-auto animate-pulse">
+                        <span className="text-xl">🔒</span>
+                        <div>
+                            <p className="text-rose-400 text-xs font-black uppercase tracking-widest leading-none">ReadOnly Protection</p>
+                            <p className="text-rose-300/60 text-[10px] font-bold uppercase mt-1">Not your designated class</p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-wrap gap-2 w-full xl:w-auto">
+                        <Button variant="secondary" size="sm" onClick={() => markAll('Present')} className="flex-1 sm:flex-none py-3 px-4 text-[10px] font-black uppercase">All Present</Button>
+                        <Button variant="secondary" size="sm" onClick={() => markAll('Absent')} className="flex-1 sm:flex-none py-3 px-4 text-[10px] font-black uppercase">All Absent</Button>
+                        <Button onClick={handleSave} disabled={isSaving} className="flex-1 sm:flex-none py-3 px-10 text-[10px] font-black uppercase shadow-xl shadow-blue-900/30">
+                            {isSaving ? <Spinner /> : 'Commit Register'}
+                        </Button>
+                    </div>
+                )}
             </div>
 
-            <Card className="!p-0 overflow-hidden">
-                {loading ? <div className="p-20 flex justify-center"><Spinner /></div> : (
-                    <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-800 text-slate-400 uppercase text-[10px] font-black tracking-widest">
-                            <tr>
-                                <th className="px-6 py-4">Student Name</th>
-                                <th className="px-6 py-4 text-center">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                            {filteredStudents.map(student => (
-                                <tr key={student.uid} className="hover:bg-white/[0.02]">
-                                    <td className="px-6 py-4 font-bold text-white uppercase">{student.name}</td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex justify-center gap-4">
-                                            {(['Present', 'Absent', 'Late'] as AttendanceStatus[]).map(status => (
-                                                <label key={status} className="flex items-center gap-2 cursor-pointer group">
-                                                    <input 
-                                                        type="radio" 
-                                                        name={`status-${student.uid}`} 
-                                                        checked={records[student.uid] === status} 
-                                                        onChange={() => handleUpdate(student.uid, status)}
-                                                        className="sr-only"
-                                                    />
-                                                    <div className={`w-4 h-4 rounded-full border-2 transition-all ${records[student.uid] === status ? 'bg-blue-500 border-blue-400 scale-125 shadow-[0_0_10px_rgba(59,130,246,0.5)]' : 'border-slate-600 group-hover:border-slate-400'}`}></div>
-                                                    <span className={`text-xs font-bold transition-colors ${records[student.uid] === status ? 'text-white' : 'text-slate-500'}`}>{status}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </td>
+            {/* List Table */}
+            <Card className="!p-0 overflow-hidden border-white/5 shadow-3xl rounded-[2.5rem]">
+                {loading ? <div className="p-32 flex justify-center"><Spinner /></div> : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm border-collapse">
+                            <thead className="bg-slate-800/80 text-slate-400 uppercase text-[10px] font-black tracking-[0.3em]">
+                                <tr>
+                                    <th className="px-8 py-6 w-12">#</th>
+                                    <th className="px-8 py-6">Student Identification</th>
+                                    <th className="px-8 py-6 text-center">Protocol Status</th>
                                 </tr>
-                            ))}
-                            {filteredStudents.length === 0 && <tr><td colSpan={2} className="p-20 text-center text-slate-600 italic">No students found in this class.</td></tr>}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                                {filteredStudents.map((student, idx) => (
+                                    <tr key={student.uid} className={`group transition-colors ${!isDesignatedClassTeacher ? 'opacity-80' : 'hover:bg-white/[0.02]'}`}>
+                                        <td className="px-8 py-6 text-xs font-mono text-slate-600">{idx + 1}</td>
+                                        <td className="px-8 py-6">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-10 h-10 rounded-xl bg-slate-800 border border-white/10 flex items-center justify-center font-black text-slate-400 shadow-inner">
+                                                    {(student.name || '?').charAt(0)}
+                                                </div>
+                                                <div>
+                                                    <p className="font-black text-white text-base tracking-tight group-hover:text-blue-400 transition-colors uppercase">{student.name}</p>
+                                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{student.uid.substring(0, 8)}</p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-8 py-6">
+                                            <div className="flex justify-center gap-6">
+                                                {(['Present', 'Absent', 'Late'] as AttendanceStatus[]).map(status => (
+                                                    <label 
+                                                        key={status} 
+                                                        className={`flex items-center gap-3 transition-all ${
+                                                            isDesignatedClassTeacher ? 'cursor-pointer group/opt' : 'cursor-not-allowed'
+                                                        }`}
+                                                    >
+                                                        <input 
+                                                            type="radio" 
+                                                            name={`status-${student.uid}`} 
+                                                            checked={records[student.uid] === status} 
+                                                            onChange={() => handleUpdate(student.uid, status)}
+                                                            disabled={!isDesignatedClassTeacher}
+                                                            className="sr-only"
+                                                        />
+                                                        <div className={`w-5 h-5 rounded-full border-2 transition-all flex items-center justify-center ${
+                                                            records[student.uid] === status 
+                                                                ? status === 'Present' ? 'bg-emerald-500 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 
+                                                                  status === 'Absent' ? 'bg-rose-500 border-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.4)]' :
+                                                                  'bg-amber-500 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]'
+                                                                : 'border-slate-700 group-hover/opt:border-slate-500'
+                                                        }`}>
+                                                            {records[student.uid] === status && <div className="w-1.5 h-1.5 bg-white rounded-full"></div>}
+                                                        </div>
+                                                        <span className={`text-[10px] font-black uppercase tracking-widest ${
+                                                            records[student.uid] === status ? 'text-white' : 'text-slate-500'
+                                                        }`}>{status}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {filteredStudents.length === 0 && (
+                                    <tr>
+                                        <td colSpan={3} className="p-32 text-center text-slate-600 italic">
+                                            <div className="text-6xl mb-4 opacity-10">📂</div>
+                                            <p className="font-black uppercase tracking-widest">Sector Empty</p>
+                                            <p className="text-[10px] mt-2">No students linked to this class registry.</p>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </Card>
         </div>

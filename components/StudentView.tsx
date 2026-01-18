@@ -20,6 +20,21 @@ import StudentAttendanceLog from './StudentAttendanceLog';
 import FlyerCard from './common/FlyerCard';
 import StudentElectionPortal from './elections/StudentElectionPortal';
 import PaymentPortal from './PaymentPortal';
+import { 
+  RocketIcon, 
+  ClipboardIcon, 
+  BallotIcon, 
+  BroadcastIcon, 
+  FlaskIcon, 
+  BrainIcon, 
+  LibraryIcon, 
+  ChatIcon, 
+  AnalyticsIcon, 
+  WalletIcon, 
+  ProfileIcon, 
+  ScheduleIcon, 
+  AttendanceIcon 
+} from './common/PremiumIcons';
 
 export const StudentView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: (v: boolean) => void; }> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
   const { user, userProfile, schoolSettings } = useAuthentication();
@@ -35,28 +50,86 @@ export const StudentView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExp
   const [flyers, setFlyers] = useState<PublishedFlyer[]>([]);
   const [electionConfig, setElectionConfig] = useState<ElectionConfig | null>(null);
 
+  // --- SEQUENTIAL ALERT ONBOARDING ---
   useEffect(() => {
-    const storageKey = `onboarding_alert_student_${activeTab}`;
+    const storageKey = `onboarding_student_${activeTab}`;
     if (!localStorage.getItem(storageKey)) {
-        const messages: Record<string, string> = {
-            dashboard: "🚀 Learner Dashboard: Your academic HQ.\n\n• Live Now: Displays active classroom signals. Click 'Join Class' to enter.\n• Progress Bar: Tracks your Level and XP (Experience Points).\n• Tasks Card: Counts pending vs. graded assignments.\n• Quick Links: Access your profile or latest school flyers.",
-            assignments: "📝 Academic Tasks: Your homework and assessment registry.\n\n• Task Filter: Toggle between 'Pending', 'Graded', and 'All'.\n• Task Cards: Detail subject, due dates, and marks.\n• Start Task Button: Opens the theory or objective quiz environment.",
-            elections: "🗳️ Election Portal: Participate in school governance.\n\n• Registry: Roles open for nomination and your eligibility status.\n• Campaign Wall: Visual billboard of candidate posters.\n• Secure Vault: Cast your ballot during active voting phases.",
-            live_lesson: "📡 Live Class: Synchronized learning terminal.\n\n• Immersive Board: View slides and teacher annotations.\n• Interaction Icons: Raise hand, send emoji reactions, or joined audio.\n• AI Avatar: Real-time feedback from Sir.Edu.",
-            science_lab: "🧪 Virtual Lab: 3D High-Fidelity Simulations.\n\n• Zone Toggles: Switch between Physics, Chemistry, and Biology workbenches.\n• Laboratory Tools: Interactive tap (double-click), microscope stage, and electronics components.\n• Lab Intelligence: Chat with Dr. Adams for experiment guidance.",
-            study_mode: "🧠 Study Mode: Deep focus and AI planning.\n\n• Focus Timer: 25-minute Pomodoro sessions with alerts.\n• Smart Modules: AI-synthesized lessons based on your actual class timetable.",
-            materials: "📚 Study Materials: Your digital handout vault.\n\n• Handouts: Downloadable PDFs and class notes.\n• Video Lessons: Recorded transmissions for offline review.",
-            messages: "💬 Messages: Secure line to your teachers.\n\n• AI Summary: Summarizes long message histories.\n• Multimedia: Send text, imagery, or voice notes.",
-            reports: "📊 Reports: Official certified terminal report cards.\n\n• Term Selector: View results from previous or current academic sessions.\n• High-Fidelity Card: Full breakdown of marks, positions, and remarks.",
-            payments: "💳 Payments: Secure gateway for school fees.\n\n• Secure Link: Direct Paystack integration for bank-grade safety.\n• Receipts: Instant digital verification of all school-related dues.",
-            profile: "👤 Profile: Your digital academic identity.\n\n• XP Progression: Visual track of levels and earned badges.\n• Portfolio: Repository of all submitted artifacts and evidence.\n• Password Reset: Manage your secure access credentials.",
-            timetable: "🗓️ Timetable: Your official weekly learning schedule rendered in a comfortable notebook style.",
-            attendance: "📅 Attendance: Personal log of your presence. Includes a live tracking of your participation rate percentage."
+        const steps: Record<string, string[]> = {
+            dashboard: [
+                "🚀 Learner Dashboard: Your central academic HQ.",
+                "📡 Live Now: This indicator signals when your teacher is broadcasting a lesson. Click 'Join Class' to enter.",
+                "🆙 XP & Level: Complete assignments to earn 'Experience Points'. As your XP grows, your profile rank levels up.",
+                "📝 Pending Tasks: A real-time count of assignments waiting for your submission."
+            ],
+            assignments: [
+                "📝 Academic Tasks: Your personalized registry for all homework and tests.",
+                "🔍 Task Filters: Toggle between 'Pending' (needs action) and 'Graded' (to review your results).",
+                "⚡ Start Task: Use this icon to launch the secure Theory or Objective assessment environment.",
+                "📊 Marks: Once certified by a teacher, your grades and feedback will appear directly on the task cards."
+            ],
+            elections: [
+                "🗳️ Election Portal: Participate in school governance and student leadership.",
+                "📜 Roles: Review available leadership mandates and check your eligibility status based on academic metrics.",
+                "🎨 Campaign Designer: Approvals candidates get access to a neural studio for synthesizing posters.",
+                "🔒 Secure Vault: During the voting phase, your digital signature is locked into the encrypted ballot box."
+            ],
+            live_lesson: [
+                "📡 Live Class: Synchronized learning terminal with real-time interactivity.",
+                "🖐️ Raise Hand: Use this icon to signal your teacher if you need immediate assistance.",
+                "❤️ Reactions: Send live engagement emojis to the classroom feed.",
+                "🔊 Classroom Audio: Tap the 'Enable' button to hear your teacher's digital voice synthesis."
+            ],
+            science_lab: [
+                "🧪 Virtual Lab: High-fidelity 3D science simulations.",
+                "🔬 Zone Selectors: Toggle between Alpha (Physics) and Beta (Chemistry/Biology) workbenches.",
+                "💧 Interactive Tap: In the Chemistry zone, double-click the sink tap to control fluid flow for experiments.",
+                "👩‍🔬 Lab Intelligence: Click the Advisor icon to chat with Dr. Adams for expert experimental guidance."
+            ],
+            study_mode: [
+                "🧠 Study Mode: A focused environment for deep academic work and revision.",
+                "⏱️ Focus Timer: Start a 25-minute Pomodoro sprint with automated break notifications.",
+                "🤖 AI Planner: This tool analyzes your timetable to suggest specific modules for study.",
+                "📚 Module Player: An interactive slide deck with integrated AI voice synthesis for self-paced learning."
+            ],
+            materials: [
+                "📚 Study Materials: Your digital handout vault.",
+                "📄 Documents: Download class notes and handouts for offline study.",
+                "🎥 Video Lessons: Watch recorded transmissions from your teachers for complex topics."
+            ],
+            messages: [
+                "💬 Messages: Secure line to your teachers and faculty.",
+                "✨ AI Summarize: Summarize long message histories instantly using the 'Catch Me Up' tool.",
+                "🎙️ Voice Notes: Record and send audio transmissions directly to staff."
+            ],
+            reports: [
+                "📊 Reports: Official certified terminal report card vault.",
+                "📋 View Card: Access term-by-term certified results after they are audited by admin.",
+                "🖨️ Print: Reports are formatted for high-fidelity printing."
+            ],
+            payments: [
+                "💳 Payments Portal: Manage your school financial ledger securely.",
+                "🚀 Paystack Link: Establishes an encrypted bridge to the official bank-grade payment gateway.",
+                "⚡ Receipts: Instant digital confirmation and verification of all transactions."
+            ],
+            profile: [
+                "👤 Profile: Your digital academic identity.",
+                "🎖️ Badges: Display of honors earned through consistent excellence.",
+                "📂 Portfolio: Repository of your artifacts and submitted assignment evidence."
+            ],
+            timetable: [
+                "🗓️ Timetable: Your official weekly schedule, rendered in a comfortable notebook style for easy reading."
+            ],
+            attendance: [
+                "📅 Attendance: Personal log of your physical presence. Monitor your average participation rate here."
+            ]
         };
 
-        const msg = messages[activeTab];
-        if (msg) {
-            alert(msg);
+        const currentSteps = steps[activeTab];
+        if (currentSteps) {
+            for (let i = 0; i < currentSteps.length; i++) {
+                const proceed = confirm(`[LEARNER INTEL - ${activeTab.replace('_', ' ').toUpperCase()}]\n\nTip ${i + 1}/${currentSteps.length}:\n${currentSteps[i]}\n\n(Click OK for next, Cancel to Skip All)`);
+                if (!proceed) break;
+            }
             localStorage.setItem(storageKey, 'true');
         }
     }
@@ -117,19 +190,19 @@ export const StudentView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExp
 
   const navItems = useMemo(() => {
     const rawItems = [
-        { key: 'dashboard', label: 'Dashboard', icon: '🚀' },
-        { key: 'assignments', label: 'Assignments', icon: '📝' },
-        { key: 'elections', label: 'Election Portal', icon: '🗳️' },
-        { key: 'live_lesson', label: <span className="flex items-center">Live Class {liveLesson && <span className="ml-2 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: '📡' },
-        { key: 'science_lab', label: 'Virtual Lab', icon: '🧪' },
-        { key: 'study_mode', label: 'Study Mode', icon: '🧠' },
-        { key: 'materials', label: 'Study Materials', icon: '📚' },
-        { key: 'messages', label: 'Messages', icon: '💬' },
-        { key: 'reports', label: 'Reports', icon: '📊' },
-        { key: 'payments', label: 'Payments', icon: '💳' },
-        { key: 'profile', label: 'Profile', icon: '👤' },
-        { key: 'timetable', label: 'Timetable', icon: '🗓️' },
-        { key: 'attendance', label: 'Attendance', icon: '📅' },
+        { key: 'dashboard', label: 'Dashboard', icon: <RocketIcon size={20} active={activeTab === 'dashboard'} /> },
+        { key: 'assignments', label: 'Assignments', icon: <ClipboardIcon size={20} active={activeTab === 'assignments'} /> },
+        { key: 'elections', label: 'Election Portal', icon: <BallotIcon size={20} active={activeTab === 'elections'} /> },
+        { key: 'live_lesson', label: <span className="flex items-center">Live Class {liveLesson && <span className="ml-2 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>}</span>, icon: <BroadcastIcon size={20} active={activeTab === 'live_lesson'} /> },
+        { key: 'science_lab', label: 'Virtual Lab', icon: <FlaskIcon size={20} active={activeTab === 'science_lab'} /> },
+        { key: 'study_mode', label: 'Study Mode', icon: <BrainIcon size={20} active={activeTab === 'study_mode'} /> },
+        { key: 'materials', label: 'Study Materials', icon: <LibraryIcon size={20} active={activeTab === 'materials'} /> },
+        { key: 'messages', label: 'Messages', icon: <ChatIcon size={20} active={activeTab === 'messages'} /> },
+        { key: 'reports', label: 'Reports', icon: <AnalyticsIcon size={20} active={activeTab === 'reports'} /> },
+        { key: 'payments', label: 'Payments', icon: <WalletIcon size={20} active={activeTab === 'payments'} /> },
+        { key: 'profile', label: 'Profile', icon: <ProfileIcon size={20} active={activeTab === 'profile'} /> },
+        { key: 'timetable', label: 'Timetable', icon: <ScheduleIcon size={20} active={activeTab === 'timetable'} /> },
+        { key: 'attendance', label: 'Attendance', icon: <AttendanceIcon size={20} active={activeTab === 'attendance'} /> },
     ];
 
     const savedOrder = userProfile?.sidebarTabOrder?.student;
@@ -144,7 +217,7 @@ export const StudentView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExp
     const missingItems = rawItems.filter(item => !currentKeys.has(item.key));
 
     return [...orderedItems, ...missingItems];
-  }, [liveLesson, userProfile?.sidebarTabOrder?.student]);
+  }, [liveLesson, userProfile?.sidebarTabOrder?.student, activeTab]);
 
   const handleReorder = async (newOrder: string[]) => {
     if (!userProfile) return;
@@ -165,7 +238,7 @@ export const StudentView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExp
       if (userProfile?.status === 'pending') return (
         <div className="p-20 text-center animate-fade-in">
             <div className="text-6xl mb-6">⏳</div>
-            <h2 className="text-2xl font-bold text-white mb-2">Account Pending Approval</h2>
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">Account Pending Approval</h2>
             <p className="text-slate-400 max-w-md mx-auto italic">Your profile has been created and is currently in the administrator review queue.</p>
         </div>
       );
@@ -257,7 +330,7 @@ export const StudentView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExp
         title="Student Portal"
         onReorder={handleReorder}
       />
-      <main className={`flex-1 overflow-y-auto bg-slate-950 ${['science_lab', 'study_mode', 'live_lesson', 'elections'].includes(activeTab) ? 'p-0' : 'p-6'}`}>
+      <main className={`flex-1 overflow-y-auto bg-slate-950 dark:bg-slate-950 ${['science_lab', 'study_mode', 'live_lesson', 'elections'].includes(activeTab) ? 'p-0' : 'p-6'}`}>
         {renderContent()}
       </main>
     </div>

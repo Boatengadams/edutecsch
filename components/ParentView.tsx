@@ -13,6 +13,15 @@ import HeatMap from './common/charts/HeatMap';
 import StudentReportCard from './common/StudentReportCard';
 import FlyerCard from './common/FlyerCard';
 import PaymentPortal from './PaymentPortal';
+import { 
+  HomeIcon, 
+  AnalyticsIcon, 
+  WalletIcon, 
+  AttendanceIcon, 
+  ScheduleIcon, 
+  BellIcon, 
+  ChatIcon 
+} from './common/PremiumIcons';
 
 const OMNI_EMAILS = ["bagsgraphics4g@gmail.com", "boatengadams4g@gmail.com"];
 
@@ -46,23 +55,57 @@ export const ParentView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpan
   const selectedChildProfile = useMemo(() => childrenProfiles.find(c => c.uid === selectedChildId), [childrenProfiles, selectedChildId]);
   const isOmni = OMNI_EMAILS.includes(user?.email || "");
 
+  // --- SEQUENTIAL ALERT ONBOARDING ---
   useEffect(() => {
-    const storageKey = `onboarding_alert_parent_${activeTab}`;
+    const storageKey = `onboarding_parent_${activeTab}`;
     if (!localStorage.getItem(storageKey)) {
-        const messages: Record<string, string> = {
-            dashboard: "🏠 Parent Hub: Family strategic overview.\n\n• Child Selector: Toggle between multiple registered children.\n• Stats Summary: At-a-glance view of academic average and attendance rate.\n• School Notices: Latest announcements from the administration.",
-            academics: "📈 Academics: Deep dive into student growth.\n\n• Performance Charts: Track grade history over time.\n• Portfolios: View actual evidence of work and submitted assignments.\n• Badge Vault: See honors and XP earned by your child.",
-            reports: "📊 Report Cards: Official terminal documentation.\n\n• Report Registry: Access term-by-term certified results.\n• View Card: Interactive high-fidelity report with teacher remarks and positioning.",
-            payments: "💳 School Fees: Integrated payment portal.\n\n• Financial Dashboard: Pay fees, levies, and lab dues securely via Paystack.\n• Digital Receipts: Instant confirmation of all school-related transfers.",
-            attendance: "📅 Attendance Map: High-intensity presence visualization.\n\n• Heatmap: Identify consistency trends or concerning gaps in school participation.",
-            timetable: "🗓️ Timetable: Real-time schedule monitoring. Know exactly what subject your child is studying throughout the academic week.",
-            notifications: "🔔 Notifications: Urgent personal alerts and general school dispatches.",
-            messages: "💬 Contact Teachers: Secure direct communication link. Request summaries of discussions using the AI assistant."
+        const steps: Record<string, string[]> = {
+            dashboard: [
+                "🏠 Parent Hub: Strategic overview of your family's academic status.",
+                "🧒 Child Selector: If you have multiple children, use the top-right menu to switch profiles.",
+                "📊 Averages: Live tracking of your child's task scores and overall average percentage.",
+                "📅 Attendance Rate: Monitor consistent school participation at a glance."
+            ],
+            academics: [
+                "📈 Academics: Deep-dive into specific task performance.",
+                "📜 Portfolio: View digital artifacts and evidence of work submitted by your child.",
+                "🎖️ Badges & XP: Track character-building honors and level growth.",
+                "📉 Analysis: Observe performance trends across different subjects."
+            ],
+            reports: [
+                "📊 Report Cards: Official certified terminal reporting vault.",
+                "📋 View Card: Access term-by-term certified results after administration audit.",
+                "🔒 Verification: All results shown here have been audited and certified by the school command."
+            ],
+            payments: [
+                "💳 Payments: Secure financial gateway for school fees and levies.",
+                "🚀 Paystack: Bank-grade encrypted transaction processing.",
+                "⚡ Receipts: Instant digital confirmation and verification of all transactions."
+            ],
+            attendance: [
+                "📅 Attendance Map: High-intensity visualization of school participation.",
+                "🟦 Heatmap: Identify consistency trends or concerning gaps in presence over time."
+            ],
+            timetable: [
+                "🗓️ Timetable: Real-time access to your child's weekly learning schedule.",
+                "📚 Subject Flow: Know exactly what your child is studying at any given hour."
+            ],
+            notifications: [
+                "🔔 Notifications: Critical school dispatches and personal alerts.",
+                "📢 Broadcasts: Access important flyers and holiday notices sent by school command."
+            ],
+            messages: [
+                "💬 Contact Teachers: Secure direct communication link with educators.",
+                "✨ AI Summarize: Summarize long teacher discussions instantly for quick review."
+            ]
         };
 
-        const msg = messages[activeTab];
-        if (msg) {
-            alert(msg);
+        const currentSteps = steps[activeTab];
+        if (currentSteps) {
+            for (let i = 0; i < currentSteps.length; i++) {
+                const proceed = confirm(`[FAMILY INTEL - ${activeTab.replace('_', ' ').toUpperCase()}]\n\nTip ${i + 1}/${currentSteps.length}:\n${currentSteps[i]}\n\n(Click OK for next, Cancel to Skip All)`);
+                if (!proceed) break;
+            }
             localStorage.setItem(storageKey, 'true');
         }
     }
@@ -110,14 +153,14 @@ export const ParentView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpan
 
   const navItems = useMemo(() => {
     const rawItems = [
-        { key: 'dashboard', label: 'Dashboard', icon: '🏠' },
-        { key: 'academics', label: 'Academics', icon: '📈' },
-        { key: 'reports', label: 'Report Cards', icon: '📊' },
-        { key: 'payments', label: 'School Fees', icon: '💳' },
-        { key: 'attendance', label: 'Attendance', icon: '📅' },
-        { key: 'timetable', label: 'Timetable', icon: '🗓️' },
-        { key: 'notifications', label: 'My Notifications', icon: '🔔' },
-        { key: 'messages', label: 'Contact Teachers', icon: '💬' },
+        { key: 'dashboard', label: 'Dashboard', icon: <HomeIcon size={20} active={activeTab === 'dashboard'} /> },
+        { key: 'academics', label: 'Academics', icon: <AnalyticsIcon size={20} active={activeTab === 'academics'} /> },
+        { key: 'reports', label: 'Report Cards', icon: <AnalyticsIcon size={20} active={activeTab === 'reports'} /> },
+        { key: 'payments', label: 'School Fees', icon: <WalletIcon size={20} active={activeTab === 'payments'} /> },
+        { key: 'attendance', label: 'Attendance', icon: <AttendanceIcon size={20} active={activeTab === 'attendance'} /> },
+        { key: 'timetable', label: 'Timetable', icon: <ScheduleIcon size={20} active={activeTab === 'timetable'} /> },
+        { key: 'notifications', label: 'My Notifications', icon: <BellIcon size={20} active={activeTab === 'notifications'} /> },
+        { key: 'messages', label: 'Contact Teachers', icon: <ChatIcon size={20} active={activeTab === 'messages'} /> },
     ];
 
     const savedOrder = userProfile?.sidebarTabOrder?.parent;
@@ -132,7 +175,7 @@ export const ParentView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpan
     const missingItems = rawItems.filter(item => !currentKeys.has(item.key));
 
     return [...orderedItems, ...missingItems];
-  }, [userProfile?.sidebarTabOrder?.parent]);
+  }, [userProfile?.sidebarTabOrder?.parent, activeTab]);
 
   const handleReorder = async (newOrder: string[]) => {
     if (!userProfile) return;
@@ -148,17 +191,17 @@ export const ParentView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpan
     }
   };
 
-  if (loading) return <div className="flex h-full items-center justify-center bg-slate-950"><Spinner /></div>;
+  if (loading) return <div className="flex h-full items-center justify-center bg-slate-950 dark:bg-slate-950"><Spinner /></div>;
 
   const renderContent = () => {
     switch(activeTab) {
         case 'dashboard':
             return (
-                <div className="space-y-8 animate-fade-in-up">
+                <div className="space-y-8 animate-fade-in-up text-slate-800 dark:text-slate-200">
                     <div className="flex flex-col sm:flex-row justify-between items-end gap-4">
                         <div>
                             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Good Morning • {schoolSettings?.academicYear}</p>
-                            <h2 className="text-4xl font-black text-white leading-tight">Welcome, <span className="text-blue-500">{userProfile?.name}</span></h2>
+                            <h2 className="text-4xl font-black text-white dark:text-white leading-tight">Welcome, <span className="text-blue-500">{userProfile?.name}</span></h2>
                         </div>
                         <select value={selectedChildId || ''} onChange={e => setSelectedChildId(e.target.value)} className="bg-blue-600 text-white font-black text-xs uppercase tracking-widest px-4 py-2 rounded-xl shadow-lg outline-none border-none">
                             {childrenProfiles.map(child => <option key={child.uid} value={child.uid}>{child.name}</option>)}
@@ -195,7 +238,7 @@ export const ParentView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpan
   };
 
   return (
-    <div className="flex flex-1 overflow-hidden bg-slate-950 text-slate-200 relative">
+    <div className="flex flex-1 overflow-hidden bg-slate-950 dark:bg-slate-950 text-slate-200 relative">
       <Sidebar 
         isExpanded={isSidebarExpanded} 
         navItems={navItems} 
