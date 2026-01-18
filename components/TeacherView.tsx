@@ -40,6 +40,46 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
     }, [userProfile, isOmni]);
 
     useEffect(() => {
+        const storageKey = `onboarding_teacher_${activeTab}`;
+        if (!localStorage.getItem(storageKey)) {
+            const steps: Record<string, string[]> = {
+                dashboard: [
+                    "Welcome to your Command Hub (🚀). Here you see a high-level overview of your active students, assigned classes, and pending alerts.",
+                    "The Students Card (👨‍🎓) shows the total number of pupils across your assigned sections.",
+                    "The Alerts Card (🧡) notifies you of new assignment submissions waiting for grading.",
+                    "The 'Launch Test Class' button (🚀) allows you to start an immediate interactive session."
+                ],
+                my_students: [
+                    "The My Students (👨‍🎓) tab lists every student in your jurisdiction.",
+                    "Use the Student Cards to see individual progress, averages, and completion rates at a glance.",
+                    "Click 'View Profile' on any card to see a deep dive into that student's academic history."
+                ],
+                assignments: [
+                    "The Academic Tasks (📝) section is where you manage homework and tests.",
+                    "Use '+ Create Assignment' to design new tasks. You can use the AI Generator to draft questions automatically.",
+                    "Each task card shows its subject, class, and the current due date."
+                ],
+                live_lesson: [
+                    "The Live Class (📡) tab is your immersive teaching environment.",
+                    "Use the 'Board' to present content, and the 'Interaction' sub-tab to launch real-time polls.",
+                    "The 'Roster' shows you exactly which students are currently connected and who has raised their hand."
+                ]
+            };
+
+            const tabSteps = steps[activeTab];
+            if (tabSteps) {
+                let proceed = confirm(`Would you like a quick walkthrough of the ${activeTab.replace('_', ' ')}? (Cancel to Skip All)`);
+                if (proceed) {
+                    for (const step of tabSteps) {
+                        if (!confirm(`${step}\n\n(OK for next, Cancel to Skip All)`)) break;
+                    }
+                }
+                localStorage.setItem(storageKey, 'true');
+            }
+        }
+    }, [activeTab]);
+
+    useEffect(() => {
         if (!user || !userProfile || (userProfile.status !== 'approved' && !isOmni)) { 
             if (userProfile && userProfile.status === 'pending') setLoading(false);
             return; 
@@ -103,6 +143,7 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
                 lessonPlan: demoPlan,
                 currentBoardContent: demoPlan[0].boardContent,
                 currentImageUrl: demoPlan[0].imageUrl,
+                currentImageStyle: demoPlan[0].imageUrl ? 'cover' : 'contain',
                 currentTeacherScript: demoPlan[0].teacherScript,
                 currentQuestion: demoPlan[0].question,
                 sourcePresentationId: 'demo-test',

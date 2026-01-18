@@ -13,7 +13,6 @@ import HeatMap from './common/charts/HeatMap';
 import StudentReportCard from './common/StudentReportCard';
 import FlyerCard from './common/FlyerCard';
 import PaymentPortal from './PaymentPortal';
-import AppTutorial from './common/AppTutorial';
 
 const OMNI_EMAILS = ["bagsgraphics4g@gmail.com", "boatengadams4g@gmail.com"];
 
@@ -43,10 +42,31 @@ export const ParentView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpan
   const [flyers, setFlyers] = useState<PublishedFlyer[]>([]);
   const [viewingReport, setViewingReport] = useState<TerminalReport | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showTutorial, setShowTutorial] = useState(false);
 
   const selectedChildProfile = useMemo(() => childrenProfiles.find(c => c.uid === selectedChildId), [childrenProfiles, selectedChildId]);
   const isOmni = OMNI_EMAILS.includes(user?.email || "");
+
+  useEffect(() => {
+    const storageKey = `onboarding_alert_parent_${activeTab}`;
+    if (!localStorage.getItem(storageKey)) {
+        const messages: Record<string, string> = {
+            dashboard: "🏠 Parent Hub: Family strategic overview.\n\n• Child Selector: Toggle between multiple registered children.\n• Stats Summary: At-a-glance view of academic average and attendance rate.\n• School Notices: Latest announcements from the administration.",
+            academics: "📈 Academics: Deep dive into student growth.\n\n• Performance Charts: Track grade history over time.\n• Portfolios: View actual evidence of work and submitted assignments.\n• Badge Vault: See honors and XP earned by your child.",
+            reports: "📊 Report Cards: Official terminal documentation.\n\n• Report Registry: Access term-by-term certified results.\n• View Card: Interactive high-fidelity report with teacher remarks and positioning.",
+            payments: "💳 School Fees: Integrated payment portal.\n\n• Financial Dashboard: Pay fees, levies, and lab dues securely via Paystack.\n• Digital Receipts: Instant confirmation of all school-related transfers.",
+            attendance: "📅 Attendance Map: High-intensity presence visualization.\n\n• Heatmap: Identify consistency trends or concerning gaps in school participation.",
+            timetable: "🗓️ Timetable: Real-time schedule monitoring. Know exactly what subject your child is studying throughout the academic week.",
+            notifications: "🔔 Notifications: Urgent personal alerts and general school dispatches.",
+            messages: "💬 Contact Teachers: Secure direct communication link. Request summaries of discussions using the AI assistant."
+        };
+
+        const msg = messages[activeTab];
+        if (msg) {
+            alert(msg);
+            localStorage.setItem(storageKey, 'true');
+        }
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (!user) return;
@@ -65,13 +85,6 @@ export const ParentView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpan
         console.warn("Parent children listener error:", err.message);
         setLoading(false);
     });
-
-    // Auto-show tutorial for first-time parents
-    const onboarded = localStorage.getItem('edutec_onboarding_parent');
-    if (!onboarded) {
-        const timer = setTimeout(() => setShowTutorial(true), 2000);
-        return () => clearTimeout(timer);
-    }
 
     return () => unsubscribe();
   }, [user, userProfile, isOmni]);
@@ -194,23 +207,6 @@ export const ParentView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpan
       />
       <main className="flex-1 p-4 sm:p-8 overflow-y-auto custom-scrollbar">{renderContent()}</main>
       
-      {/* Tutorial Trigger */}
-      <button 
-        onClick={() => setShowTutorial(true)}
-        className="fixed bottom-6 right-6 z-[80] w-12 h-12 bg-slate-900 border border-white/10 rounded-full flex items-center justify-center text-white shadow-2xl hover:bg-blue-600 transition-all group"
-        title="Help & Tutorial"
-      >
-        <span className="text-xl group-hover:scale-110 transition-transform">💡</span>
-      </button>
-
-      {showTutorial && (
-        <AppTutorial 
-            role="parent" 
-            onClose={() => setShowTutorial(false)} 
-            isTriggeredManually={true} 
-        />
-      )}
-
       {viewingReport && selectedChildProfile && (
           <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-md p-4 overflow-y-auto">
               <div className="max-w-5xl mx-auto py-10">

@@ -20,14 +20,12 @@ import StudentAttendanceLog from './StudentAttendanceLog';
 import FlyerCard from './common/FlyerCard';
 import StudentElectionPortal from './elections/StudentElectionPortal';
 import PaymentPortal from './PaymentPortal';
-import AppTutorial from './common/AppTutorial';
 
 export const StudentView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: (v: boolean) => void; }> = ({ isSidebarExpanded, setIsSidebarExpanded }) => {
   const { user, userProfile, schoolSettings } = useAuthentication();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
-  const [showTutorial, setShowTutorial] = useState(false);
 
   // Data State
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -38,7 +36,33 @@ export const StudentView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExp
   const [electionConfig, setElectionConfig] = useState<ElectionConfig | null>(null);
 
   useEffect(() => {
-    // SECURITY GUARD: Only proceed if user is approved. Pending users don't have access to these collections.
+    const storageKey = `onboarding_alert_student_${activeTab}`;
+    if (!localStorage.getItem(storageKey)) {
+        const messages: Record<string, string> = {
+            dashboard: "🚀 Learner Dashboard: Your academic HQ.\n\n• Live Now: Displays active classroom signals. Click 'Join Class' to enter.\n• Progress Bar: Tracks your Level and XP (Experience Points).\n• Tasks Card: Counts pending vs. graded assignments.\n• Quick Links: Access your profile or latest school flyers.",
+            assignments: "📝 Academic Tasks: Your homework and assessment registry.\n\n• Task Filter: Toggle between 'Pending', 'Graded', and 'All'.\n• Task Cards: Detail subject, due dates, and marks.\n• Start Task Button: Opens the theory or objective quiz environment.",
+            elections: "🗳️ Election Portal: Participate in school governance.\n\n• Registry: Roles open for nomination and your eligibility status.\n• Campaign Wall: Visual billboard of candidate posters.\n• Secure Vault: Cast your ballot during active voting phases.",
+            live_lesson: "📡 Live Class: Synchronized learning terminal.\n\n• Immersive Board: View slides and teacher annotations.\n• Interaction Icons: Raise hand, send emoji reactions, or joined audio.\n• AI Avatar: Real-time feedback from Sir.Edu.",
+            science_lab: "🧪 Virtual Lab: 3D High-Fidelity Simulations.\n\n• Zone Toggles: Switch between Physics, Chemistry, and Biology workbenches.\n• Laboratory Tools: Interactive tap (double-click), microscope stage, and electronics components.\n• Lab Intelligence: Chat with Dr. Adams for experiment guidance.",
+            study_mode: "🧠 Study Mode: Deep focus and AI planning.\n\n• Focus Timer: 25-minute Pomodoro sessions with alerts.\n• Smart Modules: AI-synthesized lessons based on your actual class timetable.",
+            materials: "📚 Study Materials: Your digital handout vault.\n\n• Handouts: Downloadable PDFs and class notes.\n• Video Lessons: Recorded transmissions for offline review.",
+            messages: "💬 Messages: Secure line to your teachers.\n\n• AI Summary: Summarizes long message histories.\n• Multimedia: Send text, imagery, or voice notes.",
+            reports: "📊 Reports: Official certified terminal report cards.\n\n• Term Selector: View results from previous or current academic sessions.\n• High-Fidelity Card: Full breakdown of marks, positions, and remarks.",
+            payments: "💳 Payments: Secure gateway for school fees.\n\n• Secure Link: Direct Paystack integration for bank-grade safety.\n• Receipts: Instant digital verification of all school-related dues.",
+            profile: "👤 Profile: Your digital academic identity.\n\n• XP Progression: Visual track of levels and earned badges.\n• Portfolio: Repository of all submitted artifacts and evidence.\n• Password Reset: Manage your secure access credentials.",
+            timetable: "🗓️ Timetable: Your official weekly learning schedule rendered in a comfortable notebook style.",
+            attendance: "📅 Attendance: Personal log of your presence. Includes a live tracking of your participation rate percentage."
+        };
+
+        const msg = messages[activeTab];
+        if (msg) {
+            alert(msg);
+            localStorage.setItem(storageKey, 'true');
+        }
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
     if (!user || !userProfile || userProfile.status !== 'approved') {
         if (userProfile && userProfile.status === 'pending') setLoading(false);
         return;
@@ -48,7 +72,7 @@ export const StudentView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExp
     
     const handleError = (name: string) => (err: any) => {
         if (err.code === 'permission-denied') {
-            console.warn(`${name} access restricted by system security.`);
+            console.warn(`${name} access restricted.`);
         } else {
             console.error(`${name} stream error:`, err);
         }
@@ -88,14 +112,6 @@ export const StudentView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExp
     }, handleError("ElectionConfig")));
 
     setLoading(false);
-
-    // Auto-show tutorial for first-time students
-    const onboarded = localStorage.getItem('edutec_onboarding_student');
-    if (!onboarded) {
-        const timer = setTimeout(() => setShowTutorial(true), 2000);
-        return () => clearTimeout(timer);
-    }
-
     return () => unsubscribers.forEach(unsub => unsub());
   }, [user?.uid, userProfile?.status, userProfile?.class]);
 
@@ -244,23 +260,6 @@ export const StudentView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExp
       <main className={`flex-1 overflow-y-auto bg-slate-950 ${['science_lab', 'study_mode', 'live_lesson', 'elections'].includes(activeTab) ? 'p-0' : 'p-6'}`}>
         {renderContent()}
       </main>
-
-      {/* Tutorial Trigger */}
-      <button 
-        onClick={() => setShowTutorial(true)}
-        className="fixed bottom-6 right-6 z-[80] w-12 h-12 bg-slate-900 border border-white/10 rounded-full flex items-center justify-center text-white shadow-2xl hover:bg-blue-600 transition-all group"
-        title="Help & Tutorial"
-      >
-        <span className="text-xl group-hover:scale-110 transition-transform">💡</span>
-      </button>
-
-      {showTutorial && (
-        <AppTutorial 
-            role="student" 
-            onClose={() => setShowTutorial(false)} 
-            isTriggeredManually={true} 
-        />
-      )}
     </div>
   );
 };

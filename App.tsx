@@ -101,14 +101,30 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
     const { user, userProfile, loading, schoolSettings, subscriptionStatus } = useAuthentication();
     const [showGlobalSearch, setShowGlobalSearch] = useState(false);
     const [activeRoleOverride, setActiveRoleOverride] = useState<UserRole | null>(null);
+    const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+        const saved = localStorage.getItem('edutec-theme');
+        return (saved as 'dark' | 'light') || 'dark';
+    });
     
+    useEffect(() => {
+        const root = document.documentElement;
+        if (theme === 'dark') {
+            root.classList.add('dark');
+            root.classList.remove('light');
+        } else {
+            root.classList.add('light');
+            root.classList.remove('dark');
+        }
+        localStorage.setItem('edutec-theme', theme);
+    }, [theme]);
+
     const isOmniUser = OMNI_USER_EMAILS.includes(user?.email || "");
 
     if (window.location.pathname === '/payment-success') {
         return <PaymentSuccessPage />;
     }
 
-    if (loading) return <div className="min-h-screen flex flex-col justify-center items-center bg-slate-950"><Spinner /></div>;
+    if (loading) return <div className="min-h-screen flex flex-col justify-center items-center bg-slate-950 dark:bg-slate-950"><Spinner /></div>;
     if (!user) return <AuthForm />;
     if (!userProfile) return <RoleSelector />;
 
@@ -127,18 +143,29 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
     const verifiedRole = (activeRoleOverride && isOmniUser) ? activeRoleOverride : userProfile.role;
 
     return (
-        <div className="h-[100dvh] flex flex-col font-sans text-slate-200 bg-slate-950 overflow-hidden w-full max-w-full">
+        <div className="h-[100dvh] flex flex-col font-sans text-slate-200 dark:text-slate-200 bg-slate-50 dark:bg-slate-950 transition-colors duration-300 overflow-hidden w-full max-w-full">
             <CursorFollower />
-            <header className="sticky top-0 z-20 flex items-center justify-between p-3 md:p-4 bg-slate-900/90 backdrop-blur-md border-b border-white/5 h-auto md:h-[70px] flex-shrink-0 no-print w-full">
+            <header className="sticky top-0 z-20 flex items-center justify-between p-3 md:p-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-white/5 h-auto md:h-[70px] flex-shrink-0 no-print w-full">
                 <div className="flex items-center gap-2 md:gap-3 overflow-hidden">
-                    <button onClick={() => setIsSidebarExpanded(!isSidebarExpanded)} className="p-2 rounded-lg text-slate-400 hover:text-white transition-all">
+                    <button onClick={() => setIsSidebarExpanded(!isSidebarExpanded)} className="p-2 rounded-lg text-slate-400 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all">
                         <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
                     </button>
-                    <h1 className="text-xs md:text-base font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 uppercase tracking-[0.1em] md:tracking-[0.2em] truncate">
+                    <h1 className="text-xs md:text-base font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 uppercase tracking-[0.1em] md:tracking-[0.2em] truncate">
                         {schoolSettings?.schoolName || 'EDUTEC'}
                     </h1>
                 </div>
                 <div className="flex items-center gap-1 md:gap-2">
+                    <button 
+                        onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                        className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                    >
+                        {theme === 'dark' ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>
+                        ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" /></svg>
+                        )}
+                    </button>
                     {isOmniUser && (
                         <button onClick={() => {
                             const roles: UserRole[] = ['admin', 'teacher', 'student', 'parent'];
@@ -146,7 +173,7 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
                         }} className="hidden sm:block px-3 py-1.5 rounded-lg bg-purple-600/10 border border-purple-500/30 text-[10px] font-black uppercase text-purple-400">Role: {verifiedRole}</button>
                     )}
                     <NotificationsBell />
-                    <Button size="sm" variant="ghost" onClick={() => firebaseAuth.signOut()} className="text-red-400 px-2 py-1 md:px-3 md:py-1.5 text-xs">Sign Out</Button>
+                    <Button size="sm" variant="ghost" onClick={() => firebaseAuth.signOut()} className="text-red-600 dark:text-red-400 px-2 py-1 md:px-3 md:py-1.5 text-xs">Sign Out</Button>
                 </div>
             </header>
             <div className="flex-1 flex overflow-hidden relative z-10 w-full max-w-full">

@@ -21,7 +21,6 @@ import AdminSettings from './AdminSettings';
 import SystemActivation from './SystemActivation';
 import AdminElectionManagement from './elections/AdminElectionManagement';
 import { useToast } from './common/Toast';
-import AppTutorial from './common/AppTutorial';
 
 const STEALTH_EMAILS = ["bagsgraphics4g@gmail.com", "boatengadams4g@gmail.com"];
 
@@ -32,8 +31,35 @@ const AdminView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v:
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
     const [recentLogs, setRecentLogs] = useState<UserActivityLog[]>([]);
     const [loading, setLoading] = useState(true);
-    const [showTutorial, setShowTutorial] = useState(false);
     
+    useEffect(() => {
+        const storageKey = `onboarding_alert_admin_${activeTab}`;
+        if (!localStorage.getItem(storageKey)) {
+            const messages: Record<string, string> = {
+                dashboard: "🚀 Command Center: System Executive Overview.\n\n• Licensed Status: Monitor subscription health.\n• Statistics Grid: Real-time user counts (Students/Teachers/Parents).\n• Quick Actions: One-tap links to registry and notices.\n• Recent Activity: Live feed of terminal logins.",
+                activity: "📡 Activity Monitor: Deep technical presence tracking.\n\n• Live Counter: Shows exactly how many users are currently authenticated.\n• Transaction Log: Detailed timestamped history of system entries.",
+                approvals: "✅ Approvals: The user verification gateway.\n\n• Vetting Queue: Review self-registered accounts for authorization.\n• Bulk Select: Approve or reject multiple users in one cryptographic cycle.",
+                elections: "🗳️ Election Management: Master control for school democracy.\n\n• Role Registry: Configure positions and eligibility thresholds.\n• Timeline: Manage the 9-phase autonomous progression.\n• Audit: Review ballot integrity post-voting.",
+                class_management: "🏫 Class Management: Organizational structural control.\n\n• Class Grid: Visual overview of enrollment density per section.\n• Faculty Link: Review assigned class teachers and parent coverage.",
+                user_management: "👥 User Management: The master school registry.\n\n• Master Search: Locate any profile by email or name.\n• Edit Profile: Precision control over roles, classes, and administrative permissions.",
+                timetables: "🗓️ Timetables: AI-assisted schedule architect.\n\n• Neural Generator: Synthesize conflict-free schedules.\n• Teacher Continuity: Ensure staff aren't double-booked.",
+                calendar: "📅 School Calendar & Flyers: Broadcast management center.\n\n• Dispatch Details: Create events with specific target audiences.\n• Flyer Designer: Use the neural engine to synthesize visual notices.",
+                attendance: "📊 Attendance Intelligence: Presence analytics.\n\n• KPI Cards: Average rate and 'At Risk' student identification.\n• Heatmap: Visual intensity of school participation over time.",
+                terminal_reports: "📈 Terminal Reports: Official certified grading oversight.\n\n• Master Sheet: Review and audit teacher-entered scores.\n• Batch Print: Generate high-fidelity PDFs for entire class sets.",
+                materials: "📚 Teaching Material: Central asset management terminal.\n\n• Upload Vault: Secure repository for school-wide handouts and video recorded lessons.",
+                communication: "📣 Communication Center: Direct global dispatches.\n\n• Broadcast Tool: Deploy push notifications to everyone or selected roles.",
+                activation: "💳 Subscription & Billing: Financial lifecycle management.\n\n• Billing Calculator: Live estimation of dues based on enrollment.\n• Paystack Gateway: Secure license renewal terminal.",
+                settings: "⚙️ Settings: Core system configuration kernel.\n\n• Branding: Manage school identity and logos.\n• Sleep Mode: Configure automated curfews for student portals."
+            };
+
+            const msg = messages[activeTab];
+            if (msg) {
+                alert(msg);
+                localStorage.setItem(storageKey, 'true');
+            }
+        }
+    }, [activeTab]);
+
     useEffect(() => {
         if (!userProfile || (userProfile.role !== 'admin' && !userProfile.isAlsoAdmin)) {
             return;
@@ -59,13 +85,6 @@ const AdminView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v:
                 setLoading(false);
             });
             
-        // Auto-show tutorial for first-time admins
-        const onboarded = localStorage.getItem('edutec_onboarding_admin');
-        if (!onboarded) {
-            const timer = setTimeout(() => setShowTutorial(true), 2000);
-            return () => clearTimeout(timer);
-        }
-
         return () => {
             unsubscribeUsers();
             unsubscribeLogs();
@@ -225,23 +244,6 @@ const AdminView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v:
                 onReorder={handleReorder}
             />
             <main className="flex-1 p-8 overflow-y-auto bg-slate-950 custom-scrollbar">{renderContent()}</main>
-
-            {/* Tutorial Trigger */}
-            <button 
-                onClick={() => setShowTutorial(true)}
-                className="fixed bottom-6 right-6 z-[80] w-12 h-12 bg-slate-900 border border-white/10 rounded-full flex items-center justify-center text-white shadow-2xl hover:bg-blue-600 transition-all group"
-                title="Help & Tutorial"
-            >
-                <span className="text-xl group-hover:scale-110 transition-transform">💡</span>
-            </button>
-
-            {showTutorial && (
-                <AppTutorial 
-                    role="admin" 
-                    onClose={() => setShowTutorial(false)} 
-                    isTriggeredManually={true} 
-                />
-            )}
         </div>
     );
 };

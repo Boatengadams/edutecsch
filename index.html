@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
@@ -10,7 +10,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
   <script type="importmap">
 {
   "imports": {
@@ -35,118 +35,144 @@
   }
 }
 </script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'sans-serif'],
+        }
+      }
+    }
+  }
+</script>
 <style>
   :root {
-    --bg-dark: #0f172a;
+    --bg-main: #0f172a;
     --card-bg: rgba(30, 41, 59, 0.7);
-    --primary-glow: rgba(56, 189, 248, 0.5);
-    --secondary-glow: rgba(168, 85, 247, 0.5);
+    --border-color: rgba(255, 255, 255, 0.05);
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+  }
+
+  html.light {
+    --bg-main: #f1f5f9;
+    --card-bg: rgba(255, 255, 255, 0.95);
+    --border-color: rgba(15, 23, 42, 0.08);
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
   }
 
   body {
-    background-color: var(--bg-dark);
-    background-image: 
-        radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.15) 0px, transparent 50%),
-        radial-gradient(at 100% 0%, rgba(168, 85, 247, 0.15) 0px, transparent 50%),
-        radial-gradient(at 100% 100%, rgba(56, 189, 248, 0.15) 0px, transparent 50%),
-        radial-gradient(at 0% 100%, rgba(168, 85, 247, 0.15) 0px, transparent 50%);
-    background-attachment: fixed;
-    color: #f1f5f9; /* slate-100 */
+    background-color: var(--bg-main);
+    color: var(--text-primary);
     font-family: 'Inter', sans-serif;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
     width: 100%;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 
-  /* Modern Scrollbar */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background-image: 
+        radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.1) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(168, 85, 247, 0.1) 0px, transparent 50%);
+    pointer-events: none;
   }
-  ::-webkit-scrollbar-track {
-    background: rgba(15, 23, 42, 0.3);
+
+  /* --- SENIOR UI LIGHT MODE REFINEMENTS --- */
+  html.light .bg-slate-950, 
+  html.light .bg-slate-900,
+  html.light .bg-[#020617] { 
+    background-color: #f8fafc !important; 
   }
+
+  html.light .bg-slate-900\/90,
+  html.light .bg-slate-900\/80,
+  html.light .bg-slate-900\/40,
+  html.light .bg-slate-800\/50,
+  html.light .bg-slate-800\/40 {
+    background-color: rgba(255, 255, 255, 0.85) !important;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  }
+
+  html.light .bg-slate-800,
+  html.light .bg-slate-700 {
+    background-color: #f1f5f9 !important;
+    border: 1px solid #e2e8f0;
+  }
+
+  html.light .text-white,
+  html.light .text-slate-100,
+  html.light .text-slate-200 {
+    color: #1e293b !important;
+  }
+
+  html.light .text-slate-400,
+  html.light .text-slate-500 {
+    color: #64748b !important;
+  }
+
+  html.light .border-white\/5,
+  html.light .border-white\/10,
+  html.light .border-slate-800,
+  html.light .border-slate-700 {
+    border-color: #e2e8f0 !important;
+  }
+
+  html.light .shadow-2xl {
+    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.05), 0 8px 10px -6px rgb(0 0 0 / 0.05) !important;
+  }
+
+  html.light header {
+    background-color: rgba(255, 255, 255, 0.9) !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+  }
+
+  html.light .sidebar, 
+  html.light [role="dialog"] {
+    background-color: #ffffff !important;
+    border-right: 1px solid #e2e8f0;
+  }
+
+  html.light input, 
+  html.light select, 
+  html.light textarea {
+    background-color: #ffffff !important;
+    color: #1e293b !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+
+  html.light .glow-text {
+    text-shadow: none !important;
+    color: #334155 !important;
+  }
+
+  html.light .bg-blue-600\/20 {
+    background-color: rgba(37, 99, 235, 0.08) !important;
+  }
+
+  /* Standard Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    background: rgba(71, 85, 105, 0.6);
+    background: rgba(71, 85, 105, 0.3);
     border-radius: 4px;
-    border: 1px solid rgba(15, 23, 42, 0.3);
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: rgba(94, 106, 125, 0.8);
   }
 
-  /* Animation Utilities */
-  .animate-fade-in-up {
-    animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-  @keyframes fadeInUp {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
+  h1, h2, h3, h4, h5, h6 { letter-spacing: -0.02em; font-weight: 700; }
 
-  .animate-fade-in {
-    animation: fadeIn 0.3s ease-out forwards;
-  }
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  .animate-stream-flow {
-      stroke-dasharray: 10, 5;
-      animation: streamFlow 0.5s linear infinite;
-  }
-  @keyframes streamFlow {
-      from { stroke-dashoffset: 15; }
-      to { stroke-dashoffset: 0; }
-  }
-
-  /* Typography */
-  .prose-styles h1, .prose-styles h2, .prose-styles h3 { color: #f8fafc; margin-top: 1.5em; margin-bottom: 0.75em; font-weight: 700; }
-  .prose-styles p { margin-bottom: 1.25em; line-height: 1.7; color: #cbd5e1; }
-  .prose-styles ul, .prose-styles ol { margin-left: 1.5em; margin-bottom: 1.25em; color: #cbd5e1; }
-  .prose-styles a { color: #38bdf8; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s; }
-  .prose-styles a:hover { border-bottom-color: #38bdf8; }
-  .prose-styles blockquote { border-left: 4px solid #475569; padding-left: 1em; font-style: italic; color: #94a3b8; }
-  .prose-styles code { background-color: rgba(30, 41, 59, 0.5); padding: 0.2em 0.4em; border-radius: 4px; font-family: monospace; color: #e2e8f0; }
-  
-  /* Futuristic Elements */
-  .glow-text {
-    text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
-  }
-  
-  .futuristic-panel {
-    background: rgba(30, 41, 59, 0.4);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 16px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  }
-
-  /* --- MOBILE RESPONSIVENESS OVERRIDES --- */
   @media (max-width: 768px) {
-    /* Fluid typography for small screens */
-    html { font-size: 14px; }
-    
-    /* Force stack on typical layout structures if not already handled */
-    /* REMOVED AGGRESSIVE GRID-COLS-X !IMPORTANT OVERRIDE HERE */
-    
-    /* Fix for smaller items that should stay side-by-side (2 cols) */
-    .grid-cols-2.gap-4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-    
-    /* Ensure containers don't break viewport */
-    .w-full { max-width: 100% !important; overflow-x: hidden; }
-    .overflow-x-auto { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
-    
-    /* Fix for absolute/fixed positioned modals and overlays */
-    .fixed.inset-0 { padding: 0.5rem !important; }
-    .fixed.inset-0 > div { max-height: 98vh !important; }
-    
-    /* Sidebar touch optimizations */
-    .w-72 { width: 85vw !important; max-width: 320px !important; }
+    html { font-size: 16px; }
+    .w-full { max-width: 100% !important; }
   }
 
-  /* Prevent horizontal scrolling on body */
   body, #root { overflow-x: hidden !important; }
 </style>
 </head>

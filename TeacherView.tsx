@@ -22,7 +22,6 @@ import TeacherAssignments from './components/TeacherAssignments';
 import TeacherAttendance from './components/TeacherAttendance';
 import TeacherLibrary from './components/TeacherLibrary';
 import TeacherGroupWork from './components/TeacherGroupWork';
-import AppTutorial from './components/common/AppTutorial';
 
 const OMNI_EMAILS = ["bagsgraphics4g@gmail.com", "boatengadams4g@gmail.com"];
 
@@ -30,7 +29,6 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
     const { user, userProfile, schoolSettings } = useAuthentication();
     const [activeTab, setActiveTab] = useState('dashboard');
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
-    const [showTutorial, setShowTutorial] = useState(false);
   
     const isOmni = useMemo(() => OMNI_EMAILS.includes(user?.email || ""), [user]);
 
@@ -46,6 +44,31 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
         if (!userProfile) return [];
         return Array.from(new Set([...(userProfile.classesTaught || []), ...(userProfile.classTeacherOf ? [userProfile.classTeacherOf] : [])])).sort();
     }, [userProfile, isOmni]);
+
+    useEffect(() => {
+        const storageKey = `onboarding_alert_teacher_${activeTab}`;
+        if (!localStorage.getItem(storageKey)) {
+            const messages: Record<string, string> = {
+                dashboard: "🚀 Command Hub: Your executive overview.\n\n• Statistics Cards: Show active students, accessible classes, and pending submission alerts.\n• Launch Test Class: Starts an immediate synchronized interactive session.\n• Activity Feed: Monitors real-time student engagement logs.",
+                my_students: "👨‍🎓 My Students: Central registry of your assigned learners.\n\n• Student Cards: Display individual averages and assignment completion rates.\n• View Profile: Opens deep academic analytics and personal portfolio.\n• Add Student/Parent: Manual account deployment tools.",
+                assignments: "📝 Academic Tasks: Homework and assessment manager.\n\n• Create Assignment: Manual builder or AI quiz generator.\n• Task Cards: Detail subject links, due dates, and submission types (Theory/Objective).\n• Action Icons: Edit or terminate existing task protocols.",
+                attendance: "📅 Attendance: Official daily roll call terminal.\n\n• Class Selector: Switch between your assigned sections.\n• Date Picker: Historical or current logging.\n• Status Radios: Mark 'Present', 'Absent', or 'Late' for each student.",
+                live_lesson: "📡 Live Class: Real-time immersive classroom.\n\n• The Board: Central visual presentation stage.\n• Toolbox: Whiteboard, Laser Pointer, and Eraser controls.\n• Roster: Live student presence and 'Raise Hand' notification center.",
+                library: "📚 Resource Library: Your teaching asset vault.\n\n• Slide Decks: Manage AI-generated presentations.\n• Video Lessons: Repository for pre-recorded instructional content.\n• Generate Button: Synthesis gateway for new content.",
+                group_work: "👥 Group Work: Orchestrate student collaborations.\n\n• Form Group: Select members and define project topics.\n• Status Tracker: Monitor team submission lifecycle in real-time.",
+                ai_tools: "🤖 AI Copilot: Suite of neural teaching assistants.\n\n• Lesson Designer: Curates curriculum plans.\n• Quiz Master: Synthesizes assessment batteries.\n• Report Assistant: Drafts professional terminal remarks.",
+                terminal_reports: "📊 Master Reports: Official grading terminal.\n\n• Data Entry: Input terminal exam scores.\n• Auto-fill: Sync class assignment grades with the final ledger.\n• Print Mode: Generate high-fidelity report cards.",
+                progress: "📈 Intelligence: Longitudinal academic analytics.\n\n• Distributions: Statistical spread of class grades.\n• Trends: Longitudinal mastery tracking across subjects.",
+                messages: "💬 Messages: Secure internal transmission matrix.\n\n• Contact List: Searchable student and staff registry.\n• Chat Input: Send text, imagery, or voice transmissions."
+            };
+
+            const msg = messages[activeTab];
+            if (msg) {
+                alert(msg);
+                localStorage.setItem(storageKey, 'true');
+            }
+        }
+    }, [activeTab]);
 
     useEffect(() => {
         if (!user || !userProfile || (userProfile.status !== 'approved' && !isOmni)) { 
@@ -90,15 +113,60 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
         ));
         
         setLoading(false);
-
-        const onboarded = localStorage.getItem('edutec_onboarding_teacher');
-        if (!onboarded) {
-            const timer = setTimeout(() => setShowTutorial(true), 2000);
-            return () => clearTimeout(timer);
-        }
-
         return () => unsubscribers.forEach(unsub => unsub());
-    }, [user?.uid, userProfile?.status, teacherClasses, isOmni]);
+    }, [user, userProfile, teacherClasses, isOmni]);
+
+    const launchTestLesson = async () => {
+        if (!user || !userProfile) return;
+        try {
+            const lessonRef = db.collection('liveLessons').doc();
+            const demoPlan = [
+                {
+                    title: "Welcome to Edutec Live Classroom",
+                    boardContent: "<h1>System Check: Active</h1><p>The interactive board is operational.</p><ul><li>Real-time Audio</li><li>Digital Whiteboard</li><li>AI Assistant Integration</li></ul>",
+                    imageUrl: "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=800&q=80",
+                    teacherScript: "Hello class! Welcome to our first digital live session. Can everyone see the board clearly?",
+                    question: {
+                        id: "demo_q1",
+                        text: "Are you ready to begin the lesson?",
+                        options: ["Yes, absolutely!", "I need a minute", "I have a question"],
+                        correctAnswer: "Yes, absolutely!"
+                    }
+                },
+                {
+                    title: "The Architecture of Learning",
+                    boardContent: "<h2>Our Digital Environment</h2><p>This classroom synchronizes all participants instantly across the Edutec secure network.</p>",
+                    imageUrl: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=800&q=80",
+                    teacherScript: "Let's test the drawing tools. I'll highlight the key points on this slide.",
+                    question: null
+                }
+            ];
+            
+            await lessonRef.set({
+                id: lessonRef.id,
+                teacherId: user.uid,
+                teacherName: userProfile.name,
+                classId: userProfile.class || teacherClasses[0] || 'JHS 3',
+                subject: 'Integrated Science',
+                topic: 'Demo Live Session',
+                status: 'active',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                currentStepIndex: 0,
+                lessonPlan: demoPlan,
+                currentBoardContent: demoPlan[0].boardContent,
+                currentImageUrl: demoPlan[0].imageUrl,
+                currentImageStyle: demoPlan[0].imageUrl ? 'cover' : 'contain',
+                currentTeacherScript: demoPlan[0].teacherScript,
+                currentQuestion: demoPlan[0].question,
+                sourcePresentationId: 'demo-test',
+                raisedHands: []
+            });
+            setToast({ message: "Test Live Classroom Launched!", type: 'success' });
+            setActiveTab('live_lesson');
+        } catch (e: any) {
+            setToast({ message: `Launch failed: ${e.message}`, type: 'error' });
+        }
+    };
 
     const navItems = useMemo(() => {
         const rawItems = [
@@ -170,6 +238,11 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
                                 <h1 className="text-4xl font-black text-white tracking-tight">Executive <span className="text-blue-500">Teacher</span></h1>
                                 <p className="text-slate-400 mt-1 uppercase text-[10px] font-black tracking-widest">Logged: {teacherName} {isOmni && <span className="ml-2 text-blue-500 font-black">[MASTER ACCESS]</span>}</p>
                             </div>
+                            {!activeLiveLesson && (
+                                <Button onClick={launchTestLesson} className="shadow-lg shadow-blue-500/20 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl px-6 py-3 font-black text-xs uppercase tracking-widest">
+                                    🚀 Launch Test Class
+                                </Button>
+                            )}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <Card className="!bg-blue-900/10 border-blue-500/20 text-center"><p className="text-xs font-bold text-blue-400 uppercase">Active Students</p><p className="text-3xl font-black text-white">{students.length}</p></Card>
@@ -229,23 +302,6 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
                 onReorder={handleReorder}
             />
             <main className={`flex-1 overflow-y-auto bg-slate-950 ${activeTab === 'live_lesson' ? 'p-0' : 'p-6'}`}>{renderContent()}</main>
-            
-            <button 
-                onClick={() => setShowTutorial(true)}
-                className="fixed bottom-6 right-6 z-[80] w-12 h-12 bg-slate-900 border border-white/10 rounded-full flex items-center justify-center text-white shadow-2xl hover:bg-blue-600 transition-all group"
-                title="Help & Tutorial"
-            >
-                <span className="text-xl group-hover:scale-110 transition-transform">💡</span>
-            </button>
-
-            {showTutorial && (
-                <AppTutorial 
-                    role="teacher" 
-                    onClose={() => setShowTutorial(false)} 
-                    isTriggeredManually={true} 
-                />
-            )}
-
             {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         </div>
     );
