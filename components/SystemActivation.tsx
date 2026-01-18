@@ -11,16 +11,20 @@ interface SystemActivationProps {
 }
 
 const ACTIVATION_CODES: { [key: string]: { planType: 'trial' | 'monthly' | 'termly' | 'yearly' } } = {
-  // Free Trial
-  '10234738121900': { planType: 'trial' },
-  '1024776223800': { planType: 'trial' },
-  // Per Month
-  '10912183743201': { planType: 'monthly' },
-  '10214183743201': { planType: 'monthly' },
-  '1024776223801': { planType: 'monthly' },
-  // Per Term
-  '10247724738102': { planType: 'termly' },
-  '10553117624002': { planType: 'termly' },
+  // Free Trial (7 Days)
+  '3fRzY7kM9pLq2vWxA': { planType: 'trial' },
+  'B6nK4mJv9tS1Qp8rZ': { planType: 'trial' },
+  // Per Term (4 Months)
+  'Xw2y9zLp4rV1M3k7Q': { planType: 'termly' },
+  '7vDqR9nB2kLw5mP3X': { planType: 'termly' },
+  '1pZ89vMx4qWkL2r6N': { planType: 'termly' },
+  'Gf3tK9nM2xR4Wp7vL': { planType: 'termly' },
+  'Yw4z1pL89vRqM3k2B': { planType: 'termly' },
+  '5nQp7rZ1K9vL4mW3X': { planType: 'termly' },
+  '8bVx2kM9P1rQ7zL4n': { planType: 'termly' },
+  'R3kW9vP1M4zL7qN2t': { planType: 'termly' },
+  'Jp9r4mZ1V3kW8vL2Q': { planType: 'termly' },
+  '2vLq9pM4R7kZ1wX8N': { planType: 'termly' },
 };
 
 const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus }) => {
@@ -52,7 +56,6 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
         try {
             await db.runTransaction(async (transaction) => {
                 const tokenDoc = await transaction.get(tokenRef);
-                // FIX: Changed exists() to the exists property for Firebase v8 compat.
                 if (tokenDoc.exists && tokenDoc.data()?.isUsed === true) {
                     throw new Error("This activation token has already been used.");
                 }
@@ -76,6 +79,7 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
                 transaction.set(tokenRef, { isUsed: true, usedAt: Timestamp.fromDate(now), usedBy: userProfile.uid }, { merge: true });
                 transaction.set(subscriptionRef, newSubData, { merge: true });
             });
+            setError('');
         } catch (err: any) {
             console.error(err);
             setError(err.message || 'An unknown error occurred during activation.');
@@ -96,7 +100,6 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
             for (const code of trialCodes) {
                 const tokenRef = db.collection("activationTokens").doc(code);
                 const tokenDoc = await db.runTransaction(async t => t.get(tokenRef));
-                // FIX: Changed exists() to the exists property for Firebase v8 compat.
                 if (!tokenDoc.exists || tokenDoc.data()?.isUsed === false) {
                     availableToken = code;
                     break;
@@ -124,42 +127,60 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
         await activateWithToken(token);
     };
 
-    const title = isFirstActivation ? "Activate Your 7-Day Free Trial" : "Subscription Expired";
+    const title = isFirstActivation ? "Activate Your 7-Day Free Trial" : "Subscription Required";
     const subtitle = isFirstActivation
         ? "Click the button below to automatically activate your 7-day free trial."
-        : "Your subscription has expired. Please enter a new activation token to continue using the service.";
+        : "Your subscription has expired or is inactive. Please enter a valid termly activation token to continue using the service.";
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
-            <Card className="max-w-lg w-full">
-                <h2 className="text-2xl font-bold text-center mb-2">{title}</h2>
-                <p className="text-gray-400 text-center mb-6">{subtitle}</p>
+        <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4 relative overflow-hidden">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-950 to-slate-950 pointer-events-none"></div>
+            
+            <Card className="max-w-lg w-full !bg-slate-900/80 !backdrop-blur-xl border-white/5 shadow-2xl">
+                <div className="text-center mb-8">
+                    <div className="w-20 h-20 bg-blue-600/10 rounded-3xl flex items-center justify-center text-4xl mx-auto mb-4 border border-blue-500/20 shadow-xl">
+                        💳
+                    </div>
+                    <h2 className="text-3xl font-black text-white uppercase tracking-tighter">{title}</h2>
+                    <p className="text-slate-500 text-sm mt-2 leading-relaxed">{subtitle}</p>
+                </div>
+
                 <div className="space-y-6">
                     {isFirstActivation ? (
                         <div className="space-y-4 text-center">
-                            <Button onClick={handleTrialActivation} disabled={loading} className="w-full">
-                                {loading ? 'Activating...' : 'Start 7-Day Free Trial'}
+                            <Button onClick={handleTrialActivation} disabled={loading} className="w-full !py-4 font-black uppercase tracking-widest shadow-xl shadow-blue-900/30">
+                                {loading ? 'Initializing...' : '🚀 Start 7-Day Free Trial'}
                             </Button>
+                            <p className="text-[10px] text-slate-600 uppercase font-black tracking-widest">Full access to all modules included</p>
                         </div>
                     ) : (
                         <form onSubmit={handleManualActivate} className="space-y-4">
-                            <div>
-                                <label htmlFor="token" className="block text-sm font-medium text-gray-300 mb-1">Activation Token</label>
+                            <div className="space-y-2">
+                                <label htmlFor="token" className="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Activation Token</label>
                                 <input
                                     id="token"
                                     type="text"
                                     value={token}
                                     onChange={(e) => setToken(e.target.value)}
-                                    placeholder="Enter your one-time token"
-                                    className="w-full p-2 bg-slate-700 border border-slate-600 rounded-md shadow-sm"
+                                    placeholder="Enter encrypted token code"
+                                    className="w-full p-4 bg-slate-950 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 ring-blue-500/30 transition-all font-mono text-center tracking-widest"
                                 />
                             </div>
-                            <Button type="submit" disabled={loading} className="w-full">
-                                {loading ? <Spinner /> : 'Activate System'}
+                            <Button type="submit" disabled={loading} className="w-full !py-4 font-black uppercase tracking-widest shadow-xl shadow-blue-900/30">
+                                {loading ? <Spinner /> : 'Activate System Registry'}
                             </Button>
                         </form>
                     )}
-                    {error && <p className="text-red-400 text-sm text-center pt-2">{error}</p>}
+                    
+                    {error && (
+                        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-center">
+                            <p className="text-red-400 text-[10px] font-black uppercase tracking-widest">⚠️ {error}</p>
+                        </div>
+                    )}
+                </div>
+
+                <div className="mt-10 pt-6 border-t border-white/5 flex items-center justify-center gap-4 grayscale opacity-30">
+                     <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Official Edutec Secure License</span>
                 </div>
             </Card>
         </div>
