@@ -146,13 +146,23 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
         <div className="h-[100dvh] flex flex-col font-sans text-slate-200 dark:text-slate-200 bg-slate-50 dark:bg-slate-950 transition-colors duration-300 overflow-hidden w-full max-w-full">
             <CursorFollower />
             <header className="sticky top-0 z-20 flex items-center justify-between p-3 md:p-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-white/5 h-auto md:h-[70px] flex-shrink-0 no-print w-full">
-                <div className="flex items-center gap-2 md:gap-3 overflow-hidden">
+                <div className="flex items-center gap-2 md:gap-4 overflow-hidden">
                     <button onClick={() => setIsSidebarExpanded(!isSidebarExpanded)} className="p-2 rounded-lg text-slate-400 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all">
                         <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
                     </button>
-                    <h1 className="text-xs md:text-base font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 uppercase tracking-[0.1em] md:tracking-[0.2em] truncate">
-                        {schoolSettings?.schoolName || 'EDUTEC'}
-                    </h1>
+                    
+                    <div className="flex items-center gap-3 md:gap-4 overflow-hidden">
+                        <div className="w-8 h-8 md:w-10 md:h-10 bg-slate-100 dark:bg-white rounded-lg flex items-center justify-center shadow-lg flex-shrink-0 overflow-hidden border border-slate-200 dark:border-white/10">
+                            {schoolSettings?.schoolLogoUrl ? (
+                                <img src={schoolSettings.schoolLogoUrl} alt="Logo" className="w-full h-full object-contain" />
+                            ) : (
+                                <span className="text-blue-600 font-black text-sm md:text-lg">{(schoolSettings?.schoolName || 'E').charAt(0)}</span>
+                            )}
+                        </div>
+                        <h1 className="text-xs md:text-base font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 uppercase tracking-[0.1em] md:tracking-[0.2em] truncate">
+                            {schoolSettings?.schoolName || 'EDUTEC'}
+                        </h1>
+                    </div>
                 </div>
                 <div className="flex items-center gap-1 md:gap-2">
                     <button 

@@ -146,11 +146,11 @@ const AuthForm: React.FC = () => {
             
             <div className="relative z-10 space-y-12">
                 <div className="flex items-center gap-5">
-                    <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-2xl p-3 overflow-hidden border border-slate-700">
+                    <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-2xl p-2 overflow-hidden border border-slate-700/50">
                         {settings?.schoolLogoUrl ? (
                             <img src={settings.schoolLogoUrl} alt="School Logo" className="w-full h-full object-contain" />
                         ) : (
-                            <span className="text-4xl font-black text-blue-600">E</span>
+                            <span className="text-4xl font-black text-blue-600">{(settings?.schoolName || 'E').charAt(0)}</span>
                         )}
                     </div>
                     <div>

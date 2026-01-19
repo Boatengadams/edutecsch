@@ -33,18 +33,18 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
     const [error, setError] = useState('');
     const { userProfile } = useAuthentication();
 
-    const isFirstActivation = !subscriptionStatus || !subscriptionStatus.trialEndsAt;
+    const isTrialAvailable = !subscriptionStatus || !subscriptionStatus.trialEndsAt;
 
     const activateWithToken = async (tokenToUse: string) => {
         if (!userProfile || userProfile.role !== 'admin') {
-            setError("You are not authorized to perform this action.");
+            setError("Access Denied: Administrative authority required.");
             setLoading(false);
             return;
         }
 
         const tokenDetails = ACTIVATION_CODES[tokenToUse];
         if (!tokenDetails) {
-            setError("The provided activation token is not valid.");
+            setError("Invalid Token: The provided registry key is not recognized.");
             setLoading(false);
             return;
         }
@@ -57,7 +57,7 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
             await db.runTransaction(async (transaction) => {
                 const tokenDoc = await transaction.get(tokenRef);
                 if (tokenDoc.exists && tokenDoc.data()?.isUsed === true) {
-                    throw new Error("This activation token has already been used.");
+                    throw new Error("Expired Token: This license key has already been consumed.");
                 }
 
                 const now = new Date();
@@ -80,9 +80,10 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
                 transaction.set(subscriptionRef, newSubData, { merge: true });
             });
             setError('');
+            setToken('');
         } catch (err: any) {
             console.error(err);
-            setError(err.message || 'An unknown error occurred during activation.');
+            setError(err.message || 'Transmission Error: Activation protocol failed.');
             setLoading(false); 
         }
     };
@@ -107,7 +108,7 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
             }
 
             if (!availableToken) {
-                throw new Error("No available free trial tokens. Please contact support.");
+                throw new Error("Inventory Depleted: No free trial tokens currently available.");
             }
             await activateWithToken(availableToken);
         } catch (err: any) {
@@ -119,68 +120,72 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
     const handleManualActivate = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!token.trim()) {
-            setError("Please enter an activation token.");
+            setError("System Input Required: Please enter an activation token.");
             return;
         }
         setLoading(true);
         setError('');
-        await activateWithToken(token);
+        await activateWithToken(token.trim());
     };
-
-    const title = isFirstActivation ? "Activate Your 7-Day Free Trial" : "Subscription Required";
-    const subtitle = isFirstActivation
-        ? "Click the button below to automatically activate your 7-day free trial."
-        : "Your subscription has expired or is inactive. Please enter a valid termly activation token to continue using the service.";
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4 relative overflow-hidden">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-950 to-slate-950 pointer-events-none"></div>
             
             <Card className="max-w-lg w-full !bg-slate-900/80 !backdrop-blur-xl border-white/5 shadow-2xl">
-                <div className="text-center mb-8">
-                    <div className="w-20 h-20 bg-blue-600/10 rounded-3xl flex items-center justify-center text-4xl mx-auto mb-4 border border-blue-500/20 shadow-xl">
-                        💳
+                <div className="text-center mb-10">
+                    <div className="w-24 h-24 bg-blue-600/10 rounded-[2.5rem] flex items-center justify-center text-5xl mx-auto mb-6 border border-blue-500/20 shadow-[0_0_50px_rgba(59,130,246,0.1)]">
+                        🔐
                     </div>
-                    <h2 className="text-3xl font-black text-white uppercase tracking-tighter">{title}</h2>
-                    <p className="text-slate-500 text-sm mt-2 leading-relaxed">{subtitle}</p>
+                    <h2 className="text-4xl font-black text-white uppercase tracking-tighter leading-none">System <span className="text-blue-500">Activation</span></h2>
+                    <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.4em] mt-3">Executive License Terminal</p>
                 </div>
 
-                <div className="space-y-6">
-                    {isFirstActivation ? (
-                        <div className="space-y-4 text-center">
-                            <Button onClick={handleTrialActivation} disabled={loading} className="w-full !py-4 font-black uppercase tracking-widest shadow-xl shadow-blue-900/30">
-                                {loading ? 'Initializing...' : '🚀 Start 7-Day Free Trial'}
-                            </Button>
-                            <p className="text-[10px] text-slate-600 uppercase font-black tracking-widest">Full access to all modules included</p>
-                        </div>
-                    ) : (
-                        <form onSubmit={handleManualActivate} className="space-y-4">
-                            <div className="space-y-2">
-                                <label htmlFor="token" className="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Activation Token</label>
+                <div className="space-y-8">
+                    <form onSubmit={handleManualActivate} className="space-y-6">
+                        <div className="space-y-3">
+                            <label htmlFor="token" className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] ml-1">Registry License Key</label>
+                            <div className="relative group">
+                                <div className="absolute inset-0 bg-blue-500/5 blur-xl group-focus-within:bg-blue-500/10 transition-all rounded-2xl"></div>
                                 <input
                                     id="token"
                                     type="text"
                                     value={token}
                                     onChange={(e) => setToken(e.target.value)}
-                                    placeholder="Enter encrypted token code"
-                                    className="w-full p-4 bg-slate-950 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 ring-blue-500/30 transition-all font-mono text-center tracking-widest"
+                                    placeholder="XXXXX-XXXXX-XXXXX-XXXXX"
+                                    className="relative w-full p-5 bg-slate-950/80 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 ring-blue-500/30 transition-all font-mono text-center tracking-[0.2em] placeholder:tracking-normal placeholder:text-slate-700"
                                 />
                             </div>
-                            <Button type="submit" disabled={loading} className="w-full !py-4 font-black uppercase tracking-widest shadow-xl shadow-blue-900/30">
-                                {loading ? <Spinner /> : 'Activate System Registry'}
-                            </Button>
-                        </form>
+                        </div>
+                        <Button type="submit" disabled={loading} className="w-full !py-5 font-black uppercase tracking-[0.3em] shadow-2xl shadow-blue-900/40 rounded-2xl text-sm">
+                            {loading ? <Spinner /> : '🚀 Activate Registry'}
+                        </Button>
+                    </form>
+                    
+                    {isTrialAvailable && (
+                        <div className="pt-6 border-t border-white/5 text-center">
+                            <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-4">First-time deployment?</p>
+                            <button 
+                                onClick={handleTrialActivation} 
+                                disabled={loading}
+                                className="text-blue-400 hover:text-white font-black text-xs uppercase tracking-widest transition-all underline underline-offset-8 decoration-2 decoration-blue-500/30 hover:decoration-blue-500 disabled:opacity-30"
+                            >
+                                Start 7-Day Free Trial Access
+                            </button>
+                        </div>
                     )}
                     
                     {error && (
-                        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-center">
-                            <p className="text-red-400 text-[10px] font-black uppercase tracking-widest">⚠️ {error}</p>
+                        <div className="p-5 bg-red-500/10 border border-red-500/20 rounded-2xl text-center animate-shake">
+                            <p className="text-red-400 text-[10px] font-black uppercase tracking-widest leading-relaxed">
+                                <span className="mr-2">⚠️</span> {error}
+                            </p>
                         </div>
                     )}
                 </div>
 
-                <div className="mt-10 pt-6 border-t border-white/5 flex items-center justify-center gap-4 grayscale opacity-30">
-                     <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Official Edutec Secure License</span>
+                <div className="mt-12 pt-8 border-t border-white/5 flex flex-col items-center gap-4 grayscale opacity-30">
+                     <span className="text-[9px] font-black uppercase tracking-[0.5em] text-slate-500">Official Edutec Secure License // {new Date().getFullYear()}</span>
                 </div>
             </Card>
         </div>
