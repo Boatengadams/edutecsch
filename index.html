@@ -49,19 +49,25 @@
 </script>
 <style>
   :root {
-    --bg-main: #0f172a;
-    --card-bg: rgba(30, 41, 59, 0.7);
+    --bg-main: #020617;
+    --bg-surface: #0f172a;
+    --bg-card: rgba(15, 23, 42, 0.7);
     --border-color: rgba(255, 255, 255, 0.05);
-    --text-primary: #f1f5f9;
+    --text-primary: #f8fafc;
     --text-secondary: #94a3b8;
+    --text-muted: #475569;
+    --shadow-premium: 0 20px 25px -5px rgb(0 0 0 / 0.5);
   }
 
   html.light {
-    --bg-main: #f8fafc;
-    --card-bg: #ffffff;
-    --border-color: #e2e8f0;
+    --bg-main: #f1f5f9;
+    --bg-surface: #ffffff;
+    --bg-card: #ffffff;
+    --border-color: rgba(0, 0, 0, 0.08);
     --text-primary: #0f172a;
-    --text-secondary: #64748b;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --shadow-premium: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   }
 
   body {
@@ -69,104 +75,54 @@
     color: var(--text-primary);
     font-family: 'Inter', sans-serif;
     -webkit-font-smoothing: antialiased;
+    transition: background-color 0.3s ease, color 0.3s ease;
     overflow-x: hidden;
     width: 100%;
-    transition: background-color 0.3s ease, color 0.3s ease;
   }
 
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    background-image: 
-        radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.1) 0px, transparent 50%),
-        radial-gradient(at 100% 0%, rgba(168, 85, 247, 0.1) 0px, transparent 50%);
-    pointer-events: none;
-  }
-
-  /* --- SENIOR UI LIGHT MODE REFINEMENTS --- */
-  html.light .bg-slate-950, 
+  /* Improved Light Mode Overrides for Tailwind Classes */
+  html.light .bg-slate-950,
+  html.light .bg-[#020617] { background-color: #f1f5f9 !important; }
+  
   html.light .bg-slate-900,
-  html.light .bg-[#020617] { 
-    background-color: #f1f5f9 !important; 
-  }
-
   html.light .bg-slate-900\/90,
   html.light .bg-slate-900\/80,
-  html.light .bg-slate-900\/40,
-  html.light .bg-slate-800\/50,
-  html.light .bg-slate-800\/40 {
-    background-color: rgba(255, 255, 255, 0.8) !important;
-    backdrop-filter: blur(16px);
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.03), 0 2px 4px -2px rgb(0 0 0 / 0.03);
-    border: 1px solid #e2e8f0 !important;
+  html.light .bg-slate-900\/60,
+  html.light .bg-slate-900\/40 { 
+    background-color: #ffffff !important; 
+    border-color: rgba(0,0,0,0.08) !important;
   }
 
   html.light .bg-slate-800,
-  html.light .bg-slate-700 {
-    background-color: #ffffff !important;
-    border: 1px solid #e2e8f0;
-    color: #1e293b !important;
+  html.light .bg-slate-800\/50,
+  html.light .bg-slate-800\/40 { 
+    background-color: #f8fafc !important; 
+    border-color: rgba(0,0,0,0.08) !important;
   }
 
-  html.light .text-white,
-  html.light .text-slate-100,
-  html.light .text-slate-200 {
-    color: #0f172a !important;
-  }
+  html.light .bg-slate-950\/50,
+  html.light .bg-slate-950\/80,
+  html.light .bg-slate-950\/90 { background-color: rgba(241, 245, 249, 0.8) !important; }
 
-  html.light .text-slate-400,
-  html.light .text-slate-500 {
-    color: #64748b !important;
-  }
+  html.light .text-white { color: #0f172a !important; }
+  html.light .text-slate-200 { color: #1e293b !important; }
+  html.light .text-slate-300 { color: #334155 !important; }
+  html.light .text-slate-400 { color: #475569 !important; }
+  html.light .text-slate-500 { color: #64748b !important; }
 
   html.light .border-white\/5,
   html.light .border-white\/10,
   html.light .border-slate-800,
-  html.light .border-slate-700 {
-    border-color: #e2e8f0 !important;
-  }
+  html.light .border-slate-700 { border-color: rgba(0, 0, 0, 0.08) !important; }
 
-  html.light .shadow-2xl {
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02) !important;
-  }
+  html.light .shadow-2xl,
+  html.light .shadow-3xl { box-shadow: var(--shadow-premium) !important; }
 
-  html.light header {
-    background-color: rgba(255, 255, 255, 0.9) !important;
-    border-bottom: 1px solid #e2e8f0 !important;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
-  }
-
-  html.light .sidebar, 
-  html.light [role="dialog"] {
-    background-color: #ffffff !important;
-    border-right: 1px solid #e2e8f0;
-  }
-
-  html.light input, 
-  html.light select, 
-  html.light textarea {
-    background-color: #ffffff !important;
-    color: #0f172a !important;
-    border: 1px solid #cbd5e1 !important;
-  }
-
-  html.light input:focus, 
-  html.light select:focus, 
-  html.light textarea:focus {
-    border-color: #3b82f6 !important;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1) !important;
-  }
-
-  html.light .glow-text {
-    text-shadow: none !important;
-    color: #2563eb !important;
-  }
-
-  html.light .bg-blue-600\/20 {
-    background-color: rgba(37, 99, 235, 0.1) !important;
-  }
+  html.light .bg-blue-600\/10,
+  html.light .bg-blue-500\/10 { background-color: rgba(37, 99, 235, 0.08) !important; }
+  
+  html.light .bg-purple-600\/10,
+  html.light .bg-purple-500\/10 { background-color: rgba(147, 51, 234, 0.08) !important; }
 
   /* Standard Scrollbar */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -183,10 +139,7 @@
 
   @media (max-width: 768px) {
     html { font-size: 16px; }
-    .w-full { max-width: 100% !important; }
   }
-
-  body, #root { overflow-x: hidden !important; }
 </style>
 </head>
   <body>

@@ -14,9 +14,10 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
         ref={ref} 
         className={`
           relative group rounded-2xl 
-          bg-slate-800/50 backdrop-blur-md 
-          border border-slate-700/50
-          shadow-lg hover:shadow-xl hover:border-slate-600/50
+          bg-slate-800/50 dark:bg-slate-800/50 
+          light:bg-white backdrop-blur-md 
+          border border-slate-700/50 dark:border-slate-700/50 light:border-black/5
+          shadow-lg hover:shadow-xl hover:border-slate-600/50 dark:hover:border-slate-600/50
           transition-all duration-300 ease-in-out
           ${fullHeight ? 'h-full' : ''} 
           ${className}

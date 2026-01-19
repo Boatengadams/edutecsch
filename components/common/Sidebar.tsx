@@ -41,7 +41,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isExpanded, navItems, activeTab, setA
   const handleDragStart = (e: React.DragEvent, key: string) => {
     setDraggedKey(key);
     e.dataTransfer.effectAllowed = 'move';
-    // Small delay to hide the original item being dragged for a better visual effect
     setTimeout(() => {
         const target = e.target as HTMLElement;
         target.style.opacity = '0.4';
@@ -78,7 +77,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isExpanded, navItems, activeTab, setA
     <>
       {/* Overlay */}
       <div
-        className={`fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[60] transition-opacity duration-300 no-print lg:hidden ${isExpanded ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`fixed inset-0 bg-slate-950/90 dark:bg-slate-950/90 light:bg-slate-900/20 backdrop-blur-md z-[60] transition-opacity duration-300 no-print lg:hidden ${isExpanded ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         onClick={onClose}
         aria-hidden="true"
       ></div>
@@ -86,21 +85,21 @@ const Sidebar: React.FC<SidebarProps> = ({ isExpanded, navItems, activeTab, setA
       {/* Sidebar */}
       <div
         ref={sidebarRef}
-        className={`fixed lg:static top-0 left-0 h-full w-72 max-w-[85vw] bg-slate-900 border-r border-slate-800 z-[70] transition-transform duration-300 ease-in-out flex flex-col no-print shadow-2xl overflow-hidden
+        className={`fixed lg:static top-0 left-0 h-full w-72 max-w-[85vw] bg-slate-900 dark:bg-slate-900 light:bg-white border-r border-slate-800 dark:border-slate-800 light:border-slate-200 z-[70] transition-transform duration-300 ease-in-out flex flex-col no-print shadow-2xl light:shadow-xl overflow-hidden
                   ${isExpanded ? 'translate-x-0' : '-translate-x-full lg:hidden'}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-5 md:p-6 border-b border-slate-800/50 flex-shrink-0">
+        <div className="flex items-center justify-between p-5 md:p-6 border-b border-slate-800/50 dark:border-slate-800/50 light:border-slate-100 flex-shrink-0">
           <div className="flex flex-col">
-            <h2 className="text-lg md:text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 truncate">{title}</h2>
-            {onReorder && <span className="text-[8px] uppercase tracking-widest text-slate-600 font-bold">Drag to Reorder</span>}
+            <h2 className="text-lg md:text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 dark:from-blue-400 dark:to-purple-400 light:from-blue-600 light:to-indigo-600 truncate">{title}</h2>
+            {onReorder && <span className="text-[8px] uppercase tracking-widest text-slate-600 dark:text-slate-600 light:text-slate-400 font-bold">Drag to Reorder</span>}
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white transition-colors lg:hidden p-2 rounded-full hover:bg-slate-800"
+            className="text-slate-400 hover:text-white dark:hover:text-white light:hover:text-slate-900 transition-colors lg:hidden p-2 rounded-full hover:bg-slate-800 dark:hover:bg-slate-800 light:hover:bg-slate-100"
             aria-label="Close"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
@@ -132,11 +131,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isExpanded, navItems, activeTab, setA
                     }}
                     className={`group w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-left transition-all duration-200 outline-none
                     ${isActive
-                      ? 'bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-[length:200%_auto] text-white font-bold shadow-lg shadow-blue-500/25 scale-[1.02]'
-                      : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'
+                      ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold shadow-lg shadow-blue-500/25 scale-[1.02]'
+                      : 'text-slate-400 dark:text-slate-400 light:text-slate-500 hover:text-slate-100 dark:hover:text-slate-100 light:hover:text-slate-900 hover:bg-slate-800/50 dark:hover:bg-slate-800/50 light:hover:bg-slate-50'
                     }`}
                   >
-                    <div className={`flex-shrink-0 w-5 h-5 transition-transform group-hover:scale-110 ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-slate-300'}`}>
+                    <div className={`flex-shrink-0 w-5 h-5 transition-transform group-hover:scale-110 ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-500 light:text-slate-400 group-hover:text-slate-300 dark:group-hover:text-slate-300 light:group-hover:text-slate-600'}`}>
                         {item.icon}
                     </div>
                     <span className="truncate text-sm md:text-base">{item.label}</span>
@@ -152,7 +151,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isExpanded, navItems, activeTab, setA
           <WeatherWidget />
         </div>
 
-        <div className="p-4 text-[10px] md:text-xs text-slate-600 text-center border-t border-slate-800/50 flex-shrink-0">
+        <div className="p-4 text-[10px] md:text-xs text-slate-600 dark:text-slate-600 light:text-slate-400 text-center border-t border-slate-800/50 dark:border-slate-800/50 light:border-slate-100 flex-shrink-0">
             EduTec Platform v2.5
         </div>
       </div>

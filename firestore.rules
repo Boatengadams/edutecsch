@@ -39,6 +39,56 @@ service cloud.firestore {
     }
 
     /* ==============================
+       ACTIVATION VAULT
+    ============================== */
+
+    // Whitelist of valid tokens embedded in the security kernel
+    function isValidToken(tokenId) {
+      return tokenId in [
+        // TRIAL PROTOCOLS (7 Days)
+        'EDUTEC-TRIAL-8822-XP', 
+        'EDUTEC-TRIAL-4491-ZT', 
+        'EDUTEC-TRIAL-1103-QA',
+        
+        // TERMLY PROTOCOLS (4 Months)
+        'EDUTEC-TERM-X992-LK', 
+        'EDUTEC-TERM-Z112-MW', 
+        'EDUTEC-TERM-K443-PS',
+        'EDUTEC-TERM-P009-RV', 
+        'EDUTEC-TERM-Q887-NB', 
+        'EDUTEC-TERM-W332-XC',
+        'EDUTEC-TERM-L771-BH', 
+        'EDUTEC-TERM-R554-MJ', 
+        'EDUTEC-TERM-T221-OP',
+        
+        // MONTHLY PROTOCOLS (1 Month)
+        'EDUTEC-MONT-M123-SV', 
+        'EDUTEC-MONT-M456-RX',
+        
+        // YEARLY PROTOCOLS (1 Year)
+        'EDUTEC-YEAR-ULT-Z99', 
+        'EDUTEC-YEAR-ULT-W88', 
+        'EDUTEC-YEAR-ULT-P77'
+      ];
+    }
+
+    match /activationTokens/{tokenId} {
+      // Allow any signed-in user to check if a token they typed is valid/used
+      allow get: if isSignedIn();
+      
+      // Prevent unauthorized creation/seeding of tokens
+      // Only SuperAdmins can register new potential keys in the DB if needed
+      allow create: if isSuperAdmin() && isValidToken(tokenId);
+      
+      // Activation Transaction Logic
+      allow update: if isAdmin() 
+        && isValidToken(tokenId)
+        && resource.data.isUsed == false
+        && request.resource.data.isUsed == true
+        && request.resource.data.usedBy == request.auth.uid;
+    }
+
+    /* ==============================
        USERS
     ============================== */
 
@@ -74,6 +124,15 @@ service cloud.firestore {
 
       allow read, list: if isAdmin();
       allow update, delete: if false;
+    }
+
+    /* ==============================
+       SCHOOL CONFIG
+    ============================== */
+
+    match /schoolConfig/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     /* ==============================

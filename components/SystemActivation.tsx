@@ -10,23 +10,6 @@ interface SystemActivationProps {
     subscriptionStatus: SubscriptionStatus | null;
 }
 
-const ACTIVATION_CODES: { [key: string]: { planType: 'trial' | 'monthly' | 'termly' | 'yearly' } } = {
-  // Free Trial (7 Days)
-  '3fRzY7kM9pLq2vWxA': { planType: 'trial' },
-  'B6nK4mJv9tS1Qp8rZ': { planType: 'trial' },
-  // Per Term (4 Months)
-  'Xw2y9zLp4rV1M3k7Q': { planType: 'termly' },
-  '7vDqR9nB2kLw5mP3X': { planType: 'termly' },
-  '1pZ89vMx4qWkL2r6N': { planType: 'termly' },
-  'Gf3tK9nM2xR4Wp7vL': { planType: 'termly' },
-  'Yw4z1pL89vRqM3k2B': { planType: 'termly' },
-  '5nQp7rZ1K9vL4mW3X': { planType: 'termly' },
-  '8bVx2kM9P1rQ7zL4n': { planType: 'termly' },
-  'R3kW9vP1M4zL7qN2t': { planType: 'termly' },
-  'Jp9r4mZ1V3kW8vL2Q': { planType: 'termly' },
-  '2vLq9pM4R7kZ1wX8N': { planType: 'termly' },
-};
-
 const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus }) => {
     const [token, setToken] = useState('');
     const [loading, setLoading] = useState(false);
@@ -42,24 +25,29 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
             return;
         }
 
-        const tokenDetails = ACTIVATION_CODES[tokenToUse];
-        if (!tokenDetails) {
-            setError("Invalid Token: The provided registry key is not recognized.");
-            setLoading(false);
-            return;
-        }
+        setLoading(true);
+        setError('');
 
-        const { planType } = tokenDetails;
-        const subscriptionRef = db.collection("schoolConfig").doc("subscription");
         const tokenRef = db.collection("activationTokens").doc(tokenToUse);
+        const subscriptionRef = db.collection("schoolConfig").doc("subscription");
 
         try {
             await db.runTransaction(async (transaction) => {
                 const tokenDoc = await transaction.get(tokenRef);
-                if (tokenDoc.exists && tokenDoc.data()?.isUsed === true) {
+                
+                // If document doesn't exist, either it's an invalid code 
+                // or it hasn't been seeded. The security rules will block 
+                // the write if the ID is not in the secret whitelist.
+                if (!tokenDoc.exists) {
+                    throw new Error("Invalid Token: The provided registry key is not recognized by the security kernel.");
+                }
+
+                const tokenData = tokenDoc.data();
+                if (tokenData?.isUsed === true) {
                     throw new Error("Expired Token: This license key has already been consumed.");
                 }
 
+                const planType = tokenData?.planType || 'termly';
                 const now = new Date();
                 const newSubData: Partial<SubscriptionStatus> = { isActive: true, planType };
                 const Timestamp = firebase.firestore.Timestamp;
@@ -76,55 +64,33 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
                     newSubData.subscriptionEndsAt = Timestamp.fromDate(subEndDate);
                 }
                 
-                transaction.set(tokenRef, { isUsed: true, usedAt: Timestamp.fromDate(now), usedBy: userProfile.uid }, { merge: true });
+                // Rules will only allow this update if tokenId is in the secret rules list
+                transaction.set(tokenRef, { 
+                    isUsed: true, 
+                    usedAt: Timestamp.fromDate(now), 
+                    usedBy: userProfile.uid 
+                }, { merge: true });
+                
                 transaction.set(subscriptionRef, newSubData, { merge: true });
             });
+            
             setError('');
             setToken('');
+            window.location.reload(); // Refresh to clear state
         } catch (err: any) {
             console.error(err);
             setError(err.message || 'Transmission Error: Activation protocol failed.');
+        } finally {
             setLoading(false); 
         }
     };
 
-    const handleTrialActivation = async () => {
-        setLoading(true);
-        setError('');
-
-        const trialCodes = Object.keys(ACTIVATION_CODES).filter(
-            (code) => ACTIVATION_CODES[code].planType === 'trial'
-        );
-
-        let availableToken: string | null = null;
-        try {
-            for (const code of trialCodes) {
-                const tokenRef = db.collection("activationTokens").doc(code);
-                const tokenDoc = await db.runTransaction(async t => t.get(tokenRef));
-                if (!tokenDoc.exists || tokenDoc.data()?.isUsed === false) {
-                    availableToken = code;
-                    break;
-                }
-            }
-
-            if (!availableToken) {
-                throw new Error("Inventory Depleted: No free trial tokens currently available.");
-            }
-            await activateWithToken(availableToken);
-        } catch (err: any) {
-            setError(err.message);
-            setLoading(false);
-        }
-    };
-    
     const handleManualActivate = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!token.trim()) {
             setError("System Input Required: Please enter an activation token.");
             return;
         }
-        setLoading(true);
-        setError('');
         await activateWithToken(token.trim());
     };
 
@@ -162,19 +128,6 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
                         </Button>
                     </form>
                     
-                    {isTrialAvailable && (
-                        <div className="pt-6 border-t border-white/5 text-center">
-                            <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-4">First-time deployment?</p>
-                            <button 
-                                onClick={handleTrialActivation} 
-                                disabled={loading}
-                                className="text-blue-400 hover:text-white font-black text-xs uppercase tracking-widest transition-all underline underline-offset-8 decoration-2 decoration-blue-500/30 hover:decoration-blue-500 disabled:opacity-30"
-                            >
-                                Start 7-Day Free Trial Access
-                            </button>
-                        </div>
-                    )}
-                    
                     {error && (
                         <div className="p-5 bg-red-500/10 border border-red-500/20 rounded-2xl text-center animate-shake">
                             <p className="text-red-400 text-[10px] font-black uppercase tracking-widest leading-relaxed">
@@ -185,7 +138,7 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
                 </div>
 
                 <div className="mt-12 pt-8 border-t border-white/5 flex flex-col items-center gap-4 grayscale opacity-30">
-                     <span className="text-[9px] font-black uppercase tracking-[0.5em] text-slate-500">Official Edutec Secure License // {new Date().getFullYear()}</span>
+                     <span className="text-[9px] font-black uppercase tracking-[0.5em] text-slate-50 text-slate-500">Official Edutec Secure License // {new Date().getFullYear()}</span>
                 </div>
             </Card>
         </div>

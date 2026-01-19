@@ -1,5 +1,3 @@
-
-
 import React, { useState } from 'react';
 import { useAuthentication } from '../hooks/useAuth';
 import { UserRole, GES_CLASSES, GES_SUBJECTS } from '../types';
@@ -183,7 +181,7 @@ const RoleSelector: React.FC = () => {
                             key={option.key}
                             onClick={() => setSelectedRole(option.key)}
                             className={`group relative flex flex-col items-center p-6 rounded-2xl border transition-all duration-300 cursor-pointer overflow-hidden ${selectedRole === option.key 
-                                ? 'bg-blue-600/20 border-blue-500 ring-1 ring-blue-500 shadow-lg shadow-blue-500/20 scale-105 z-10' 
+                                ? 'bg-gradient-to-br from-blue-500/20 to-purple-500/20 border-blue-500 ring-1 ring-blue-500 shadow-lg shadow-blue-500/20 scale-105 z-10' 
                                 : 'bg-slate-800/40 border-slate-700 hover:bg-slate-800 hover:border-slate-500'}`}
                         >
                             <div className="text-4xl mb-3 transition-transform group-hover:scale-110">{option.icon}</div>
