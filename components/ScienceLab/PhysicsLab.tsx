@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { LabLevel, UserProfile } from '../../types';
 import Electricity from './Physics/Electricity';
@@ -44,8 +43,10 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ level }) => {
             </div>
 
             <div className="flex-grow relative h-full">
-                {mode === 'Electricity' && <Electricity onUpdateChar={updateCharacter} />}
-                {mode === 'Mechanics' && <Mechanics onUpdateChar={updateCharacter} />}
+                {/* FIX: Removed onUpdateChar prop from Electricity as it is not defined in its props. */}
+                {mode === 'Electricity' && <Electricity />}
+                {/* FIX: Removed onUpdateChar prop from Mechanics as it is not defined in its props. */}
+                {mode === 'Mechanics' && <Mechanics />}
                 {mode === 'Optics' && <Optics onUpdateChar={updateCharacter} />}
             </div>
         </div>

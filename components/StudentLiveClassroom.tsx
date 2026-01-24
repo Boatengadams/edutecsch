@@ -3,11 +3,11 @@ import { db, firebase } from '../services/firebase';
 import type { LiveLesson, LiveLessonResponse, UserProfile } from '../types';
 import Spinner from './common/Spinner';
 import SirEduAvatar from './common/SirEduAvatar';
-// FIX: Added Card import which was missing and causing errors on lines 163 and 166.
 import Card from './common/Card';
 import Button from './common/Button';
 import { useLiveLessonAudio } from '../hooks/useLiveLessonAudio';
 import { useToast } from './common/Toast';
+import { useAuthentication } from '../hooks/useAuth';
 
 interface StudentLiveClassroomProps {
   lessonId: string;
@@ -18,6 +18,7 @@ interface StudentLiveClassroomProps {
 const REACTIONS = ['👍', '👏', '❤️', '🤯', '😮', '❓'];
 
 const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, userProfile, onClose }) => {
+  const { schoolSettings } = useAuthentication();
   const { showToast } = useToast();
   const [lesson, setLesson] = useState<LiveLesson | null>(null);
   const [hasResponded, setHasResponded] = useState(false);
@@ -106,6 +107,13 @@ const StudentLiveClassroom: React.FC<StudentLiveClassroomProps> = ({ lessonId, u
       {/* Dynamic Immersive Header */}
       <header className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start z-50 pointer-events-none">
           <div className="flex items-center gap-4 pointer-events-auto">
+              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center overflow-hidden p-1 shadow-2xl border border-white/20">
+                {schoolSettings?.schoolLogoUrl ? (
+                    <img src={schoolSettings.schoolLogoUrl} alt="Logo" className="w-full h-full object-contain" />
+                ) : (
+                    <span className="text-blue-600 font-black text-xl">{(schoolSettings?.schoolName || 'E').charAt(0)}</span>
+                )}
+              </div>
               <div className="bg-red-600 px-4 py-1.5 rounded-full flex items-center gap-2.5 shadow-2xl border border-red-400/50">
                   <div className="w-2.5 h-2.5 bg-white rounded-full animate-ping"></div>
                   <span className="text-xs font-black text-white uppercase tracking-[0.2em]">Live Session</span>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { db, firebase } from '../services/firebase';
 import type { LiveLesson, LiveLessonResponse, UserProfile, LiveAction, LiveActionType, DrawingElement, Point, DrawingToolType } from '../types';
@@ -7,6 +6,7 @@ import Button from './common/Button';
 import Spinner from './common/Spinner';
 import SirEduAvatar from './common/SirEduAvatar';
 import { useToast } from './common/Toast';
+import { useAuthentication } from '../hooks/useAuth';
 
 interface TeacherLiveClassroomProps {
   lessonId: string;
@@ -16,6 +16,7 @@ interface TeacherLiveClassroomProps {
 }
 
 export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ lessonId, onClose, userProfile, setToast }) => {
+  const { schoolSettings } = useAuthentication();
   const [lesson, setLesson] = useState<LiveLesson | null>(null);
   const [responses, setResponses] = useState<LiveLessonResponse[]>([]);
   const [studentsInClass, setStudentsInClass] = useState<UserProfile[]>([]);
@@ -171,6 +172,13 @@ export const TeacherLiveClassroom: React.FC<TeacherLiveClassroomProps> = ({ less
     <div className="h-full flex flex-col bg-[#020617] text-white overflow-hidden font-sans">
       <header className="flex items-center justify-between px-8 py-4 bg-slate-900 border-b border-white/5 shadow-2xl z-50">
         <div className="flex items-center gap-6">
+            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center overflow-hidden p-1 shadow-lg border border-white/10">
+                {schoolSettings?.schoolLogoUrl ? (
+                    <img src={schoolSettings.schoolLogoUrl} alt="Logo" className="w-full h-full object-contain" />
+                ) : (
+                    <span className="text-blue-600 font-black text-xl">{(schoolSettings?.schoolName || 'E').charAt(0)}</span>
+                )}
+            </div>
             <div className="flex flex-col">
                 <h2 className="text-xl font-black tracking-tight text-white uppercase">{lesson.topic}</h2>
                 <div className="flex items-center gap-2 mt-0.5">

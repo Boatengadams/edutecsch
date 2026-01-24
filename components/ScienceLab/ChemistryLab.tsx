@@ -1,559 +1,116 @@
+import React, { useState, useEffect } from 'react';
+import Card from '../common/Card';
+import Button from '../common/Button';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { LabLevel, UserProfile, LabEquipment } from '../../types';
-import { useToast } from '../common/Toast';
-import { db, firebase } from '../../services/firebase';
-
-// --- TYPES ---
-
-type ContainerType = 'test_tube' | 'beaker' | 'conical_flask' | 'measuring_cylinder' | 'burette' | 'reagent_bottle' | 'bunsen_burner' | 'white_tile' | 'retort_stand';
-
-interface Chemical {
-    id: string;
-    name: string;
-    formula?: string;
-    concentration: number;
-    volume: number;
-    color: string;
-    type: 'acid' | 'base' | 'salt' | 'indicator' | 'solvent';
+interface Liquid {
     ph: number;
-}
-
-interface LabContainer {
-    id: string;
-    type: ContainerType;
+    volume: number;
+    temp: number;
     name: string;
-    capacity: number;
-    currentVolume: number;
-    contents: Chemical[]; 
-    temperature: number;
-    x: number;
-    y: number;
-    rotation: number; 
-    isPouring?: boolean;
-    zIndex?: number;
-    lastX: number; // For direction detection
-    label?: string; // Optional label for reagent bottles
 }
 
-interface ChemistryLabProps {
-    level: LabLevel;
-    userProfile: UserProfile;
-}
+const ChemistryLab: React.FC = () => {
+    const [beaker, setBeaker] = useState<Liquid>({ ph: 7, volume: 100, temp: 25, name: 'Water' });
+    const [burnerOn, setBurnerOn] = useState(false);
+    const [isDripping, setIsDripping] = useState(false);
 
-// --- CONFIGURATION ---
-
-const GLASS_DEFS: Record<ContainerType, { 
-    width: number; 
-    height: number; 
-    mouthWidth: number; 
-    spoutOffset: { x: number; y: number }; 
-    capacity: number;
-    icon: string;
-}> = {
-    'beaker': { width: 90, height: 110, mouthWidth: 80, spoutOffset: { x: -45, y: -55 }, capacity: 250, icon: '🥃' },
-    'conical_flask': { width: 100, height: 130, mouthWidth: 35, spoutOffset: { x: 15, y: -65 }, capacity: 250, icon: '🏺' },
-    'test_tube': { width: 30, height: 120, mouthWidth: 25, spoutOffset: { x: -12, y: -60 }, capacity: 50, icon: '🧪' },
-    'measuring_cylinder': { width: 40, height: 180, mouthWidth: 35, spoutOffset: { x: -18, y: -90 }, capacity: 100, icon: '📏' },
-    'burette': { width: 20, height: 350, mouthWidth: 15, spoutOffset: { x: 0, y: 175 }, capacity: 50, icon: '📐' },
-    'reagent_bottle': { width: 70, height: 110, mouthWidth: 30, spoutOffset: { x: 30, y: -55 }, capacity: 250, icon: '🧴' },
-    'bunsen_burner': { width: 80, height: 120, mouthWidth: 0, spoutOffset: { x: 0, y: 0 }, capacity: 0, icon: '🔥' },
-    'white_tile': { width: 140, height: 20, mouthWidth: 0, spoutOffset: { x: 0, y: 0 }, capacity: 0, icon: '⬜' },
-    'retort_stand': { width: 150, height: 400, mouthWidth: 0, spoutOffset: { x: 0, y: 0 }, capacity: 0, icon: '🏗️' },
-};
-
-const REAGENTS: Record<string, LabEquipment[]> = {
-    'Acids': [
-        { id: 'hcl', name: 'Hydrochloric Acid', type: 'chemical', icon: '🧪', description: 'Strong Acid (1.0M HCl)', properties: { color: 'rgba(230, 230, 230, 0.2)', volume: 200, ph: 0.1 } },
-        { id: 'h2so4', name: 'Sulfuric Acid', type: 'chemical', icon: '🧪', description: 'Strong Acid (1.0M H2SO4)', properties: { color: 'rgba(240, 240, 240, 0.3)', volume: 200, ph: 0.3 } },
-        { id: 'hno3', name: 'Nitric Acid', type: 'chemical', icon: '🧪', description: 'Strong Acid (1.0M HNO3)', properties: { color: 'rgba(255, 255, 200, 0.2)', volume: 200, ph: 0.5 } },
-        { id: 'ch3cooh', name: 'Ethanoic Acid', type: 'chemical', icon: '🧪', description: 'Weak Acid (1.0M CH3COOH)', properties: { color: 'rgba(255, 255, 255, 0.1)', volume: 200, ph: 2.4 } },
-    ],
-    'Bases': [
-        { id: 'naoh', name: 'Sodium Hydroxide', type: 'chemical', icon: '🧴', description: 'Strong Base (1.0M NaOH)', properties: { color: 'rgba(230, 230, 230, 0.2)', volume: 200, ph: 13.9 } },
-        { id: 'koh', name: 'Potassium Hydroxide', type: 'chemical', icon: '🧴', description: 'Strong Base (1.0M KOH)', properties: { color: 'rgba(230, 230, 230, 0.2)', volume: 200, ph: 13.5 } },
-        { id: 'nh3', name: 'Ammonia Solution', type: 'chemical', icon: '🧴', description: 'Weak Base (1.0M NH3)', properties: { color: 'rgba(200, 230, 255, 0.1)', volume: 200, ph: 11.6 } },
-        { id: 'caoh2', name: 'Limewater', type: 'chemical', icon: '🧴', description: 'Ca(OH)2 Solution', properties: { color: 'rgba(255, 255, 255, 0.4)', volume: 200, ph: 12.4 } },
-    ],
-    'Salts & Others': [
-        { id: 'water', name: 'Distilled Water', type: 'chemical', icon: '💧', description: 'H2O (pH 7.0)', properties: { color: 'rgba(186, 230, 253, 0.3)', volume: 200, ph: 7.0 } },
-        { id: 'cuso4', name: 'Copper(II) Sulfate', type: 'chemical', icon: '🔷', description: '0.5M CuSO4', properties: { color: 'rgba(14, 165, 233, 0.6)', volume: 200, ph: 4.0 } },
-        { id: 'kmno4', name: 'Potassium Permanganate', type: 'chemical', icon: '🟣', description: '0.1M KMnO4', properties: { color: 'rgba(162, 28, 175, 0.7)', volume: 200, ph: 7.0 } },
-        { id: 'ki', name: 'Potassium Iodide', type: 'chemical', icon: '⚪', description: '0.1M KI', properties: { color: 'rgba(255, 255, 255, 0.1)', volume: 200, ph: 7.0 } },
-        { id: 'agno3', name: 'Silver Nitrate', type: 'chemical', icon: '💎', description: '0.1M AgNO3', properties: { color: 'rgba(255, 255, 255, 0.05)', volume: 200, ph: 6.0 } },
-    ],
-    'Indicators': [
-        { id: 'phenolphthalein', name: 'Phenolphthalein', type: 'chemical', icon: '⚪', description: 'pH 8.2-10.0', properties: { color: 'rgba(255, 255, 255, 0)', volume: 50, ph: 7.0 } },
-        { id: 'methyl_orange', name: 'Methyl Orange', type: 'chemical', icon: '🟠', description: 'pH 3.1-4.4', properties: { color: 'rgba(251, 146, 60, 0.8)', volume: 50, ph: 7.0 } },
-    ]
-};
-
-// --- PHYSICS ENGINE HELPERS ---
-
-const blendChemicals = (contents: Chemical[]) => {
-    if (contents.length === 0) return { color: 'rgba(255,255,255,0.05)', ph: 7.0 };
-    let totalVol = 0, r = 0, g = 0, b = 0, a = 0, phWeighted = 0;
-
-    contents.forEach(c => {
-        totalVol += c.volume;
-        const match = c.color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
-        if (match) {
-            r += parseInt(match[1]) * c.volume;
-            g += parseInt(match[2]) * c.volume;
-            b += parseInt(match[3]) * c.volume;
-            a += (match[4] ? parseFloat(match[4]) : 1) * c.volume;
-        }
-        phWeighted += c.ph * c.volume;
-    });
-
-    const finalPh = phWeighted / totalVol;
-    let finalColor = `rgba(${Math.round(r / totalVol)}, ${Math.round(g / totalVol)}, ${Math.round(b / totalVol)}, ${Math.min(0.8, a / totalVol)})`;
-    
-    // Indicator Reactivity
-    if (contents.some(c => c.id === 'phenolphthalein')) {
-        if (finalPh > 8.2) {
-            const intensity = Math.min(1, (finalPh - 8.2) / 2);
-            finalColor = `rgba(236, 72, 153, ${0.4 + intensity * 0.4})`; 
-        }
-    }
-    if (contents.some(c => c.id === 'methyl_orange')) {
-        if (finalPh < 3.1) {
-            finalColor = `rgba(239, 68, 68, 0.8)`; // Red
-        } else if (finalPh < 4.4) {
-            finalColor = `rgba(249, 115, 22, 0.8)`; // Orange
-        } else {
-            finalColor = `rgba(234, 179, 8, 0.8)`; // Yellow
-        }
-    }
-    return { color: finalColor, ph: finalPh };
-};
-
-const ChemistryLab: React.FC<ChemistryLabProps> = () => {
-    const { showToast } = useToast();
-    const [containers, setContainers] = useState<LabContainer[]>([]);
-    const [heldId, setHeldId] = useState<string | null>(null);
-    const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [isSidebarOpen, setSidebarOpen] = useState(false);
-    const [openReagentCategory, setOpenReagentCategory] = useState<string | null>(null);
-    
-    const workbenchRef = useRef<HTMLDivElement>(null);
-    const mousePos = useRef({ x: 0, y: 0 });
-    const requestRef = useRef<number | null>(null);
-
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-
-    const updatePhysics = useCallback(() => {
-        setContainers(prev => {
-            const next = [...prev];
-            const held = next.find(c => c.id === heldId);
-
-            if (held) {
-                const dx = mousePos.current.x - held.lastX;
-                held.lastX = held.x;
-                held.x = lerp(held.x, mousePos.current.x, 0.2);
-                held.y = lerp(held.y, mousePos.current.y, 0.2);
-
-                if (held.isPouring) {
-                    const targetRot = dx < -1 ? -80 : dx > 1 ? 80 : held.rotation;
-                    held.rotation = lerp(held.rotation, targetRot === 0 ? -80 : targetRot, 0.1);
-                } else {
-                    held.rotation = lerp(held.rotation, 0, 0.15);
-                }
-
-                if (held.isPouring && held.currentVolume > 0 && Math.abs(held.rotation) > 30) {
-                    const def = GLASS_DEFS[held.type];
-                    const rad = held.rotation * (Math.PI / 180);
-                    
-                    const actualSpoutOffset = { 
-                        x: held.rotation < 0 ? -def.spoutOffset.x : def.spoutOffset.x, 
-                        y: def.spoutOffset.y 
-                    };
-
-                    const spoutX = held.x + (actualSpoutOffset.x * Math.cos(rad) - actualSpoutOffset.y * Math.sin(rad));
-                    const spoutY = held.y + (actualSpoutOffset.x * Math.sin(rad) + actualSpoutOffset.y * Math.cos(rad));
-
-                    const target = next.find(t => 
-                        t.id !== held.id && 
-                        Math.abs(t.x - spoutX) < 40 && 
-                        t.y > spoutY && t.y < spoutY + 400
-                    );
-
-                    if (target && target.currentVolume < target.capacity) {
-                        const flowRate = 1.5; 
-                        const flow = Math.min(flowRate, held.currentVolume);
-                        held.currentVolume -= flow;
-                        target.currentVolume += flow;
-                        
-                        held.contents.forEach(chem => {
-                            const transferAmount = (chem.volume / (held.currentVolume + flow)) * flow;
-                            chem.volume -= transferAmount;
-                            const existing = target.contents.find(tc => tc.id === chem.id);
-                            if (existing) existing.volume += transferAmount;
-                            else target.contents.push({ ...chem, volume: transferAmount });
-                        });
-                    }
-                }
-            }
-
-            next.forEach(c => {
-                if (c.id !== heldId) {
-                    c.rotation = lerp(c.rotation, 0, 0.2);
-                }
-            });
-
-            return next;
-        });
-        requestRef.current = requestAnimationFrame(updatePhysics);
-    }, [heldId]);
-
+    // Thermal Engine
     useEffect(() => {
-        requestRef.current = requestAnimationFrame(updatePhysics);
-        return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
-    }, [updatePhysics]);
-
-    const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
-        const rect = workbenchRef.current?.getBoundingClientRect();
-        if (rect) {
-            const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-            const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-            
-            const parent = workbenchRef.current?.parentElement;
-            const scrollLeft = parent?.scrollLeft || 0;
-            const scrollTop = parent?.scrollTop || 0;
-            
-            mousePos.current = { 
-                x: (clientX - rect.left) + scrollLeft, 
-                y: (clientY - rect.top) + scrollTop 
-            };
+        let interval: any;
+        if (burnerOn) {
+            interval = setInterval(() => {
+                setBeaker(prev => ({ ...prev, temp: Math.min(100, prev.temp + 0.5) }));
+            }, 100);
+        } else {
+            interval = setInterval(() => {
+                setBeaker(prev => ({ ...prev, temp: Math.max(25, prev.temp - 0.1) }));
+            }, 100);
         }
+        return () => clearInterval(interval);
+    }, [burnerOn]);
+
+    const dripAcid = () => {
+        setIsDripping(true);
+        setTimeout(() => {
+            setBeaker(prev => ({
+                ...prev,
+                ph: Math.max(0, prev.ph - 0.2),
+                volume: prev.volume + 1
+            }));
+            setIsDripping(false);
+        }, 500);
     };
 
-    const handleMouseDown = (id: string) => {
-        setHeldId(id);
-        setSelectedId(id);
-    };
-
-    const handleMouseUp = () => {
-        setHeldId(null);
-    };
-
-    const spawn = (type: ContainerType) => {
-        const def = GLASS_DEFS[type];
-        const parent = workbenchRef.current?.parentElement;
-        const scrollLeft = parent?.scrollLeft || 0;
-        const scrollTop = parent?.scrollTop || 0;
-        const visibleWidth = parent?.clientWidth || 800;
-        const visibleHeight = parent?.clientHeight || 600;
-        
-        // Tuned Spawn for v5.6 Massive Surface
-        const newC: LabContainer = {
-            id: Math.random().toString(36).substr(2, 9),
-            type, name: type.replace('_', ' ').toUpperCase(), 
-            capacity: def.capacity, currentVolume: 0,
-            contents: [], temperature: 25,
-            x: scrollLeft + visibleWidth / 2 + (Math.random() * 200 - 100), 
-            y: scrollTop + visibleHeight * 0.82 + (Math.random() * 50 - 25), 
-            rotation: 0, zIndex: 10,
-            lastX: 400
-        };
-        setContainers(prev => [...prev, newC]);
-        setSidebarOpen(false);
-    };
-
-    const spawnReagentBottle = (chem: LabEquipment) => {
-        const type: ContainerType = 'reagent_bottle';
-        const def = GLASS_DEFS[type];
-        const props = chem.properties!;
-        
-        const parent = workbenchRef.current?.parentElement;
-        const scrollLeft = parent?.scrollLeft || 0;
-        const scrollTop = parent?.scrollTop || 0;
-        const visibleWidth = parent?.clientWidth || 800;
-        const visibleHeight = parent?.clientHeight || 600;
-
-        const newC: LabContainer = {
-            id: Math.random().toString(36).substr(2, 9),
-            type, 
-            name: chem.name, 
-            label: chem.name,
-            capacity: def.capacity, 
-            currentVolume: props.volume || 200,
-            contents: [{ 
-                id: chem.id, 
-                name: chem.name, 
-                volume: props.volume || 200, 
-                concentration: 1.0, 
-                color: props.color, 
-                ph: props.ph, 
-                type: 'solvent' 
-            }], 
-            temperature: 25,
-            x: scrollLeft + visibleWidth / 2 + (Math.random() * 200 - 100),
-            y: scrollTop + visibleHeight * 0.82 + (Math.random() * 50 - 25), 
-            rotation: 0, 
-            zIndex: 15,
-            lastX: 400
-        };
-        setContainers(prev => [...prev, newC]);
-        setSidebarOpen(false);
-        showToast(`Spawned bottle of ${chem.name}`, 'info');
+    const getLiquidColor = (ph: number) => {
+        if (ph < 4) return 'rgba(239, 68, 68, 0.6)'; // Acidic - Red
+        if (ph > 10) return 'rgba(59, 130, 246, 0.6)'; // Basic - Blue
+        return 'rgba(186, 230, 253, 0.3)'; // Neutral
     };
 
     return (
-        <div 
-            className="h-full flex flex-col md:flex-row bg-transparent overflow-hidden select-none relative font-sans touch-none" 
-            onMouseMove={handleMouseMove} 
-            onTouchMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onTouchEnd={handleMouseUp}
-            onClick={() => { setSelectedId(null); setSidebarOpen(false); }}
-        >
-            {/* Sidebar (Fixed position) */}
-            <div className={`fixed top-14 left-0 h-[calc(100%-3.5rem)] w-80 bg-slate-950/98 backdrop-blur-3xl border-r border-white/5 z-[60] transition-transform duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-                <div className="p-10 pt-16 space-y-10 overflow-y-auto h-full custom-scrollbar">
-                    <section>
-                        <h4 className="text-[12px] font-black text-blue-500 uppercase tracking-[0.2em] mb-8 flex items-center gap-2">
-                             <div className="w-1.5 h-4 bg-blue-500 rounded-full"></div>
-                             Apparatus
-                        </h4>
-                        <div className="grid grid-cols-2 gap-5">
-                            {(Object.keys(GLASS_DEFS) as ContainerType[]).filter(t => t !== 'reagent_bottle' && GLASS_DEFS[t].capacity > 0).map(type => (
-                                <button key={type} onClick={() => spawn(type)} className="flex flex-col items-center p-5 bg-white/5 hover:bg-blue-600/10 rounded-3xl border border-white/5 hover:border-blue-500/40 transition-all active:scale-95 group shadow-sm hover:shadow-blue-500/10">
-                                    <span className="text-4xl mb-3 group-hover:scale-110 transition-transform">{GLASS_DEFS[type].icon}</span>
-                                    <span className="text-[10px] font-black text-slate-400 group-hover:text-white uppercase tracking-tighter text-center leading-tight">{type.replace('_', ' ')}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </section>
+        <div className="h-full flex bg-[#020617] overflow-hidden">
+            <div className="flex-grow flex items-center justify-center p-20 relative">
+                {/* Bunsen Burner */}
+                <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex flex-col items-center">
+                    {burnerOn && (
+                        <div className="mb-[-10px] w-8 h-20 bg-blue-500/40 rounded-full blur-xl animate-pulse"></div>
+                    )}
+                    <div className="w-10 h-32 bg-slate-700 rounded-t-lg border-x border-slate-500"></div>
+                    <button 
+                        onClick={() => setBurnerOn(!burnerOn)}
+                        className={`mt-4 px-6 py-2 rounded-full text-[10px] font-black uppercase transition-all ${burnerOn ? 'bg-red-600 text-white shadow-lg' : 'bg-slate-800 text-slate-500'}`}
+                    >
+                        Burner: {burnerOn ? 'ON' : 'OFF'}
+                    </button>
+                </div>
+
+                {/* Beaker & Stand */}
+                <div className="relative mb-40">
+                     {/* Burette Drip */}
+                    {isDripping && (
+                        <div className="absolute top-[-200px] left-1/2 -translate-x-1/2 w-1 h-40 bg-blue-300/40 animate-pulse"></div>
+                    )}
                     
-                    <section>
-                         <h4 className="text-[12px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-8 flex items-center gap-2">
-                             <div className="w-1.5 h-4 bg-emerald-500 rounded-full"></div>
-                             Chemicals
-                        </h4>
-                        <div className="space-y-4">
-                            {Object.entries(REAGENTS).map(([category, items]) => (
-                                <div key={category} className="space-y-2">
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); setOpenReagentCategory(openReagentCategory === category ? null : category); }}
-                                        className="w-full flex items-center justify-between p-4 bg-slate-900/50 rounded-2xl border border-white/5 hover:border-emerald-500/40 transition-all group"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-emerald-400 opacity-70 group-hover:opacity-100 transition-opacity">⚗️</span>
-                                            <span className="text-[11px] font-black text-slate-300 uppercase tracking-widest">{category}</span>
-                                        </div>
-                                        <span className={`text-[10px] text-slate-500 transition-transform ${openReagentCategory === category ? 'rotate-90 text-white' : ''}`}>▶</span>
-                                    </button>
-                                    
-                                    {openReagentCategory === category && (
-                                        <div className="grid grid-cols-1 gap-2.5 pl-3 animate-fade-in-down">
-                                            {items.map(chem => (
-                                                <button key={chem.id} onClick={(e) => { e.stopPropagation(); spawnReagentBottle(chem); }} className="w-full flex items-center gap-4 p-3 bg-white/5 hover:bg-slate-800 border border-white/5 rounded-2xl text-left transition-all group hover:scale-[1.02]">
-                                                    <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-xl group-hover:bg-emerald-500/20 transition-colors shadow-inner border border-white/5">{chem.icon}</div>
-                                                    <div className="min-w-0">
-                                                        <p className="text-[11px] font-black text-slate-200 truncate uppercase tracking-tighter">{chem.name}</p>
-                                                        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{chem.id}</p>
-                                                    </div>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </section>
+                    <svg width="200" height="200" viewBox="0 0 100 100" className="drop-shadow-2xl">
+                        <path d="M 20 10 L 20 90 Q 20 95 25 95 L 75 95 Q 80 95 80 90 L 80 10" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.3)" strokeWidth="2" />
+                        <rect x="20" y={90 - beaker.volume/2} width="60" height={beaker.volume/2} fill={getLiquidColor(beaker.ph)} className="transition-all duration-500" />
+                        <text x="50" y="115" textAnchor="middle" fill="#475569" fontSize="6" fontWeight="bold">PYREX 250ML</text>
+                    </svg>
                 </div>
             </div>
 
-            <button onClick={(e) => { e.stopPropagation(); setSidebarOpen(!isSidebarOpen); }} className="fixed top-18 left-6 z-[70] p-4 bg-blue-600 rounded-2xl text-white shadow-2xl hover:bg-blue-500 transition-all active:scale-90 ring-4 ring-blue-600/20">
-                {isSidebarOpen ? '✕' : '🧪'}
-            </button>
+            <aside className="w-96 border-l border-white/5 p-10 space-y-8 bg-slate-900/50 backdrop-blur-3xl">
+                <div className="space-y-2">
+                    <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Chemistry Workbench</h2>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Titration Control Unit</p>
+                </div>
 
-            {/* Massive Workbench Area (2500px x 1800px) */}
-            <div ref={workbenchRef} className="absolute inset-0 w-[2500px] h-[1800px] bg-transparent overflow-visible">
-                {containers.map(c => (
-                    <div 
-                        key={c.id} 
-                        className={`absolute cursor-grab active:cursor-grabbing transition-transform duration-75`}
-                        style={{ left: c.x, top: c.y, transform: `translate(-50%, -50%) rotate(${c.rotation}deg)`, zIndex: c.zIndex }}
-                        onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(c.id); }}
-                        onTouchStart={(e) => { e.stopPropagation(); handleMouseDown(c.id); }}
-                    >
-                        {selectedId === c.id && (
-                            <div className="absolute -top-24 left-1/2 -translate-x-1/2 flex gap-4 animate-fade-in-up">
-                                <button onClick={(e) => { e.stopPropagation(); setContainers(prev => prev.filter(x => x.id !== c.id)); }} className="bg-red-500/10 text-red-500 p-4 rounded-3xl border border-red-500/20 hover:bg-red-500 hover:text-white transition-all shadow-2xl backdrop-blur-xl">🗑️</button>
-                                {GLASS_DEFS[c.type].capacity > 0 && (
-                                    <button 
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setContainers(prev => prev.map(x => x.id === c.id ? { ...x, isPouring: !x.isPouring } : x));
-                                        }}
-                                        className={`px-8 py-3 rounded-3xl font-black text-[12px] tracking-widest uppercase transition-all shadow-2xl backdrop-blur-xl border ${c.isPouring ? 'bg-blue-600 text-white border-blue-400 animate-pulse' : 'bg-slate-900/80 text-slate-300 border-white/20 hover:bg-slate-800'}`}
-                                    >
-                                        {c.isPouring ? 'Flowing...' : 'Pour'}
-                                    </button>
-                                )}
-                            </div>
-                        )}
-                        <GlassRenderer container={c} isHeld={heldId === c.id} />
+                <Card className="space-y-6 !bg-slate-950/50">
+                    <div className="flex justify-between items-end">
+                        <div>
+                            <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest">pH Level</p>
+                            <p className="text-4xl font-mono font-bold text-white">{beaker.ph.toFixed(1)}</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-[8px] font-black text-orange-500 uppercase tracking-widest">Temperature</p>
+                            <p className="text-4xl font-mono font-bold text-white">{beaker.temp.toFixed(1)}°C</p>
+                        </div>
                     </div>
-                ))}
+                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-red-500 via-yellow-400 to-blue-500" style={{ width: `${(beaker.ph / 14) * 100}%` }}></div>
+                    </div>
+                </Card>
 
-                {/* Pouring Stream Visualization */}
-                {containers.map(c => c.isPouring && c.currentVolume > 0 && Math.abs(c.rotation) > 30 && (
-                    <PouringStream key={`stream-${c.id}`} source={c} />
-                ))}
-            </div>
-        </div>
-    );
-};
+                <div className="space-y-4">
+                    <Button onClick={dripAcid} className="w-full !py-4 font-black uppercase tracking-widest">💧 Add 1ml 0.1M HCl</Button>
+                    <Button onClick={() => setBeaker({ ph: 7, volume: 100, temp: 25, name: 'Water' })} variant="secondary" className="w-full">Reset Apparatus</Button>
+                </div>
 
-// --- VISUAL RENDERERS ---
-
-const PouringStream: React.FC<{ source: LabContainer }> = ({ source }) => {
-    const { color } = blendChemicals(source.contents);
-    const def = GLASS_DEFS[source.type];
-    const rad = source.rotation * (Math.PI / 180);
-    
-    const actualSpoutOffset = { 
-        x: source.rotation < 0 ? -def.spoutOffset.x : def.spoutOffset.x, 
-        y: def.spoutOffset.y 
-    };
-
-    const startX = source.x + (actualSpoutOffset.x * Math.cos(rad) - actualSpoutOffset.y * Math.sin(rad));
-    const startY = source.y + (actualSpoutOffset.x * Math.sin(rad) + actualSpoutOffset.y * Math.cos(rad));
-    
-    const endX = startX + Math.sin(Date.now() / 150) * 3;
-    const endY = startY + 400;
-
-    return (
-        <svg className="absolute inset-0 pointer-events-none w-full h-full z-40 overflow-visible">
-            <defs>
-                <filter id="streamGlow">
-                    <feGaussianBlur stdDeviation="4" />
-                    <feComposite in="SourceGraphic" operator="over" />
-                </filter>
-            </defs>
-            <path 
-                d={`M ${startX} ${startY} Q ${startX} ${startY + 100}, ${endX} ${endY}`}
-                stroke={color}
-                strokeWidth="10"
-                fill="none"
-                strokeLinecap="round"
-                filter="url(#streamGlow)"
-                className="animate-stream-flow"
-                style={{ strokeDasharray: '16, 6', opacity: 0.8 }}
-            />
-        </svg>
-    );
-};
-
-const GlassRenderer: React.FC<{ container: LabContainer; isHeld: boolean }> = ({ container, isHeld }) => {
-    const { color } = blendChemicals(container.contents);
-    const fill = (container.currentVolume / container.capacity) * 100;
-    const def = GLASS_DEFS[container.type];
-
-    const renderGlassBody = () => {
-        const glassFill = "rgba(255, 255, 255, 0.05)";
-        const glassStroke = "rgba(255, 255, 255, 0.3)";
-        const reflectionGradient = "url(#glassReflection)";
-        
-        switch (container.type) {
-            case 'beaker':
-                return (
-                    <g>
-                        <rect x="-45" y="-55" width="90" height="110" rx="4" fill={glassFill} stroke={glassStroke} strokeWidth="2.5" />
-                        <rect x="-45" y={55 - (fill * 1.1)} width="90" height={fill * 1.1} rx="2" fill={color} className="transition-all duration-500" />
-                        {/* Scale marks */}
-                        {Array.from({length: 6}).map((_, i) => <line key={i} x1="25" y1={40 - i * 18} x2="40" y2={40 - i * 18} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />)}
-                        <rect x="-40" y="-50" width="80" height="100" fill={reflectionGradient} opacity="0.3" pointerEvents="none" />
-                    </g>
-                );
-            case 'conical_flask':
-                const path = "M -15 -65 L 15 -65 L 20 -40 L 52 65 L -52 65 L -20 -40 Z";
-                return (
-                    <g>
-                        <path d={path} fill={glassFill} stroke={glassStroke} strokeWidth="2.5" />
-                        <clipPath id={`fill-${container.id}`}><path d={path} /></clipPath>
-                        <rect x="-52" y={65 - (fill * 1.3)} width="104" height={fill * 1.3} fill={color} clipPath={`url(#fill-${container.id})`} className="transition-all duration-500" />
-                        <path d={path} fill={reflectionGradient} opacity="0.2" pointerEvents="none" />
-                    </g>
-                );
-            case 'test_tube':
-                return (
-                    <g>
-                        <path d="M -15 -60 L 15 -60 L 15 45 A 15 15 0 0 1 -15 45 Z" fill={glassFill} stroke={glassStroke} strokeWidth="2.5" />
-                        <clipPath id={`tube-${container.id}`}><path d="M -15 -60 L 15 -60 L 15 45 A 15 15 0 0 1 -15 45 Z" /></clipPath>
-                        <rect x="-15" y={60 - (fill * 1.2)} width="30" height={fill * 1.2} fill={color} clipPath={`url(#tube-${container.id})`} className="transition-all duration-500" />
-                        <rect x="-12" y="-55" width="24" height="100" fill={reflectionGradient} opacity="0.4" pointerEvents="none" />
-                    </g>
-                );
-            case 'reagent_bottle':
-                return (
-                    <g>
-                        <rect x="-35" y="-55" width="70" height="110" rx="14" fill="rgba(60, 40, 30, 0.85)" stroke="rgba(0,0,0,0.5)" strokeWidth="3" />
-                        <rect x="-35" y={55 - fill} width="70" height={fill} rx="4" fill={color} className="mix-blend-overlay" />
-                        <rect x="-20" y="-68" width="40" height="14" rx="3" fill="#111" />
-                        <rect x="-25" y="-12" width="50" height="42" rx="4" fill="#f8fafc" stroke="#e2e8f0" />
-                        <text x="0" y="8" textAnchor="middle" fontSize="6.5" fill="#334155" fontWeight="900" className="uppercase tracking-tighter font-mono" style={{ pointerEvents: 'none' }}>
-                             {container.label?.split(' ').slice(0, 2).join(' ') || container.name.split(' ')[0]}
-                        </text>
-                        <rect x="-30" y="-50" width="10" height="90" fill="white" opacity="0.1" rx="2" />
-                    </g>
-                );
-            case 'measuring_cylinder':
-                return (
-                    <g>
-                        <rect x="-20" y="-90" width="40" height="180" rx="6" fill={glassFill} stroke={glassStroke} strokeWidth="2.5" />
-                        <rect x="-20" y={90 - (fill * 1.8)} width="40" height={fill * 1.8} fill={color} className="transition-all duration-500" />
-                        {Array.from({length: 15}).map((_, i) => <line key={i} x1="-12" y1={80 - i * 12} x2="12" y2={80 - i * 12} stroke="rgba(255,255,255,0.2)" strokeWidth="1" />)}
-                    </g>
-                );
-            case 'burette':
-                return (
-                    <g>
-                        <rect x="-10" y="-175" width="20" height="350" rx="4" fill={glassFill} stroke={glassStroke} strokeWidth="2.5" />
-                        <rect x="-10" y={175 - (fill * 3.5)} width="20" height={fill * 3.5} fill={color} className="transition-all duration-500" />
-                        <circle cx="0" cy="140" r="12" fill="#1e293b" stroke="#475569" strokeWidth="2.5" />
-                        <rect x="-2" y="130" width="4" height="20" fill="#64748b" />
-                    </g>
-                );
-            case 'bunsen_burner':
-                return (
-                    <g>
-                        <rect x="-40" y="55" width="80" height="12" rx="4" fill="#0f172a" />
-                        <rect x="-10" y="-40" width="20" height="105" fill="#94a3b8" stroke="#475569" strokeWidth="2.5" />
-                        <circle cx="0" cy="55" r="16" fill="#1e293b" stroke="#334155" strokeWidth="2" />
-                        <rect x="-12" y="-42" width="24" height="6" fill="#334155" rx="1" />
-                    </g>
-                );
-            case 'retort_stand':
-                return (
-                    <g>
-                        <rect x="-75" y="190" width="150" height="12" rx="3" fill="#0f172a" />
-                        <rect x="-6" y="-200" width="12" height="400" rx="6" fill="#cbd5e1" stroke="#94a3b8" strokeWidth="1.5" />
-                        <rect x="-60" y="-80" width="120" height="6" rx="3" fill="#475569" stroke="#334155" strokeWidth="1.5" />
-                    </g>
-                );
-            default: return null;
-        }
-    };
-
-    return (
-        <div className={`relative transition-all duration-500 ${isHeld ? 'drop-shadow-[0_60px_80px_rgba(0,0,0,0.8)] scale-110' : 'drop-shadow-2xl'}`}>
-            <svg width={def.width} height={def.height} viewBox={`-${def.width/2} -${def.height/2} ${def.width} ${def.height}`} style={{ overflow: 'visible' }}>
-                <defs>
-                    <linearGradient id="glassReflection" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="white" stopOpacity="0.2" />
-                        <stop offset="10%" stopColor="white" stopOpacity="0.6" />
-                        <stop offset="25%" stopColor="white" stopOpacity="0.1" />
-                        <stop offset="90%" stopColor="white" stopOpacity="0.3" />
-                        <stop offset="100%" stopColor="white" stopOpacity="0" />
-                    </linearGradient>
-                </defs>
-                {renderGlassBody()}
-                <path d={`M -${def.width/2.8} -${def.height/2.8} Q -${def.width/3} 0 -${def.width/2.8} ${def.height/2.8}`} stroke="rgba(255,255,255,0.4)" strokeWidth="4" fill="none" opacity="0.6" strokeLinecap="round" pointerEvents="none" />
-            </svg>
+                <div className="p-4 bg-blue-500/10 rounded-2xl border border-blue-500/20">
+                    <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest mb-1">Safety Note</p>
+                    <p className="text-xs text-blue-200/60 leading-relaxed italic">"Always add acid to water, never water to acid. Monitor temperature during exothermic reactions."</p>
+                </div>
+            </aside>
         </div>
     );
 };

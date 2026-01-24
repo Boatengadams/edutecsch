@@ -7,7 +7,7 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  ({ children, className, fullHeight = true, ...props }, ref) => {
+  ({ children, className, fullHeight = false, ...props }, ref) => {
     return (
       <div 
         {...props} 
@@ -23,8 +23,7 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
           ${className}
         `}
       >
-        {/* Inner content wrapper */}
-        <div className={`relative p-5 sm:p-6 h-full flex flex-col z-10`}>
+        <div className={`relative p-4 sm:p-6 h-full flex flex-col z-10`}>
             {children}
         </div>
       </div>

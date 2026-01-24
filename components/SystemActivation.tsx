@@ -14,9 +14,7 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
     const [token, setToken] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const { userProfile } = useAuthentication();
-
-    const isTrialAvailable = !subscriptionStatus || !subscriptionStatus.trialEndsAt;
+    const { userProfile, schoolSettings } = useAuthentication();
 
     const activateWithToken = async (tokenToUse: string) => {
         if (!userProfile || userProfile.role !== 'admin') {
@@ -35,9 +33,6 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
             await db.runTransaction(async (transaction) => {
                 const tokenDoc = await transaction.get(tokenRef);
                 
-                // If document doesn't exist, either it's an invalid code 
-                // or it hasn't been seeded. The security rules will block 
-                // the write if the ID is not in the secret whitelist.
                 if (!tokenDoc.exists) {
                     throw new Error("Invalid Token: The provided registry key is not recognized by the security kernel.");
                 }
@@ -64,7 +59,6 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
                     newSubData.subscriptionEndsAt = Timestamp.fromDate(subEndDate);
                 }
                 
-                // Rules will only allow this update if tokenId is in the secret rules list
                 transaction.set(tokenRef, { 
                     isUsed: true, 
                     usedAt: Timestamp.fromDate(now), 
@@ -76,7 +70,7 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
             
             setError('');
             setToken('');
-            window.location.reload(); // Refresh to clear state
+            window.location.reload(); 
         } catch (err: any) {
             console.error(err);
             setError(err.message || 'Transmission Error: Activation protocol failed.');
@@ -100,10 +94,16 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
             
             <Card className="max-w-lg w-full !bg-slate-900/80 !backdrop-blur-xl border-white/5 shadow-2xl">
                 <div className="text-center mb-10">
-                    <div className="w-24 h-24 bg-blue-600/10 rounded-[2.5rem] flex items-center justify-center text-5xl mx-auto mb-6 border border-blue-500/20 shadow-[0_0_50px_rgba(59,130,246,0.1)]">
-                        🔐
+                    <div className="w-24 h-24 bg-white rounded-[2.5rem] flex items-center justify-center text-5xl mx-auto mb-6 border border-white/10 shadow-[0_0_50px_rgba(59,130,246,0.1)] overflow-hidden">
+                        {schoolSettings?.schoolLogoUrl ? (
+                            <img src={schoolSettings.schoolLogoUrl} alt="Logo" className="w-full h-full object-contain p-2" />
+                        ) : (
+                            <span>🔐</span>
+                        )}
                     </div>
-                    <h2 className="text-4xl font-black text-white uppercase tracking-tighter leading-none">System <span className="text-blue-500">Activation</span></h2>
+                    <h2 className="text-4xl font-black text-white uppercase tracking-tighter leading-none">
+                        {schoolSettings?.schoolName || 'System'} <span className="text-blue-500">Activation</span>
+                    </h2>
                     <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.4em] mt-3">Executive License Terminal</p>
                 </div>
 
@@ -138,7 +138,7 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
                 </div>
 
                 <div className="mt-12 pt-8 border-t border-white/5 flex flex-col items-center gap-4 grayscale opacity-30">
-                     <span className="text-[9px] font-black uppercase tracking-[0.5em] text-slate-50 text-slate-500">Official Edutec Secure License // {new Date().getFullYear()}</span>
+                     <span className="text-[9px] font-black uppercase tracking-[0.5em] text-slate-500">Official Edutec Secure License // {new Date().getFullYear()}</span>
                 </div>
             </Card>
         </div>

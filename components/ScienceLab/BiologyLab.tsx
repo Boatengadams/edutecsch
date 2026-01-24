@@ -1,220 +1,112 @@
+import React, { useState } from 'react';
+import Card from '../common/Card';
 
-import React, { useState, useRef } from 'react';
-import { LabLevel, UserProfile, LabEquipment } from '../../types';
-
-interface BiologyLabProps {
-    level: LabLevel;
-    userProfile: UserProfile;
-}
-
-const SLIDES: LabEquipment[] = [
-    { id: 'onion', name: 'Onion Epidermis', type: 'specimen', icon: '🧅', description: 'Plant cells structure' },
-    { id: 'blood', name: 'Human Blood Smear', type: 'specimen', icon: '🩸', description: 'RBCs, WBCs, Platelets' },
-    { id: 'amoeba', name: 'Amoeba Proteus', type: 'specimen', icon: '🦠', description: 'Unicellular organism' },
-    { id: 'cheek', name: 'Cheek Squamous', type: 'specimen', icon: '🧬', description: 'Animal epithelial cells' },
-    { id: 'hydra', name: 'Hydra Budding', type: 'specimen', icon: '🌿', description: 'Reproduction study' },
+const SPECIMENS = [
+    { id: 'cell', name: 'Plant Cell', img: 'https://images.unsplash.com/photo-1551033406-611cf9a28f67?auto=format&fit=crop&w=800&q=80', description: 'Onion epidermis showing cell walls.' },
+    { id: 'blood', name: 'Human Blood', img: 'https://images.unsplash.com/photo-1579152276503-68fe28dc47bf?auto=format&fit=crop&w=800&q=80', description: 'Erythrocytes and Leucocytes (400x).' },
+    { id: 'tissue', name: 'Muscle Tissue', img: 'https://images.unsplash.com/photo-1583911800223-960965e6402f?auto=format&fit=crop&w=800&q=80', description: 'Striated skeletal muscle fibers.' }
 ];
 
-const IMAGES: Record<string, string> = {
-    'onion': 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Onion_cells_2.jpg/1024px-Onion_cells_2.jpg',
-    'blood': 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/37/Erythrocyte_deoxy.jpg/1024px-Erythrocyte_deoxy.jpg',
-    'amoeba': 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/Amoeba_proteus.jpg/1024px-Amoeba_proteus.jpg',
-    'cheek': 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/Cheek_cells_stained.jpg/1024px-Cheek_cells_stained.jpg',
-    'hydra': 'https://upload.wikimedia.org/wikipedia/commons/6/67/Hydra_oligactis.jpg'
-};
+const BiologyLab: React.FC = () => {
+    const [selected, setSelected] = useState(SPECIMENS[0]);
+    const [magnification, setMagnification] = useState(10);
+    const [focus, setFocus] = useState(25); // 0 is perfect
+    const [posX, setPosX] = useState(50);
+    const [posY, setPosY] = useState(50);
 
-const BiologyLab: React.FC<BiologyLabProps> = ({ level }) => {
-    const [currentSlide, setCurrentSlide] = useState<LabEquipment | null>(null);
-    const [magnification, setMagnification] = useState<40 | 100 | 400 | 1000>(40);
-    const [focus, setFocus] = useState(50); // 0-100, 50 is perfect
-    const [brightness, setBrightness] = useState(100);
-    const [contrast, setContrast] = useState(100);
-    const [isSidebarOpen, setSidebarOpen] = useState(false);
-    
-    // Viewport State
-    const [position, setPosition] = useState({ x: 50, y: 50 }); // Percentage center
-    const [isDragging, setIsDragging] = useState(false);
-    const viewportRef = useRef<HTMLDivElement>(null);
-    const lastMousePos = useRef({ x: 0, y: 0 });
-
-    const handleSlideSelect = (slide: LabEquipment) => {
-        setCurrentSlide(slide);
-        setFocus(30); // Start slightly out of focus for realism
-        setMagnification(40); // Reset mag
-        setPosition({ x: 50, y: 50 }); // Center
-    };
-
-    const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
-        setIsDragging(true);
-        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-        lastMousePos.current = { x: clientX, y: clientY };
-    };
-
-    const handleMove = (e: React.MouseEvent | React.TouchEvent) => {
-        if (isDragging && viewportRef.current) {
-            const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-            const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-            
-            const dx = clientX - lastMousePos.current.x;
-            const dy = clientY - lastMousePos.current.y;
-            
-            const rect = viewportRef.current.getBoundingClientRect();
-            const deltaX = (dx / rect.width) * 100; 
-            const deltaY = (dy / rect.height) * 100;
-            
-            setPosition(prev => ({
-                x: Math.max(0, Math.min(100, prev.x - deltaX)),
-                y: Math.max(0, Math.min(100, prev.y - deltaY))
-            }));
-            
-            lastMousePos.current = { x: clientX, y: clientY };
-        }
-    };
-
-    const blurAmount = Math.abs(50 - focus) / 5; // CSS pixel blur
-    const zoomScale = magnification / 40; // Normalize scale for CSS
+    const blurAmount = Math.abs(focus) / 2;
 
     return (
-        <div className="h-full flex flex-col md:flex-row bg-slate-950 relative overflow-hidden touch-none" onClick={() => setSidebarOpen(false)}>
-            
-            {/* Main Viewport (Microscope View) */}
-            <div className="flex-grow relative bg-black flex flex-col items-center justify-center overflow-hidden">
-                {currentSlide ? (
+        <div className="h-full flex flex-col md:flex-row bg-[#050b1a] overflow-hidden">
+            {/* Specimen Browser */}
+            <aside className="w-full md:w-80 border-r border-white/5 bg-slate-900/50 p-6 flex flex-col gap-6 order-2 md:order-1">
+                <h3 className="text-xs font-black text-blue-500 uppercase tracking-widest">Specimen Library</h3>
+                <div className="space-y-3">
+                    {SPECIMENS.map(s => (
+                        <button 
+                            key={s.id} 
+                            onClick={() => setSelected(s)}
+                            className={`w-full p-4 rounded-2xl border transition-all flex items-center gap-4 ${selected.id === s.id ? 'bg-blue-600 border-blue-400' : 'bg-slate-800 border-white/5 hover:bg-slate-700'}`}
+                        >
+                            <div className="w-10 h-10 rounded-lg bg-black border border-white/10 overflow-hidden">
+                                <img src={s.img} className="w-full h-full object-cover" />
+                            </div>
+                            <span className="text-xs font-bold uppercase">{s.name}</span>
+                        </button>
+                    ))}
+                </div>
+                <Card className="mt-auto !bg-slate-950/50">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Microscope Log</p>
+                    <p className="text-xs text-slate-300 leading-relaxed italic">"{selected.description}"</p>
+                </Card>
+            </aside>
+
+            {/* Viewport */}
+            <main className="flex-grow flex flex-col items-center justify-center p-6 sm:p-20 order-1 md:order-2 relative">
+                <div className="relative w-full max-w-[600px] aspect-square rounded-full border-[15px] border-slate-900 shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden bg-black flex items-center justify-center">
+                    {/* Reticle Layer */}
+                    <div className="absolute inset-0 z-30 pointer-events-none opacity-20">
+                        <div className="absolute top-1/2 w-full h-px bg-white"></div>
+                        <div className="absolute left-1/2 h-full w-px bg-white"></div>
+                        <div className="absolute inset-0 rounded-full border border-white/10"></div>
+                    </div>
+
                     <div 
-                        ref={viewportRef}
-                        className="relative w-full h-full flex items-center justify-center cursor-move"
-                        onMouseDown={handleStart}
-                        onTouchStart={handleStart}
-                        onMouseUp={() => setIsDragging(false)}
-                        onTouchEnd={() => setIsDragging(false)}
-                        onMouseLeave={() => setIsDragging(false)}
-                        onMouseMove={handleMove}
-                        onTouchMove={handleMove}
-                    >
-                        {/* Circular Mask Container */}
-                        <div className="w-[80vmin] h-[80vmin] rounded-full overflow-hidden border-[20px] border-slate-900 shadow-2xl relative bg-white z-10 ring-1 ring-white/10">
-                            <div 
-                                className="absolute w-[200%] h-[200%] bg-cover transition-all duration-300 ease-out"
-                                style={{
-                                    backgroundImage: `url(${IMAGES[currentSlide.id]})`,
-                                    left: `${-position.x}%`,
-                                    top: `${-position.y}%`,
-                                    transform: `scale(${1 + zoomScale * 0.5})`, 
-                                    filter: `blur(${blurAmount}px) brightness(${brightness}%) contrast(${contrast}%) grayscale(${magnification === 1000 ? 1 : 0})`
-                                }}
-                            ></div>
-                            <div className="absolute inset-0 pointer-events-none opacity-30">
-                                <div className="absolute top-1/2 left-0 w-full h-px bg-black"></div>
-                                <div className="absolute left-1/2 top-0 h-full w-px bg-black"></div>
-                                <div className="absolute bottom-10 right-10 border-b-2 border-black w-24 text-right text-[10px] font-bold text-black pr-1">
-                                    {magnification === 40 ? '500µm' : magnification === 100 ? '200µm' : magnification === 400 ? '50µm' : '20µm'}
-                                </div>
-                            </div>
-                        </div>
-                        <div className="absolute bottom-8 text-slate-500 text-xs bg-black/50 px-3 py-1 rounded-full backdrop-blur-sm pointer-events-none">
-                            Swipe to move slide stage
-                        </div>
-                    </div>
-                ) : (
-                    <div className="text-center text-slate-600 animate-pulse">
-                        <div className="text-8xl mb-4 opacity-20">🔬</div>
-                        <p className="text-xl font-light">Place a slide on the stage to begin</p>
-                    </div>
-                )}
-            </div>
-
-            <button 
-                onClick={(e) => { e.stopPropagation(); setSidebarOpen(!isSidebarOpen); }} 
-                className="absolute top-4 right-4 z-50 p-3 bg-slate-800 rounded-full text-white shadow-lg border border-slate-600 hover:bg-slate-700 transition-colors"
-            >
-                {isSidebarOpen ? '✖️' : '🔬'}
-            </button>
-
-            <div 
-                className={`absolute top-0 right-0 h-full w-80 bg-[#0f172a] border-l border-slate-800 p-6 flex flex-col gap-6 shadow-2xl z-40 overflow-y-auto transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="pt-12">
-                    <h2 className="text-2xl font-bold text-white mb-1">BioScope Pro</h2>
-                    <p className="text-xs text-slate-400 font-mono">MODEL X-2025 // OPTICAL SYSTEM</p>
+                        className="w-[200%] h-[200%] transition-all duration-300 ease-out"
+                        style={{
+                            backgroundImage: `url(${selected.img})`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: `${posX}% ${posY}%`,
+                            filter: `blur(${blurAmount}px) contrast(1.1) saturate(1.2)`,
+                            transform: `scale(${magnification/5})`
+                        }}
+                    ></div>
                 </div>
 
-                <div className="bg-slate-900 rounded-xl p-4 border border-slate-800">
-                    <h3 className="text-xs font-bold text-slate-400 uppercase mb-3 tracking-wider">Slide Box</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                        {SLIDES.map(slide => (
-                            <button
-                                key={slide.id}
-                                onClick={() => handleSlideSelect(slide)}
-                                className={`p-2 rounded-lg text-left transition-all border flex items-center gap-3 ${currentSlide?.id === slide.id ? 'bg-green-600/20 border-green-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500'}`}
-                            >
-                                <span className="text-xl">{slide.icon}</span>
-                                <div className="min-w-0">
-                                    <p className="text-xs font-bold truncate">{slide.name}</p>
-                                </div>
-                            </button>
-                        ))}
-                    </div>
+                <div className="mt-10 flex gap-4 bg-slate-900/80 p-2 rounded-2xl border border-white/10 backdrop-blur-md">
+                    {[10, 40, 100].map(m => (
+                        <button 
+                            key={m} 
+                            onClick={() => setMagnification(m)}
+                            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${magnification === m ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
+                        >
+                            {m}x
+                        </button>
+                    ))}
                 </div>
+            </main>
 
+            {/* Stage Controls */}
+            <aside className="w-full md:w-80 border-l border-white/5 bg-slate-900/50 p-10 space-y-10 order-3">
                 <div className="space-y-6">
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Objective Lenses</label>
-                        <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800">
-                            {[40, 100, 400, 1000].map((mag) => (
-                                <button
-                                    key={mag}
-                                    onClick={() => setMagnification(mag as any)}
-                                    disabled={!currentSlide}
-                                    className={`flex-1 py-2 rounded-md text-xs font-bold transition-all ${magnification === mag ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
-                                >
-                                    {mag}x
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="bg-slate-900 rounded-xl p-4 border border-slate-800 space-y-4">
-                        <div>
-                            <div className="flex justify-between mb-1">
-                                <label className="text-xs font-bold text-slate-400">Coarse / Fine Focus</label>
-                                <span className={`text-xs font-mono ${Math.abs(50 - focus) < 5 ? 'text-green-400' : 'text-slate-600'}`}>
-                                    {Math.abs(50 - focus) < 2 ? 'LOCKED' : 'ADJUST'}
-                                </span>
-                            </div>
-                            <input 
-                                type="range" min="0" max="100" value={focus} 
-                                onChange={(e) => setFocus(Number(e.target.value))}
-                                className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-green-500"
-                                disabled={!currentSlide}
-                            />
-                        </div>
-
-                        <div>
-                            <label className="text-xs font-bold text-slate-400 mb-1 block">Illumination (Iris)</label>
-                            <input 
-                                type="range" min="50" max="150" value={brightness} 
-                                onChange={(e) => setBrightness(Number(e.target.value))}
-                                className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"
-                                disabled={!currentSlide}
-                            />
-                        </div>
+                    <h4 className="text-xs font-black text-blue-500 uppercase tracking-widest">Stage Alignment</h4>
+                    <div className="grid grid-cols-3 gap-2">
+                        <div />
+                        <button onClick={() => setPosY(Math.max(0, posY - 5))} className="p-3 bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors">🔼</button>
+                        <div />
+                        <button onClick={() => setPosX(Math.max(0, posX - 5))} className="p-3 bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors">◀️</button>
+                        <div className="flex items-center justify-center text-[10px] font-bold text-slate-600 uppercase">Stage</div>
+                        <button onClick={() => setPosX(Math.min(100, posX + 5))} className="p-3 bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors">▶️</button>
+                        <div />
+                        <button onClick={() => setPosY(Math.min(100, posY + 5))} className="p-3 bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors">🔽</button>
+                        <div />
                     </div>
                 </div>
 
-                {currentSlide && Math.abs(50 - focus) < 10 && (
-                    <div className="mt-auto bg-blue-900/20 border border-blue-500/30 p-4 rounded-xl animate-fade-in-up">
-                        <h4 className="text-blue-400 text-sm font-bold mb-1 flex items-center gap-2">
-                            <span>🧠</span> AI Analysis
-                        </h4>
-                        <p className="text-xs text-blue-200 leading-relaxed">
-                            Specimen detected: <strong>{currentSlide.name}</strong>.<br/>
-                            {currentSlide.description}. Structure visible clearly at {magnification}x magnification.
-                        </p>
+                <div className="space-y-4">
+                    <h4 className="text-xs font-black text-blue-500 uppercase tracking-widest">Fine Focus Knob</h4>
+                    <input 
+                        type="range" min="-50" max="50" value={focus} 
+                        onChange={e => setFocus(Number(e.target.value))} 
+                        className="w-full h-1.5 bg-slate-800 rounded-full appearance-none cursor-pointer accent-blue-500" 
+                    />
+                    <div className="flex justify-between text-[8px] font-black text-slate-500 uppercase">
+                        <span>Coarse</span>
+                        <span className={blurAmount < 1 ? 'text-emerald-400 animate-pulse' : ''}>{blurAmount < 1 ? 'OPTIMAL FOCUS' : 'Adjust'}</span>
+                        <span>Near</span>
                     </div>
-                )}
-            </div>
+                </div>
+            </aside>
         </div>
     );
 };

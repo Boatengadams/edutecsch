@@ -23,6 +23,7 @@ import { usePresence } from './hooks/usePresence';
 import { ToastProvider } from './components/common/Toast';
 
 const OMNI_USER_EMAILS = ["bagsgraphics4g@gmail.com", "boatengadams4g@gmail.com"];
+const DEFAULT_LOGO = "https://cdn-icons-png.flaticon.com/512/5968/5968213.png";
 
 const AuthenticationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<firebase.User | null>(null);
@@ -34,7 +35,6 @@ const AuthenticationProvider: React.FC<{ children: ReactNode }> = ({ children })
   usePresence(userProfile);
 
   useEffect(() => {
-    // School settings are public in rules, but we catch errors just in case
     const settingsDocRef = db.collection('schoolConfig').doc('settings');
     const unsubscribeSettings = settingsDocRef.onSnapshot(docSnap => {
         if (docSnap.exists) setSchoolSettings(docSnap.data() as SchoolSettings);
@@ -64,7 +64,6 @@ const AuthenticationProvider: React.FC<{ children: ReactNode }> = ({ children })
             setLoading(false);
           },
           err => {
-            if (err.code !== 'permission-denied') console.warn("Profile stream error:", err.message);
             setUserProfile(null);
             setLoading(false);
           });
@@ -120,15 +119,11 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
 
     const isOmniUser = OMNI_USER_EMAILS.includes(user?.email || "");
 
-    if (window.location.pathname === '/payment-success') {
-        return <PaymentSuccessPage />;
-    }
-
-    if (loading) return <div className="min-h-screen flex flex-col justify-center items-center bg-slate-950 dark:bg-slate-950 light:bg-slate-50"><Spinner /></div>;
+    if (window.location.pathname === '/payment-success') return <PaymentSuccessPage />;
+    if (loading) return <div className="min-h-screen flex flex-col justify-center items-center bg-slate-950"><Spinner /></div>;
     if (!user) return <AuthForm />;
     if (!userProfile) return <RoleSelector />;
 
-    // --- SECURITY GUARDS ---
     if (!isOmniUser) {
         if (!subscriptionStatus?.isActive) {
             if (userProfile?.role === 'admin') return <SystemActivation subscriptionStatus={subscriptionStatus} />;
@@ -143,38 +138,30 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
     const verifiedRole = (activeRoleOverride && isOmniUser) ? activeRoleOverride : userProfile.role;
 
     return (
-        <div className="h-[100dvh] flex flex-col font-sans text-slate-200 dark:text-slate-200 light:text-slate-900 bg-slate-50 dark:bg-slate-950 light:bg-slate-50 transition-colors duration-500 overflow-hidden w-full max-w-full">
+        <div className="h-[100dvh] flex flex-col font-sans text-slate-200 dark:text-slate-200 light:text-slate-900 bg-slate-50 dark:bg-slate-950 transition-colors duration-500 overflow-hidden w-full max-w-full">
             <CursorFollower />
-            <header className="sticky top-0 z-20 flex items-center justify-between p-3 md:p-4 bg-white/90 dark:bg-slate-900/90 light:bg-white/80 backdrop-blur-xl border-b border-slate-200 dark:border-white/5 light:border-black/5 h-auto md:h-[70px] flex-shrink-0 no-print w-full transition-all">
+            <header className="sticky top-0 z-20 flex items-center justify-between p-3 md:p-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200 dark:border-white/5 h-auto md:h-[70px] flex-shrink-0 no-print w-full transition-all">
                 <div className="flex items-center gap-2 md:gap-4 overflow-hidden">
-                    <button onClick={() => setIsSidebarExpanded(!isSidebarExpanded)} className="p-2 rounded-lg text-slate-400 dark:text-slate-400 light:text-slate-500 hover:text-slate-900 dark:hover:text-white light:hover:bg-slate-100 transition-all">
+                    <button onClick={() => setIsSidebarExpanded(!isSidebarExpanded)} className="p-2 rounded-lg text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all">
                         <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
                     </button>
                     
                     <div className="flex items-center gap-3 md:gap-4 overflow-hidden">
-                        <div className="w-8 h-8 md:w-10 md:h-10 bg-slate-100 dark:bg-white light:bg-white rounded-lg flex items-center justify-center shadow-lg light:shadow-md flex-shrink-0 overflow-hidden border border-slate-200 dark:border-white/10 light:border-black/5">
-                            {schoolSettings?.schoolLogoUrl ? (
-                                <img src={schoolSettings.schoolLogoUrl} alt="Logo" className="w-full h-full object-contain" />
-                            ) : (
-                                <span className="text-blue-600 font-black text-sm md:text-lg">{(schoolSettings?.schoolName || 'E').charAt(0)}</span>
-                            )}
+                        <div className="w-8 h-8 md:w-12 md:h-12 bg-white rounded-xl flex items-center justify-center shadow-lg flex-shrink-0 overflow-hidden border border-slate-200 dark:border-white/10 p-2">
+                            <img 
+                                src={schoolSettings?.schoolLogoUrl || DEFAULT_LOGO} 
+                                alt="Logo" 
+                                className="w-full h-full object-contain" 
+                            />
                         </div>
-                        <h1 className="text-xs md:text-base font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 light:from-blue-700 light:to-indigo-700 uppercase tracking-[0.1em] md:tracking-[0.2em] truncate">
-                            {schoolSettings?.schoolName || 'EDUTEC'}
+                        <h1 className="text-xs md:text-base font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 uppercase tracking-[0.1em] md:tracking-[0.2em] truncate">
+                            {schoolSettings?.schoolName || 'EDUTEC SCHOOLS'}
                         </h1>
                     </div>
                 </div>
                 <div className="flex items-center gap-1 md:gap-2">
-                    <button 
-                        onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                        className="p-2 rounded-full text-slate-500 dark:text-slate-400 light:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 light:hover:bg-slate-100 transition-colors"
-                        title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-                    >
-                        {theme === 'dark' ? (
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>
-                        ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" /></svg>
-                        )}
+                    <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                        {theme === 'dark' ? '☀️' : '🌙'}
                     </button>
                     {isOmniUser && (
                         <button onClick={() => {
@@ -183,7 +170,7 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
                         }} className="hidden sm:block px-3 py-1.5 rounded-lg bg-purple-600/10 border border-purple-500/30 text-[10px] font-black uppercase text-purple-400">Role: {verifiedRole}</button>
                     )}
                     <NotificationsBell />
-                    <Button size="sm" variant="ghost" onClick={() => firebaseAuth.signOut()} className="text-red-600 dark:text-red-400 light:text-red-500 px-2 py-1 md:px-3 md:py-1.5 text-xs hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors">Sign Out</Button>
+                    <Button size="sm" variant="ghost" onClick={() => firebaseAuth.signOut()} className="text-red-600 dark:text-red-400 px-2 py-1 md:px-3 md:py-1.5 text-xs hover:bg-red-900/10 transition-colors">Sign Out</Button>
                 </div>
             </header>
             <div className="flex-1 flex overflow-hidden relative z-10 w-full max-w-full">
@@ -200,14 +187,10 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
 export const App: React.FC = () => {
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(window.innerWidth >= 1024);
     
-    // Auto-collapse sidebar on resize for smaller screens
     useEffect(() => {
         const handleResize = () => {
-            if (window.innerWidth < 1024) {
-                setIsSidebarExpanded(false);
-            } else {
-                setIsSidebarExpanded(true);
-            }
+            if (window.innerWidth < 1024) setIsSidebarExpanded(false);
+            else setIsSidebarExpanded(true);
         };
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);

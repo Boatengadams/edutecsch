@@ -19,71 +19,77 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return request.auth.token.email in [
-        'bagsgraphics4g@gmail.com',
-        'boatengadams4g@gmail.com'
-      ];
+      return request.auth != null &&
+        request.auth.token.email in [
+          'bagsgraphics4g@gmail.com',
+          'boatengadams4g@gmail.com'
+        ];
     }
 
-    function isAdmin() {
+    function isCallerAdmin() {
       return isSuperAdmin() ||
         (userExists(request.auth.uid) &&
-         userDoc(request.auth.uid).data.role == 'admin');
+         (
+           userDoc(request.auth.uid).data.role == 'admin' ||
+           userDoc(request.auth.uid).data.isAlsoAdmin == true
+         ));
     }
 
-    function isApproved() {
+    function isCallerApproved() {
       return isSignedIn() &&
-        (isSuperAdmin() ||
-         (userExists(request.auth.uid) &&
-          userDoc(request.auth.uid).data.status == 'approved'));
+        (
+          isSuperAdmin() ||
+          (
+            userExists(request.auth.uid) &&
+            (
+              userDoc(request.auth.uid).data.status == 'approved' ||
+              userDoc(request.auth.uid).data.role == 'admin'
+            )
+          )
+        );
     }
 
     /* ==============================
-       ACTIVATION VAULT
+       SAFE UPDATE GUARDS
     ============================== */
 
-    // Whitelist of valid tokens embedded in the security kernel
+    function isSafeUserUpdate() {
+      let incoming = request.resource.data;
+      let existing = resource.data;
+      return incoming.role == existing.role
+        && incoming.status == existing.status
+        && incoming.adminType == existing.adminType
+        && incoming.isAlsoAdmin == existing.isAlsoAdmin
+        && incoming.isAlsoTeacher == existing.isAlsoTeacher;
+    }
+
+    /* ==============================
+       ACTIVATION TOKENS
+    ============================== */
+
     function isValidToken(tokenId) {
       return tokenId in [
-        // TRIAL PROTOCOLS (7 Days)
-        'EDUTEC-TRIAL-8822-XP', 
-        'EDUTEC-TRIAL-4491-ZT', 
-        'EDUTEC-TRIAL-1103-QA',
-        
-        // TERMLY PROTOCOLS (4 Months)
-        'EDUTEC-TERM-X992-LK', 
-        'EDUTEC-TERM-Z112-MW', 
-        'EDUTEC-TERM-K443-PS',
-        'EDUTEC-TERM-P009-RV', 
-        'EDUTEC-TERM-Q887-NB', 
-        'EDUTEC-TERM-W332-XC',
-        'EDUTEC-TERM-L771-BH', 
-        'EDUTEC-TERM-R554-MJ', 
-        'EDUTEC-TERM-T221-OP',
-        
-        // MONTHLY PROTOCOLS (1 Month)
-        'EDUTEC-MONT-M123-SV', 
-        'EDUTEC-MONT-M456-RX',
-        
-        // YEARLY PROTOCOLS (1 Year)
-        'EDUTEC-YEAR-ULT-Z99', 
-        'EDUTEC-YEAR-ULT-W88', 
-        'EDUTEC-YEAR-ULT-P77'
+        'EDUTEC-SECURE-8822-XP', 'EDUTEC-ACTIVE-4491-ZT', 'EDUTEC-PRIME-1103-QA',
+        'EDUTEC-SYSTEM-9901-LK', 'EDUTEC-MATRIX-2234-MW', 'EDUTEC-KERNEL-5567-PS',
+        'EDUTEC-VAULT-X992-LK', 'EDUTEC-BLOCK-Z112-MW', 'EDUTEC-NODAL-K443-PS',
+        'EDUTEC-CYPHER-P009-RV', 'EDUTEC-ACCESS-Q887-NB', 'EDUTEC-SIGNAL-W332-XC',
+        'EDUTEC-HYPER-L771-BH', 'EDUTEC-DELTA-R554-MJ', 'EDUTEC-SIGMA-T221-OP',
+        'EDUTEC-OMEGA-A110-PQ', 'EDUTEC-ALPHA-B221-RS', 'EDUTEC-THETA-C332-TU',
+        'EDUTEC-KAPPA-M123-SV', 'EDUTEC-ZETA-M456-RX', 'EDUTEC-EP-990-PL',
+        'EDUTEC-UNIV-ULT-Z99', 'EDUTEC-GLOBAL-ULT-W88', 'EDUTEC-ELITE-ULT-P77',
+        'EDUTEC-CORE-ULT-H11', 'EDUTEC-MAX-ULT-Y22', 'EDUTEC-PRO-ULT-X33'
       ];
     }
 
     match /activationTokens/{tokenId} {
-      // Allow any signed-in user to check if a token they typed is valid/used
-      allow get: if isSignedIn();
-      
-      // Prevent unauthorized creation/seeding of tokens
-      // Only SuperAdmins can register new potential keys in the DB if needed
+      allow get: if isSignedIn() && isValidToken(tokenId);
+
       allow create: if isSuperAdmin() && isValidToken(tokenId);
-      
-      // Activation Transaction Logic
-      allow update: if isAdmin() 
+
+      allow update: if isCallerAdmin()
         && isValidToken(tokenId)
         && resource.data.isUsed == false
+        && resource.data.isActive == true
         && request.resource.data.isUsed == true
         && request.resource.data.usedBy == request.auth.uid;
     }
@@ -94,36 +100,42 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if isSignedIn() &&
-        (request.auth.uid == userId || isAdmin());
+        (request.auth.uid == userId || isCallerApproved());
 
-      allow list: if isAdmin();
+      allow list: if isCallerApproved();
 
-      allow create: if isSignedIn()
-        && request.auth.uid == userId
-        && request.resource.data.role in ['student', 'teacher', 'parent']
-        && request.resource.data.status == 'pending';
+      allow create: if
+        (
+          isSignedIn()
+          && request.auth.uid == userId
+          && request.resource.data.role in ['student','teacher','parent']
+          && request.resource.data.status == 'pending'
+          && !('isAlsoAdmin' in request.resource.data)
+        );
 
-      allow update: if isAdmin()
-        || (isSignedIn()
-            && request.auth.uid == userId
-            && request.resource.data.role == resource.data.role
-            && request.resource.data.status == resource.data.status);
+      allow update: if
+        isCallerAdmin()
+        || (
+          isSignedIn()
+          && request.auth.uid == userId
+          && isSafeUserUpdate()
+        );
 
-      allow delete: if isAdmin();
+      allow delete: if isCallerAdmin();
     }
 
     /* ==============================
-       USER ACTIVITY LOGS (WRITE-ONCE)
+       USER ACTIVITY LOGS
     ============================== */
 
     match /userActivity/{logId} {
       allow create: if isSignedIn()
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.action is string
-        && request.resource.data.action.size() <= 100;
+        && request.resource.data.userId == request.auth.uid;
 
-      allow read, list: if isAdmin();
-      allow update, delete: if false;
+      allow read, list: if isCallerAdmin()
+        || (isCallerApproved() && userDoc(request.auth.uid).data.role == 'teacher');
+
+      allow update, delete: if isCallerAdmin();
     }
 
     /* ==============================
@@ -132,29 +144,28 @@ service cloud.firestore {
 
     match /schoolConfig/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isCallerAdmin();
     }
 
     /* ==============================
-       CONVERSATIONS
+       CONVERSATIONS + MESSAGES
     ============================== */
 
     match /conversations/{conversationId} {
-      allow create: if isApproved();
+      function isParticipant() {
+        return request.auth.uid in resource.data.participantUids;
+      }
 
-      allow read, update: if isApproved()
-        && request.auth.uid in resource.data.participantUids;
+      allow get, update: if isCallerApproved() && isParticipant();
+      allow list: if isCallerApproved() && isParticipant();
+
+      allow create: if isCallerApproved()
+        && request.auth.uid in request.resource.data.participantUids;
 
       match /messages/{messageId} {
-        allow read: if isApproved()
-          && request.auth.uid in
-            get(/databases/$(database)/documents/conversations/$(conversationId))
-              .data.participantUids;
-
-        allow create: if isApproved()
-          && request.resource.data.senderId == request.auth.uid
-          && request.resource.data.text is string
-          && request.resource.data.text.size() <= 2000;
+        allow read, list: if isCallerApproved() && isParticipant();
+        allow create: if isCallerApproved()
+          && request.resource.data.senderId == request.auth.uid;
       }
     }
 
@@ -163,15 +174,17 @@ service cloud.firestore {
     ============================== */
 
     match /assignments/{assignmentId} {
-      allow read: if isApproved();
+      allow read: if isCallerApproved();
 
-      allow create: if isApproved()
+      allow create: if isCallerApproved()
         && userDoc(request.auth.uid).data.role == 'teacher'
         && request.resource.data.teacherId == request.auth.uid;
 
-      allow update, delete: if isAdmin()
-        || (userDoc(request.auth.uid).data.role == 'teacher'
-            && resource.data.teacherId == request.auth.uid);
+      allow update, delete: if isCallerAdmin()
+        || (
+          userDoc(request.auth.uid).data.role == 'teacher'
+          && resource.data.teacherId == request.auth.uid
+        );
     }
 
     /* ==============================
@@ -179,41 +192,41 @@ service cloud.firestore {
     ============================== */
 
     match /submissions/{submissionId} {
-      allow create: if isApproved()
+      allow create: if isCallerApproved()
         && userDoc(request.auth.uid).data.role == 'student'
         && request.resource.data.studentId == request.auth.uid;
 
-      allow read: if isAdmin()
+      allow read: if isCallerAdmin()
         || request.auth.uid == resource.data.studentId
         || request.auth.uid == resource.data.teacherId;
 
-      allow update: if isAdmin()
-        || (userDoc(request.auth.uid).data.role == 'teacher'
-            && request.auth.uid == resource.data.teacherId);
+      allow update: if isCallerAdmin()
+        || (
+          userDoc(request.auth.uid).data.role == 'teacher'
+          && request.auth.uid == resource.data.teacherId
+        );
 
-      allow delete: if isAdmin();
+      allow delete: if isCallerAdmin();
     }
 
     /* ==============================
-       GENERATED / AI CONTENT
+       GENERATED CONTENT
     ============================== */
 
     match /generatedContent/{contentId} {
-      allow read: if isApproved();
+      allow read: if isCallerApproved();
 
-      allow create: if isApproved()
-        && userDoc(request.auth.uid).data.role == 'teacher'
-        && request.resource.data.prompt is string
-        && request.resource.data.prompt.size() <= 4000;
+      allow create: if isCallerApproved()
+        && userDoc(request.auth.uid).data.role == 'teacher';
 
-      allow update, delete: if isAdmin();
+      allow update, delete: if isCallerAdmin();
     }
 
     /* ==============================
        DEFAULT DENY
     ============================== */
 
-    match /{document=**} {
+    match /{path=**} {
       allow read, write: if false;
     }
   }
