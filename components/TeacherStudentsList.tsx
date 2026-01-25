@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { UserProfile, Assignment, Submission, GES_CLASSES } from '../types';
+import { UserProfile, Assignment, Submission, GES_CLASSES, UserRole } from '../types';
 import Card from './common/Card';
 import TeacherStudentCard from './TeacherStudentCard';
 import StudentProfile from './StudentProfile';
@@ -7,6 +7,8 @@ import Button from './common/Button';
 import TeacherCreateStudentForm from './TeacherCreateStudentForm';
 import TeacherCreateParentForm from './TeacherCreateParentForm';
 import { InstitutionIcon } from './common/PremiumIcons';
+import SnapToRegister from './SnapToRegister';
+import { useAuthentication } from '../hooks/useAuth';
 
 interface TeacherStudentsListProps {
     students: UserProfile[];
@@ -15,9 +17,13 @@ interface TeacherStudentsListProps {
 }
 
 const TeacherStudentsList: React.FC<TeacherStudentsListProps> = ({ students, assignments, submissions }) => {
+    const { userProfile } = useAuthentication();
     const [selectedStudent, setSelectedStudent] = useState<UserProfile | null>(null);
     const [showCreateModal, setShowCreateModal] = useState<'student' | 'parent' | null>(null);
+    const [showSnapModal, setShowSnapModal] = useState<UserRole | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+
+    const isOmni = useMemo(() => ["bagsgraphics4g@gmail.com", "boatengadams4g@gmail.com"].includes(userProfile?.email || ""), [userProfile]);
 
     // Filter students by search term first
     const filteredStudents = useMemo(() => {
@@ -55,6 +61,8 @@ const TeacherStudentsList: React.FC<TeacherStudentsListProps> = ({ students, ass
         });
     }, [groupedStudents]);
 
+    const canRegisterInAnyClass = isOmni || !!userProfile?.classTeacherOf;
+
     if (selectedStudent) {
         return (
             <div className="animate-fade-in-up">
@@ -75,7 +83,7 @@ const TeacherStudentsList: React.FC<TeacherStudentsListProps> = ({ students, ass
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div>
                     <h2 className="text-4xl font-black text-white tracking-tighter">Student <span className="text-blue-500">Registry</span></h2>
-                    <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.3em] mt-1">Official Enrollment Records</p>
+                    <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.3em] mt-1">Authorized Learner Records</p>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
@@ -88,10 +96,14 @@ const TeacherStudentsList: React.FC<TeacherStudentsListProps> = ({ students, ass
                             className="w-full sm:w-64 bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-blue-500 transition-all placeholder-slate-600"
                         />
                     </div>
-                    <div className="flex gap-2">
-                        <Button variant="secondary" onClick={() => setShowCreateModal('parent')} className="flex-1 sm:flex-none text-[10px] font-black uppercase tracking-widest">+ Add Parent</Button>
-                        <Button onClick={() => setShowCreateModal('student')} className="flex-1 sm:flex-none text-[10px] font-black uppercase tracking-widest">+ Add Student</Button>
-                    </div>
+                    
+                    {canRegisterInAnyClass && (
+                        <div className="flex gap-2">
+                            <Button variant="secondary" onClick={() => setShowSnapModal('student')} className="flex-1 sm:flex-none text-[10px] font-black uppercase tracking-widest border border-blue-500/20 !text-blue-400">📸 Snap List</Button>
+                            <Button variant="secondary" onClick={() => setShowCreateModal('parent')} className="flex-1 sm:flex-none text-[10px] font-black uppercase tracking-widest">+ Parent</Button>
+                            <Button onClick={() => setShowCreateModal('student')} className="flex-1 sm:flex-none text-[10px] font-black uppercase tracking-widest">+ Student</Button>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -138,18 +150,31 @@ const TeacherStudentsList: React.FC<TeacherStudentsListProps> = ({ students, ass
                 <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex justify-center items-center p-4 z-[100] animate-fade-in">
                     <Card className="w-full max-w-md shadow-3xl !p-0 overflow-hidden border-white/10">
                         <div className="p-6 border-b border-white/5 flex justify-between items-center bg-slate-900/50">
-                            <h3 className="text-lg font-black text-white uppercase tracking-widest">New {showCreateModal === 'student' ? 'Student' : 'Parent'} Account</h3>
+                            <h3 className="text-lg font-black text-white uppercase tracking-widest">
+                                Protocol: {showCreateModal === 'student' ? 'Student' : 'Parent'} Enrollment
+                            </h3>
                             <button onClick={() => setShowCreateModal(null)} className="text-slate-500 hover:text-white p-2">✕</button>
                         </div>
                         <div className="p-8">
+                            <div className="mb-6 p-4 bg-blue-600/10 border border-blue-500/20 rounded-xl text-[10px] text-blue-300 font-bold uppercase tracking-widest leading-relaxed">
+                                Restriction: You are authorized to register users only for your designated class: <span className="text-white font-black">{userProfile?.classTeacherOf || 'UNAUTHORIZED'}</span>
+                            </div>
                             {showCreateModal === 'student' ? (
-                                <TeacherCreateStudentForm classId={sortedClassNames[0] || students[0]?.class || ''} />
+                                <TeacherCreateStudentForm classId={userProfile?.classTeacherOf || ''} />
                             ) : (
-                                <TeacherCreateParentForm allStudents={students} setToast={() => {}} />
+                                <TeacherCreateParentForm allStudents={students.filter(s => s.class === userProfile?.classTeacherOf)} setToast={() => {}} />
                             )}
                         </div>
                     </Card>
                 </div>
+            )}
+
+            {showSnapModal && (
+                <SnapToRegister 
+                    onClose={() => setShowSnapModal(null)} 
+                    roleToRegister={showSnapModal} 
+                    classId={userProfile?.classTeacherOf}
+                />
             )}
         </div>
     );

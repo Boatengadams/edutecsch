@@ -49,7 +49,7 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
     // Data states
     const [assignments, setAssignments] = useState<Assignment[]>([]);
     const [submissions, setSubmissions] = useState<Submission[]>([]);
-    const [students, setStudents] = useState<UserProfile[]>([]);
+    const [allStudents, setAllStudents] = useState<UserProfile[]>([]);
     const [activeLiveLesson, setActiveLiveLesson] = useState<LiveLesson | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -59,31 +59,11 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
         return Array.from(new Set([...(userProfile.classesTaught || []), ...(userProfile.classTeacherOf ? [userProfile.classTeacherOf] : [])])).sort();
     }, [userProfile, isOmni]);
 
-    useEffect(() => {
-        const storageKey = `onboarding_teacher_${activeTab}`;
-        if (!localStorage.getItem(storageKey)) {
-            const steps: Record<string, string[]> = {
-                dashboard: ["🚀 Command Hub: Your executive operations center.", "📊 Statistics Cards: Monitor 'Active Students' in your jurisdiction.", "⚡ Launch Test Class: Instantly initialize a secure demo session."],
-                my_students: ["👨‍🎓 Student Registry: Centralized learner database.", "🔍 View Profile: Access deep-dive analytics for any student."],
-                assignments: ["📝 Academic Tasks: Manage the lifecycle of all homework.", "➕ Create Assignment: Deploy new tasks using the manual builder or AI Assistant."],
-                live_lesson: ["📡 Live Class: High-fidelity immersive teaching environment.", "🖥️ The Board: Your primary presentation stage."],
-                attendance: ["📅 Attendance: Official daily roll call terminal.", "📍 Selector: Toggle between classes and historical dates."],
-                library: ["📚 Resource Library: Your teaching asset vault.", "📄 Slide Decks: Manage and launch pre-generated AI presentations."],
-                ai_tools: ["🤖 AI Copilot: Neural teaching assistants powered by Gemini."],
-                progress: ["📈 Intelligence: Longitudinal academic analytics and mastery tracking."],
-                terminal_reports: ["📊 Master Reports: The official academic grading terminal."],
-                messages: ["💬 Messages: Secure internal school transmission matrix."]
-            };
-            const currentSteps = steps[activeTab];
-            if (currentSteps) {
-                for (let i = 0; i < currentSteps.length; i++) {
-                    const proceed = confirm(`[SYSTEM INTEL - ${activeTab.toUpperCase()}]\n\nTip ${i + 1}/${currentSteps.length}:\n${currentSteps[i]}\n\n(OK for next, Cancel to Skip)`);
-                    if (!proceed) break;
-                }
-                localStorage.setItem(storageKey, 'true');
-            }
-        }
-    }, [activeTab]);
+    // ENFORCED SCOPE: Filter students only to those in teacher's assigned classes
+    const scopedStudents = useMemo(() => {
+        if (isOmni) return allStudents;
+        return allStudents.filter(s => s.class && teacherClasses.includes(s.class));
+    }, [allStudents, teacherClasses, isOmni]);
 
     useEffect(() => {
         if (!user || !userProfile || (userProfile.status !== 'approved' && !isOmni)) { 
@@ -93,19 +73,22 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
         const unsubscribers: (() => void)[] = [];
         unsubscribers.push(db.collection('assignments').where('teacherId', '==', user.uid).onSnapshot(snap => setAssignments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Assignment))), err => console.warn("Assignments listener error:", err.message)));
         unsubscribers.push(db.collection('submissions').where('teacherId', '==', user.uid).onSnapshot(snap => setSubmissions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Submission))), err => console.warn("Submissions listener error:", err.message)));
-        const studentsQuery = isOmni ? db.collection('users').where('role', '==', 'student') : (teacherClasses.length > 0 ? db.collection('users').where('class', 'in', teacherClasses).where('role', '==', 'student') : null);
-        if (studentsQuery) unsubscribers.push(studentsQuery.onSnapshot(snap => setStudents(snap.docs.map(doc => doc.data() as UserProfile)), err => console.warn("Students listener error:", err.message)));
+        
+        // Fetch all students but we filter them in memory to maintain reactive consistency
+        const studentsQuery = db.collection('users').where('role', '==', 'student');
+        unsubscribers.push(studentsQuery.onSnapshot(snap => setAllStudents(snap.docs.map(doc => doc.data() as UserProfile)), err => console.warn("Students listener error:", err.message)));
+        
         unsubscribers.push(db.collection('liveLessons').where('teacherId', '==', user.uid).where('status', '==', 'active').onSnapshot(snap => setActiveLiveLesson(snap.empty ? null : {id: snap.docs[0].id, ...snap.docs[0].data()} as LiveLesson), err => console.warn("LiveLessons listener error:", err.message)));
         setLoading(false);
         return () => unsubscribers.forEach(unsub => unsub());
-    }, [user, userProfile, teacherClasses, isOmni]);
+    }, [user, userProfile, isOmni]);
 
     const launchTestLesson = async () => {
         if (!user || !userProfile) return;
         try {
             const lessonRef = db.collection('liveLessons').doc();
             const demoPlan = [{ title: "Welcome to Edutec Live Classroom", boardContent: "<h1>System Check: Active</h1>", teacherScript: "Hello class!", question: null }];
-            await lessonRef.set({ id: lessonRef.id, teacherId: user.uid, teacherName: userProfile.name, classId: userProfile.class || teacherClasses[0] || 'JHS 3', topic: 'Demo Live Session', status: 'active', createdAt: firebase.firestore.FieldValue.serverTimestamp(), currentStepIndex: 0, lessonPlan: demoPlan, currentBoardContent: demoPlan[0].boardContent, raisedHands: [] });
+            await lessonRef.set({ id: lessonRef.id, teacherId: user.uid, teacherName: userProfile.name, classId: userProfile.classTeacherOf || teacherClasses[0] || 'JHS 3', topic: 'Demo Live Session', status: 'active', createdAt: firebase.firestore.FieldValue.serverTimestamp(), currentStepIndex: 0, lessonPlan: demoPlan, currentBoardContent: demoPlan[0].boardContent, raisedHands: [] });
             setToast({ message: "Test Classroom Launched!", type: 'success' });
             setActiveTab('live_lesson');
         } catch (e: any) { setToast({ message: `Launch failed: ${e.message}`, type: 'error' }); }
@@ -148,20 +131,20 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
         if (userProfile?.status === 'pending' && !isOmni) return <div className="p-20 text-center animate-fade-in"><div className="text-6xl mb-6">📝</div><h2 className="text-2xl font-bold text-white mb-2">Staff Profile Verification</h2></div>;
         const teacherName = (userProfile?.name || 'Architect').toUpperCase();
         switch (activeTab) {
-            case 'dashboard': return <div className="space-y-8 animate-fade-in-up"><div className="flex justify-between items-end"><div><h1 className="text-4xl font-black text-white dark:text-white tracking-tight">Executive <span className="text-blue-500">Teacher</span></h1><p className="text-slate-400 mt-1 uppercase text-[10px] font-black tracking-widest">Logged: {teacherName}</p></div>{!activeLiveLesson && <Button onClick={launchTestLesson} className="shadow-lg shadow-blue-500/20 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl px-6 py-3 font-black text-xs uppercase tracking-widest">🚀 Launch Test Class</Button>}</div><div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-slate-200 dark:text-slate-200"><Card className="!bg-blue-900/10 border-blue-500/20 text-center"><p className="text-xs font-bold text-blue-400 uppercase">Active Students</p><p className="text-3xl font-black text-white">{students.length}</p></Card><Card className="!bg-purple-900/10 border-purple-500/20 text-center"><p className="text-xs font-bold text-purple-400 uppercase">Classes Accessible</p><p className="text-3xl font-black text-white">{teacherClasses.length}</p></Card><Card className="!bg-orange-900/10 border-orange-500/20 text-center"><p className="text-xs font-bold text-orange-400 uppercase">Alerts</p><p className="text-3xl font-black text-white">{submissions.filter(s => s.status === 'Submitted').length}</p></Card></div><TeacherStudentActivity teacherClasses={teacherClasses} /></div>;
-            case 'my_students': return <TeacherStudentsList students={students} assignments={assignments} submissions={submissions} />;
+            case 'dashboard': return <div className="space-y-8 animate-fade-in-up"><div className="flex justify-between items-end"><div><h1 className="text-4xl font-black text-white dark:text-white tracking-tight">Executive <span className="text-blue-500">Teacher</span></h1><p className="text-slate-400 mt-1 uppercase text-[10px] font-black tracking-widest">Logged: {teacherName}</p></div>{!activeLiveLesson && <Button onClick={launchTestLesson} className="shadow-lg shadow-blue-500/20 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl px-6 py-3 font-black text-xs uppercase tracking-widest">🚀 Launch Test Class</Button>}</div><div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-slate-200 dark:text-slate-200"><Card className="!bg-blue-900/10 border-blue-500/20 text-center"><p className="text-xs font-bold text-blue-400 uppercase">Active Students</p><p className="text-3xl font-black text-white">{scopedStudents.length}</p></Card><Card className="!bg-purple-900/10 border-purple-500/20 text-center"><p className="text-xs font-bold text-purple-400 uppercase">Classes Accessible</p><p className="text-3xl font-black text-white">{teacherClasses.length}</p></Card><Card className="!bg-orange-900/10 border-orange-500/20 text-center"><p className="text-xs font-bold text-orange-400 uppercase">Alerts</p><p className="text-3xl font-black text-white">{submissions.filter(s => s.status === 'Submitted').length}</p></Card></div><TeacherStudentActivity teacherClasses={teacherClasses} /></div>;
+            case 'my_students': return <TeacherStudentsList students={scopedStudents} assignments={assignments} submissions={submissions} />;
             case 'assignments': return <TeacherAssignments user={user!} userProfile={userProfile!} teacherClasses={teacherClasses} />;
-            case 'attendance': return <TeacherAttendance teacherClasses={teacherClasses} students={students} />;
+            case 'attendance': return <TeacherAttendance teacherClasses={teacherClasses} students={scopedStudents} />;
             case 'library': return <TeacherLibrary user={user!} userProfile={userProfile!} teacherClasses={teacherClasses} onStartLiveLesson={() => setActiveTab('live_lesson')} />;
-            case 'group_work': return <TeacherGroupWork teacherClasses={teacherClasses} students={students} />;
-            case 'ai_tools': return <TeacherAITools students={students} userProfile={userProfile!} />;
+            case 'group_work': return <TeacherGroupWork teacherClasses={teacherClasses} students={scopedStudents} />;
+            case 'ai_tools': return <TeacherAITools students={scopedStudents} userProfile={userProfile!} />;
             case 'my_voice': return <TeacherMyVoice userProfile={userProfile!} />;
             case 'bece_questions': return <BECEPastQuestionsView />;
             case 'live_lesson': return activeLiveLesson ? <TeacherLiveClassroom lessonId={activeLiveLesson.id} onClose={() => setActiveTab('dashboard')} userProfile={userProfile!} setToast={setToast} /> : <div className="flex flex-col items-center justify-center p-20 text-slate-500 italic h-full"><span className="text-7xl mb-6 opacity-20">📡</span><h3 className="text-xl font-bold text-white mb-2 not-italic">No Active Classroom Signal</h3><Button onClick={() => setActiveTab('library')}>Go to Library</Button></div>;
             case 'elections': return <StudentElectionPortal userProfile={userProfile!} />;
-            case 'terminal_reports': return <AdminTerminalReports schoolSettings={schoolSettings} user={user} userProfile={userProfile} teacherMode allowedClasses={teacherClasses} allStudents={students} assignments={assignments} submissions={submissions} />;
-            case 'progress': return <TeacherProgressDashboard students={students} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} />;
-            case 'messages': return <MessagingView userProfile={userProfile!} contacts={students} />;
+            case 'terminal_reports': return <AdminTerminalReports schoolSettings={schoolSettings} user={user} userProfile={userProfile} teacherMode allowedClasses={teacherClasses} allStudents={scopedStudents} assignments={assignments} submissions={submissions} />;
+            case 'progress': return <TeacherProgressDashboard students={scopedStudents} assignments={assignments} submissions={submissions} teacherClasses={teacherClasses} />;
+            case 'messages': return <MessagingView userProfile={userProfile!} contacts={scopedStudents} />;
             default: return <div className="p-20 text-center text-slate-600 italic">Sector Operational.</div>;
         }
     };

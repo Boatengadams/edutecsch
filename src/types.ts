@@ -1,4 +1,3 @@
-
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 
@@ -6,7 +5,8 @@ export type UserRole = 'student' | 'teacher' | 'parent' | 'admin';
 export type AdminType = 'super' | 'co-admin';
 
 // --- ELECTION TYPES ---
-export type ElectionStatus = 'setup' | 'applications' | 'vetting' | 'campaigning' | 'voting' | 'results' | 'concluded';
+// FIX: Added 'cooling' and 'audit' to ElectionStatus to support full election lifecycle
+export type ElectionStatus = 'setup' | 'applications' | 'vetting' | 'campaigning' | 'cooling' | 'voting' | 'audit' | 'results' | 'concluded';
 export type CriteriaLevel = 'high' | 'moderate' | 'low' | 'custom';
 
 export interface ElectionPosition {
@@ -359,11 +359,13 @@ export interface SubscriptionStatus {
 }
 
 // --- CONTENT GENERATION ---
+// FIX: Added layout property to Slide interface to support custom presentation layouts
 export interface Slide {
   title: string;
   content: string[];
   imageUrl: string;
   imageStyle?: 'contain' | 'cover';
+  layout?: string;
   audioUrl?: string;
   teacherScript?: string;
   summaryScript?: string;
@@ -387,6 +389,7 @@ export interface Collaborator {
     name: string | null;
     email: string | null;
 }
+// FIX: Added subtopic property to GeneratedContent interface
 export interface GeneratedContent {
     id: string;
     teacherId: string;
@@ -394,6 +397,7 @@ export interface GeneratedContent {
     classes: string[];
     subject: string;
     topic: string;
+    subtopic?: string;
     audience?: string;
     presentation: Presentation;
     quiz: Quiz | null;

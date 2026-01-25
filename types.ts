@@ -368,11 +368,13 @@ export interface SubscriptionStatus {
 }
 
 // --- CONTENT GENERATION ---
+// FIX: Added layout property to Slide interface to resolve type errors in PresentationGenerator
 export interface Slide {
   title: string;
   content: string[];
   imageUrl: string;
   imageStyle?: 'contain' | 'cover';
+  layout?: string;
   audioUrl?: string;
   teacherScript?: string;
   summaryScript?: string;
@@ -396,6 +398,7 @@ export interface Collaborator {
     name: string | null;
     email: string | null;
 }
+// FIX: Added subtopic property to GeneratedContent interface
 export interface GeneratedContent {
     id: string;
     teacherId: string;
@@ -403,6 +406,7 @@ export interface GeneratedContent {
     classes: string[];
     subject: string;
     topic: string;
+    subtopic?: string;
     audience?: string;
     presentation: Presentation;
     quiz: Quiz | null;

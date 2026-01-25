@@ -17,7 +17,7 @@ interface TeacherAttendanceProps {
 const TeacherAttendance: React.FC<TeacherAttendanceProps> = ({ teacherClasses, students }) => {
     const { user, userProfile } = useAuthentication();
     const { showToast } = useToast();
-    const [selectedClass, setSelectedClass] = useState(teacherClasses[0] || '');
+    const [selectedClass, setSelectedClass] = useState(userProfile?.classTeacherOf || teacherClasses[0] || '');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [records, setRecords] = useState<Record<string, AttendanceStatus>>({});
     const [loading, setLoading] = useState(false);
@@ -35,6 +35,12 @@ const TeacherAttendance: React.FC<TeacherAttendanceProps> = ({ teacherClasses, s
         students.filter(s => s.class === selectedClass).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
     , [students, selectedClass]);
 
+    // PREVENT INCOMPLETE RECORDS: Check if all students in the list have been marked
+    const isMarkingComplete = useMemo(() => {
+        if (filteredStudents.length === 0) return false;
+        return filteredStudents.every(student => !!records[student.uid]);
+    }, [filteredStudents, records]);
+
     useEffect(() => {
         const fetchExisting = async () => {
             if (!selectedClass || !date) return;
@@ -46,9 +52,8 @@ const TeacherAttendance: React.FC<TeacherAttendanceProps> = ({ teacherClasses, s
                     const data = doc.data() as AttendanceRecord;
                     setRecords(data.records || {});
                 } else {
-                    const initial: Record<string, AttendanceStatus> = {};
-                    filteredStudents.forEach(s => initial[s.uid] = 'Present');
-                    setRecords(initial);
+                    // Reset records when changing class or date if no record exists
+                    setRecords({});
                 }
             } catch (e) {
                 console.error(e);
@@ -57,18 +62,26 @@ const TeacherAttendance: React.FC<TeacherAttendanceProps> = ({ teacherClasses, s
             }
         };
         fetchExisting();
-    }, [selectedClass, date, filteredStudents]);
+    }, [selectedClass, date]);
 
     const handleUpdate = (uid: string, status: AttendanceStatus) => {
-        if (!isDesignatedClassTeacher) return;
+        if (!isDesignatedClassTeacher) {
+            showToast("Protocol locked. You are not the designated class teacher.", "error");
+            return;
+        }
         setRecords(prev => ({ ...prev, [uid]: status }));
     };
 
     const handleSave = async () => {
         if (!user || !userProfile || !isDesignatedClassTeacher) {
-            showToast("Unauthorized: You are not the designated class teacher.", "error");
+            showToast("Unauthorized: Protocol Restricted to Designated Class Teacher.", "error");
             return;
         }
+        if (!isMarkingComplete) {
+            showToast("Incomplete Registry: Please mark all students before saving.", "error");
+            return;
+        }
+
         setIsSaving(true);
         try {
             const docId = `${date}_${selectedClass}`;
@@ -82,9 +95,9 @@ const TeacherAttendance: React.FC<TeacherAttendanceProps> = ({ teacherClasses, s
                 studentUids: filteredStudents.map(s => s.uid),
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-            showToast("Attendance saved successfully.", "success");
+            showToast("Registry Committed Successfully.", "success");
         } catch (err: any) {
-            showToast(`Error: ${err.message}`, "error");
+            showToast(`Protocol Interrupted: ${err.message}`, "error");
         } finally {
             setIsSaving(false);
         }
@@ -103,11 +116,11 @@ const TeacherAttendance: React.FC<TeacherAttendanceProps> = ({ teacherClasses, s
             <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 bg-slate-900/60 p-6 rounded-[2rem] border border-white/5 shadow-2xl">
                 <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto">
                     <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Class Registry</label>
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Assigned Class Registry</label>
                         <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="p-3.5 bg-slate-950 border border-white/10 rounded-2xl text-sm font-bold text-white outline-none focus:border-blue-500">
                             {teacherClasses.map(c => (
                                 <option key={c} value={c}>
-                                    {c} {userProfile?.classTeacherOf === c ? '(My Class)' : ''}
+                                    {c} {userProfile?.classTeacherOf === c ? '(Official Responsibility)' : ''}
                                 </option>
                             ))}
                         </select>
@@ -119,39 +132,50 @@ const TeacherAttendance: React.FC<TeacherAttendanceProps> = ({ teacherClasses, s
                 </div>
 
                 {!isDesignatedClassTeacher ? (
-                    <div className="flex items-center gap-3 bg-rose-500/10 border border-rose-500/30 px-6 py-4 rounded-2xl w-full xl:w-auto animate-pulse">
-                        <span className="text-xl">🔒</span>
+                    <div className="flex items-center gap-4 bg-amber-500/10 border border-amber-500/30 px-6 py-4 rounded-2xl w-full xl:w-auto">
+                        <span className="text-xl">🛡️</span>
                         <div>
-                            <p className="text-rose-400 text-xs font-black uppercase tracking-widest leading-none">ReadOnly Protection</p>
-                            <p className="text-rose-300/60 text-[10px] font-bold uppercase mt-1">Not your designated class</p>
+                            <p className="text-amber-400 text-[10px] font-black uppercase tracking-widest leading-none">ReadOnly Inspection Mode</p>
+                            <p className="text-slate-500 text-[9px] font-bold uppercase mt-1">Marking restricted to official Class Teacher.</p>
                         </div>
                     </div>
                 ) : (
                     <div className="flex flex-wrap gap-2 w-full xl:w-auto">
-                        <Button variant="secondary" size="sm" onClick={() => markAll('Present')} className="flex-1 sm:flex-none py-3 px-4 text-[10px] font-black uppercase">All Present</Button>
-                        <Button variant="secondary" size="sm" onClick={() => markAll('Absent')} className="flex-1 sm:flex-none py-3 px-4 text-[10px] font-black uppercase">All Absent</Button>
-                        <Button onClick={handleSave} disabled={isSaving} className="flex-1 sm:flex-none py-3 px-10 text-[10px] font-black uppercase shadow-xl shadow-blue-900/30">
-                            {isSaving ? <Spinner /> : 'Commit Register'}
-                        </Button>
+                        <Button variant="secondary" size="sm" onClick={() => markAll('Present')} className="flex-1 sm:flex-none py-3 px-4 text-[10px] font-black uppercase">Present All</Button>
+                        <div className="flex flex-col gap-1">
+                            <Button 
+                                onClick={handleSave} 
+                                disabled={isSaving || !isMarkingComplete} 
+                                className={`flex-1 sm:flex-none py-3 px-10 text-[10px] font-black uppercase shadow-xl ${!isMarkingComplete ? 'opacity-50 grayscale' : 'shadow-blue-900/30'}`}
+                            >
+                                {isSaving ? <Spinner /> : '🚀 Commit Registry'}
+                            </Button>
+                            {!isMarkingComplete && filteredStudents.length > 0 && (
+                                <span className="text-[8px] text-orange-400 font-bold uppercase text-center animate-pulse">Mark all to enable save</span>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>
 
             {/* List Table */}
-            <Card className="!p-0 overflow-hidden border-white/5 shadow-3xl rounded-[2.5rem]">
+            <Card className="!p-0 overflow-hidden border-white/5 shadow-3xl rounded-[2.5rem] relative">
+                {!isDesignatedClassTeacher && (
+                    <div className="absolute inset-0 z-10 bg-slate-950/40 backdrop-grayscale pointer-events-none"></div>
+                )}
                 {loading ? <div className="p-32 flex justify-center"><Spinner /></div> : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm border-collapse">
                             <thead className="bg-slate-800/80 text-slate-400 uppercase text-[10px] font-black tracking-[0.3em]">
                                 <tr>
                                     <th className="px-8 py-6 w-12">#</th>
-                                    <th className="px-8 py-6">Student Identification</th>
-                                    <th className="px-8 py-6 text-center">Protocol Status</th>
+                                    <th className="px-8 py-6">Student Terminal Identity</th>
+                                    <th className="px-8 py-6 text-center">Authorization Status</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
                                 {filteredStudents.map((student, idx) => (
-                                    <tr key={student.uid} className={`group transition-colors ${!isDesignatedClassTeacher ? 'opacity-80' : 'hover:bg-white/[0.02]'}`}>
+                                    <tr key={student.uid} className={`group transition-colors ${!isDesignatedClassTeacher ? 'opacity-40' : 'hover:bg-white/[0.02]'}`}>
                                         <td className="px-8 py-6 text-xs font-mono text-slate-600">{idx + 1}</td>
                                         <td className="px-8 py-6">
                                             <div className="flex items-center gap-4">
