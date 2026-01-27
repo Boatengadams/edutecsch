@@ -16,13 +16,24 @@ const ElectionResults: React.FC<ElectionResultsProps> = ({ config, positions, is
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // SECURITY GUARD: Only listen to votes if authorized (Admin or Results are public)
+        // This prevents the permission-denied error from firing before rules can allow access.
+        if (!isAdmin && config.status !== 'results' && !config.publishedResults) {
+            setLoading(false);
+            return;
+        }
+
         const unsubVotes = db.collection('electionVotes').onSnapshot(snap => {
             setVotes(snap.docs.map(d => ({ id: d.id, ...d.data() } as Vote)));
         }, err => {
-            if (err.code !== 'permission-denied') {
+            // Gracefully handle permission errors which may occur during phase transitions
+            if (err.code === 'permission-denied') {
+                console.warn("Election votes vault is currently locked.");
+            } else {
                 console.error("Election votes listener error:", err);
             }
         });
+
         const unsubCand = db.collection('electionApplications').where('status', '==', 'approved').onSnapshot(snap => {
             setCandidates(snap.docs.map(d => ({ id: d.id, ...d.data() } as ElectionApplication)));
             setLoading(false);
@@ -32,8 +43,9 @@ const ElectionResults: React.FC<ElectionResultsProps> = ({ config, positions, is
             }
             setLoading(false);
         });
+
         return () => { unsubVotes(); unsubCand(); };
-    }, []);
+    }, [isAdmin, config.status, config.publishedResults]);
 
     const resultsByPosition = useMemo(() => {
         const results: Record<string, Array<{ candidateId: string, name: string, photo?: string, count: number, percentage: number }>> = {};
@@ -60,7 +72,7 @@ const ElectionResults: React.FC<ElectionResultsProps> = ({ config, positions, is
 
     if (loading) return <div className="p-10 flex justify-center items-center h-full"><Spinner /></div>;
 
-    if (!isAdmin && !config.publishedResults) {
+    if (!isAdmin && !config.publishedResults && config.status !== 'results') {
         return (
             <div className="min-h-[70vh] flex flex-col items-center justify-center text-center p-10 space-y-12 animate-fade-in">
                 <div className="relative">

@@ -55,62 +55,6 @@ export const ParentView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpan
   const selectedChildProfile = useMemo(() => childrenProfiles.find(c => c.uid === selectedChildId), [childrenProfiles, selectedChildId]);
   const isOmni = OMNI_EMAILS.includes(user?.email || "");
 
-  // --- SEQUENTIAL ALERT ONBOARDING ---
-  useEffect(() => {
-    const storageKey = `onboarding_parent_${activeTab}`;
-    if (!localStorage.getItem(storageKey)) {
-        const steps: Record<string, string[]> = {
-            dashboard: [
-                "🏠 Parent Hub: Strategic overview of your family's academic status.",
-                "🧒 Child Selector: If you have multiple children, use the top-right menu to switch profiles.",
-                "📊 Averages: Live tracking of your child's task scores and overall average percentage.",
-                "📅 Attendance Rate: Monitor consistent school participation at a glance."
-            ],
-            academics: [
-                "📈 Academics: Deep-dive into specific task performance.",
-                "📜 Portfolio: View digital artifacts and evidence of work submitted by your child.",
-                "🎖️ Badges & XP: Track character-building honors and level growth.",
-                "📉 Analysis: Observe performance trends across different subjects."
-            ],
-            reports: [
-                "📊 Report Cards: Official certified terminal reporting vault.",
-                "📋 View Card: Access term-by-term certified results after administration audit.",
-                "🔒 Verification: All results shown here have been audited and certified by the school command."
-            ],
-            payments: [
-                "💳 Payments: Secure financial gateway for school fees and levies.",
-                "🚀 Paystack: Bank-grade encrypted transaction processing.",
-                "⚡ Receipts: Instant digital confirmation and verification of all transactions."
-            ],
-            attendance: [
-                "📅 Attendance Map: High-intensity visualization of school participation.",
-                "🟦 Heatmap: Identify consistency trends or concerning gaps in presence over time."
-            ],
-            timetable: [
-                "🗓️ Timetable: Real-time access to your child's weekly learning schedule.",
-                "📚 Subject Flow: Know exactly what your child is studying at any given hour."
-            ],
-            notifications: [
-                "🔔 Notifications: Critical school dispatches and personal alerts.",
-                "📢 Broadcasts: Access important flyers and holiday notices sent by school command."
-            ],
-            messages: [
-                "💬 Contact Teachers: Secure direct communication link with educators.",
-                "✨ AI Summarize: Summarize long teacher discussions instantly for quick review."
-            ]
-        };
-
-        const currentSteps = steps[activeTab];
-        if (currentSteps) {
-            for (let i = 0; i < currentSteps.length; i++) {
-                const proceed = confirm(`[FAMILY INTEL - ${activeTab.replace('_', ' ').toUpperCase()}]\n\nTip ${i + 1}/${currentSteps.length}:\n${currentSteps[i]}\n\n(Click OK for next, Cancel to Skip All)`);
-                if (!proceed) break;
-            }
-            localStorage.setItem(storageKey, 'true');
-        }
-    }
-  }, [activeTab]);
-
   useEffect(() => {
     if (!user) return;
     setLoading(true);
@@ -208,21 +152,32 @@ export const ParentView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpan
                         </select>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <Card className="flex flex-col justify-between py-6 !bg-slate-900/40 border-slate-800">
+                        <Card onClick={() => setActiveTab('academics')} className="flex flex-col justify-between py-6 !bg-slate-900/40 border-slate-800 cursor-pointer hover:bg-slate-900/60 hover:scale-105 transition-all group">
                              <div className="flex justify-between items-start">
                                  <div>
                                      <p className="text-3xl font-black text-white">{stats.avg ? `${stats.avg.toFixed(0)}%` : '--'}</p>
                                      <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">{selectedChildProfile?.name?.split(' ')[0]}'s Average</p>
                                  </div>
                              </div>
+                             <p className="text-[9px] font-black uppercase text-blue-500 mt-4 opacity-0 group-hover:opacity-100 transition-opacity">Full Analytics →</p>
                         </Card>
-                        <Card className="flex flex-col justify-between py-6 !bg-slate-900/40 border-slate-800">
+                        <Card onClick={() => setActiveTab('attendance')} className="flex flex-col justify-between py-6 !bg-slate-900/40 border-slate-800 cursor-pointer hover:bg-slate-900/60 hover:scale-105 transition-all group">
                              <div className="flex justify-between items-start">
                                  <div>
                                      <p className="text-3xl font-black text-white">{stats.attRate.toFixed(0)}%</p>
                                      <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">Attendance Rate</p>
                                  </div>
                              </div>
+                             <p className="text-[9px] font-black uppercase text-blue-500 mt-4 opacity-0 group-hover:opacity-100 transition-opacity">Intensity Map →</p>
+                        </Card>
+                        <Card onClick={() => setActiveTab('payments')} className="flex flex-col justify-between py-6 !bg-slate-900/40 border-slate-800 cursor-pointer hover:bg-slate-900/60 hover:scale-105 transition-all group">
+                             <div className="flex justify-between items-start">
+                                 <div>
+                                     <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">Status</p>
+                                     <p className="text-xl font-black text-emerald-400">Account Active</p>
+                                 </div>
+                             </div>
+                             <p className="text-[9px] font-black uppercase text-blue-500 mt-4 opacity-0 group-hover:opacity-100 transition-opacity">Payment Portal →</p>
                         </Card>
                     </div>
                 </div>

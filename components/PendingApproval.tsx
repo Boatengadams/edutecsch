@@ -8,7 +8,7 @@ const PendingApproval: React.FC = () => {
   const { schoolSettings } = useAuthentication();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4 relative overflow-y-auto">
       {/* Background Animation */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950"></div>
       

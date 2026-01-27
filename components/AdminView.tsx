@@ -95,7 +95,40 @@ const AdminView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v:
 
     const renderContent = () => {
         switch(activeTab) {
-            case 'dashboard': return <div className="space-y-6 animate-fade-in-up"><div className="bg-gradient-to-r from-indigo-950 to-slate-900 p-10 rounded-[2.5rem] border border-indigo-500/20 shadow-2xl relative overflow-hidden"><div className="absolute top-0 right-0 p-12 opacity-10 text-9xl">🏛️</div><h2 className="text-5xl font-black text-white uppercase tracking-tighter">Executive Command</h2><p className="text-indigo-400 text-xs font-bold uppercase tracking-[0.4em]">System Intelligence v2.5.0</p></div><div className="grid grid-cols-2 md:grid-cols-4 gap-6"><Card className="text-center py-8"><span className="text-4xl block mb-2">🎓</span><p className="text-4xl font-black text-white">{allUsers.filter(u => u.role === 'student').length}</p></Card><Card className="text-center py-8"><span className="text-4xl block mb-2">🧑‍🏫</span><p className="text-4xl font-black text-white">{allUsers.filter(u => u.role === 'teacher').length}</p></Card></div></div>;
+            case 'dashboard': return (
+                <div className="space-y-6 animate-fade-in-up">
+                    <div className="bg-gradient-to-r from-indigo-950 to-slate-900 p-10 rounded-[2.5rem] border border-indigo-500/20 shadow-2xl relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-12 opacity-10 text-9xl">🏛️</div>
+                        <h2 className="text-5xl font-black text-white uppercase tracking-tighter">Executive Command</h2>
+                        <p className="text-indigo-400 text-xs font-bold uppercase tracking-[0.4em]">System Intelligence v2.5.0</p>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                        <Card onClick={() => setActiveTab('user_management')} className="text-center py-8 cursor-pointer hover:bg-slate-800 hover:scale-105 transition-all group">
+                            <span className="text-4xl block mb-2">🎓</span>
+                            <p className="text-4xl font-black text-white">{allUsers.filter(u => u.role === 'student').length}</p>
+                            <p className="text-[10px] mt-2 text-blue-500 uppercase font-black opacity-0 group-hover:opacity-100 transition-opacity">Learners →</p>
+                            {filterRole === 'all' && <p className="text-[10px] mt-2 text-blue-500 uppercase font-black group-hover:hidden transition-all">Learners</p>}
+                        </Card>
+                        <Card onClick={() => setActiveTab('user_management')} className="text-center py-8 cursor-pointer hover:bg-slate-800 hover:scale-105 transition-all group">
+                            <span className="text-4xl block mb-2">🧑‍🏫</span>
+                            <p className="text-4xl font-black text-white">{allUsers.filter(u => u.role === 'teacher').length}</p>
+                            <p className="text-[10px] mt-2 text-blue-500 uppercase font-black opacity-0 group-hover:opacity-100 transition-opacity">Staff →</p>
+                            {filterRole === 'all' && <p className="text-[10px] mt-2 text-blue-500 uppercase font-black group-hover:hidden transition-all">Staff</p>}
+                        </Card>
+                        <Card onClick={() => setActiveTab('approvals')} className="text-center py-8 cursor-pointer hover:bg-slate-800 hover:scale-105 transition-all group">
+                            <span className="text-4xl block mb-2">🛡️</span>
+                            <p className="text-4xl font-black text-white">{allUsers.filter(u => u.status === 'pending').length}</p>
+                            <p className="text-[10px] mt-2 text-amber-500 uppercase font-black opacity-0 group-hover:opacity-100 transition-opacity">Pending →</p>
+                            {filterRole === 'all' && <p className="text-[10px] mt-2 text-amber-500 uppercase font-black group-hover:hidden transition-all">Pending</p>}
+                        </Card>
+                        <Card onClick={() => setActiveTab('activity')} className="text-center py-8 cursor-pointer hover:bg-slate-800 hover:scale-105 transition-all group">
+                            <span className="text-4xl block mb-2">📡</span>
+                            <p className="text-[10px] mt-2 text-emerald-500 uppercase font-black opacity-0 group-hover:opacity-100 transition-opacity">Full Monitor →</p>
+                            {filterRole === 'all' && <p className="text-[10px] mt-2 text-emerald-500 uppercase font-black group-hover:hidden transition-all">Real-time</p>}
+                        </Card>
+                    </div>
+                </div>
+            );
             case 'activity': return <ActivityMonitor />;
             case 'approvals': return <AdminApprovalQueue allUsers={allUsers} />;
             case 'elections': return <AdminElectionManagement allUsers={allUsers} />;
@@ -112,6 +145,9 @@ const AdminView: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v:
             default: return <div className="p-10 text-center text-slate-600">Module offline.</div>;
         }
     };
+
+    // Helper for role filtering within management tabs
+    const [filterRole, setFilterRole] = useState('all');
 
     return (
         <div className="flex flex-1 overflow-hidden relative">

@@ -21,9 +21,7 @@ import SleepModeScreen from './components/SleepModeScreen';
 import PaymentSuccessPage from './components/PaymentSuccessPage';
 import { usePresence } from './hooks/usePresence';
 import { ToastProvider } from './components/common/Toast';
-
-const OMNI_USER_EMAILS = ["bagsgraphics4g@gmail.com", "boatengadams4g@gmail.com"];
-const DEFAULT_LOGO = "https://cdn-icons-png.flaticon.com/512/5968/5968213.png";
+import AppTutorial from './components/common/AppTutorial';
 
 const AuthenticationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<firebase.User | null>(null);
@@ -99,7 +97,10 @@ const isSleepTime = (config: SchoolSettings['sleepModeConfig']) => {
 const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v: boolean) => void;}> = ({isSidebarExpanded, setIsSidebarExpanded}) => {
     const { user, userProfile, loading, schoolSettings, subscriptionStatus } = useAuthentication();
     const [showGlobalSearch, setShowGlobalSearch] = useState(false);
-    const [activeRoleOverride, setActiveRoleOverride] = useState<UserRole | null>(null);
+    const [activeRoleOverride, setActiveRoleOverride] = useState<UserRole | null>(() => {
+        return (localStorage.getItem('edutec_role_override') as UserRole) || null;
+    });
+    const [showOnboarding, setShowOnboarding] = useState(false);
     const [theme, setTheme] = useState<'dark' | 'light'>(() => {
         const saved = localStorage.getItem('edutec-theme');
         return (saved as 'dark' | 'light') || 'dark';
@@ -117,7 +118,15 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
         localStorage.setItem('edutec-theme', theme);
     }, [theme]);
 
-    const isOmniUser = OMNI_USER_EMAILS.includes(user?.email || "");
+    useEffect(() => {
+        if (userProfile && !localStorage.getItem(`edutec_onboarding_${userProfile.role}`)) {
+            setShowOnboarding(true);
+        }
+    }, [userProfile]);
+
+    const OMNI_EMAILS = ["bagsgraphics4g@gmail.com", "boatengadams4g@gmail.com"];
+    const isOmniUser = OMNI_EMAILS.includes(user?.email || "");
+    const canSwitchRoles = isOmniUser || userProfile?.isAlsoAdmin || userProfile?.isAlsoTeacher;
 
     if (window.location.pathname === '/payment-success') return <PaymentSuccessPage />;
     if (loading) return <div className="min-h-screen flex flex-col justify-center items-center bg-slate-950"><Spinner /></div>;
@@ -135,7 +144,32 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
         }
     }
 
-    const verifiedRole = (activeRoleOverride && isOmniUser) ? activeRoleOverride : userProfile.role;
+    const verifiedRole = (activeRoleOverride && canSwitchRoles) ? activeRoleOverride : userProfile.role;
+
+    const handleRoleSwitch = () => {
+        if (!canSwitchRoles) return;
+        
+        const availableRoles: UserRole[] = [];
+        // Determine what roles this user actually has permission for
+        if (isOmniUser) {
+            availableRoles.push('admin', 'teacher', 'student', 'parent');
+        } else {
+            // Add primary role
+            availableRoles.push(userProfile.role);
+            // Add privileged roles
+            if (userProfile.isAlsoAdmin && !availableRoles.includes('admin')) availableRoles.push('admin');
+            if (userProfile.isAlsoTeacher && !availableRoles.includes('teacher')) availableRoles.push('teacher');
+        }
+
+        const currentIdx = availableRoles.indexOf(verifiedRole);
+        const nextIdx = (currentIdx + 1) % availableRoles.length;
+        const nextRole = availableRoles[nextIdx];
+        
+        setActiveRoleOverride(nextRole);
+        localStorage.setItem('edutec_role_override', nextRole);
+    };
+
+    const DEFAULT_LOGO = "https://cdn-icons-png.flaticon.com/512/5968/5968213.png";
 
     return (
         <div className="h-[100dvh] flex flex-col font-sans text-slate-200 dark:text-slate-200 light:text-slate-900 bg-slate-50 dark:bg-slate-950 transition-colors duration-500 overflow-hidden w-full max-w-full">
@@ -163,14 +197,17 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
                     <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                         {theme === 'dark' ? '☀️' : '🌙'}
                     </button>
-                    {isOmniUser && (
-                        <button onClick={() => {
-                            const roles: UserRole[] = ['admin', 'teacher', 'student', 'parent'];
-                            setActiveRoleOverride(roles[(roles.indexOf(verifiedRole) + 1) % roles.length]);
-                        }} className="hidden sm:block px-3 py-1.5 rounded-lg bg-purple-600/10 border border-purple-500/30 text-[10px] font-black uppercase text-purple-400">Role: {verifiedRole}</button>
+                    {canSwitchRoles && (
+                        <button 
+                            onClick={handleRoleSwitch} 
+                            className="flex px-3 py-1.5 rounded-lg bg-blue-600/10 border border-blue-500/30 text-[10px] font-black uppercase text-blue-400 hover:bg-blue-600 hover:text-white transition-all items-center gap-2"
+                        >
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                            Portal: {verifiedRole}
+                        </button>
                     )}
                     <NotificationsBell />
-                    <Button size="sm" variant="ghost" onClick={() => firebaseAuth.signOut()} className="text-red-600 dark:text-red-400 px-2 py-1 md:px-3 md:py-1.5 text-xs hover:bg-red-900/10 transition-colors">Sign Out</Button>
+                    <Button size="sm" variant="ghost" onClick={() => { localStorage.removeItem('edutec_role_override'); firebaseAuth.signOut(); }} className="text-red-600 dark:text-red-400 px-2 py-1 md:px-3 md:py-1.5 text-xs hover:bg-red-900/10 transition-colors">Sign Out</Button>
                 </div>
             </header>
             <div className="flex-1 flex overflow-hidden relative z-10 w-full max-w-full">
@@ -180,6 +217,7 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
                 {verifiedRole === 'parent' && <ParentView isSidebarExpanded={isSidebarExpanded} setIsSidebarExpanded={setIsSidebarExpanded} />}
             </div>
             {showGlobalSearch && <GlobalSearch onClose={() => setShowGlobalSearch(false)} />}
+            {showOnboarding && <AppTutorial role={userProfile.role} onClose={() => setShowOnboarding(false)} />}
         </div>
     );
 }

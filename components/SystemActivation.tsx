@@ -89,7 +89,7 @@ const SystemActivation: React.FC<SystemActivationProps> = ({ subscriptionStatus 
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4 relative overflow-hidden">
+        <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4 relative overflow-y-auto">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-950 to-slate-950 pointer-events-none"></div>
             
             <Card className="max-w-lg w-full !bg-slate-900/80 !backdrop-blur-xl border-white/5 shadow-2xl">

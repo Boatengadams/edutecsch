@@ -59,7 +59,6 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
         return Array.from(new Set([...(userProfile.classesTaught || []), ...(userProfile.classTeacherOf ? [userProfile.classTeacherOf] : [])])).sort();
     }, [userProfile, isOmni]);
 
-    // ENFORCED SCOPE: Filter students only to those in teacher's assigned classes
     const scopedStudents = useMemo(() => {
         if (isOmni) return allStudents;
         return allStudents.filter(s => s.class && teacherClasses.includes(s.class));
@@ -74,7 +73,6 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
         unsubscribers.push(db.collection('assignments').where('teacherId', '==', user.uid).onSnapshot(snap => setAssignments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Assignment))), err => console.warn("Assignments listener error:", err.message)));
         unsubscribers.push(db.collection('submissions').where('teacherId', '==', user.uid).onSnapshot(snap => setSubmissions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Submission))), err => console.warn("Submissions listener error:", err.message)));
         
-        // Fetch all students but we filter them in memory to maintain reactive consistency
         const studentsQuery = db.collection('users').where('role', '==', 'student');
         unsubscribers.push(studentsQuery.onSnapshot(snap => setAllStudents(snap.docs.map(doc => doc.data() as UserProfile)), err => console.warn("Students listener error:", err.message)));
         
@@ -131,7 +129,35 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
         if (userProfile?.status === 'pending' && !isOmni) return <div className="p-20 text-center animate-fade-in"><div className="text-6xl mb-6">📝</div><h2 className="text-2xl font-bold text-white mb-2">Staff Profile Verification</h2></div>;
         const teacherName = (userProfile?.name || 'Architect').toUpperCase();
         switch (activeTab) {
-            case 'dashboard': return <div className="space-y-8 animate-fade-in-up"><div className="flex justify-between items-end"><div><h1 className="text-4xl font-black text-white dark:text-white tracking-tight">Executive <span className="text-blue-500">Teacher</span></h1><p className="text-slate-400 mt-1 uppercase text-[10px] font-black tracking-widest">Logged: {teacherName}</p></div>{!activeLiveLesson && <Button onClick={launchTestLesson} className="shadow-lg shadow-blue-500/20 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl px-6 py-3 font-black text-xs uppercase tracking-widest">🚀 Launch Test Class</Button>}</div><div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-slate-200 dark:text-slate-200"><Card className="!bg-blue-900/10 border-blue-500/20 text-center"><p className="text-xs font-bold text-blue-400 uppercase">Active Students</p><p className="text-3xl font-black text-white">{scopedStudents.length}</p></Card><Card className="!bg-purple-900/10 border-purple-500/20 text-center"><p className="text-xs font-bold text-purple-400 uppercase">Classes Accessible</p><p className="text-3xl font-black text-white">{teacherClasses.length}</p></Card><Card className="!bg-orange-900/10 border-orange-500/20 text-center"><p className="text-xs font-bold text-orange-400 uppercase">Alerts</p><p className="text-3xl font-black text-white">{submissions.filter(s => s.status === 'Submitted').length}</p></Card></div><TeacherStudentActivity teacherClasses={teacherClasses} /></div>;
+            case 'dashboard': return (
+                <div className="space-y-8 animate-fade-in-up">
+                    <div className="flex justify-between items-end">
+                        <div>
+                            <h1 className="text-4xl font-black text-white dark:text-white tracking-tight">Executive <span className="text-blue-500">Teacher</span></h1>
+                            <p className="text-slate-400 mt-1 uppercase text-[10px] font-black tracking-widest">Logged: {teacherName}</p>
+                        </div>
+                        {!activeLiveLesson && <Button onClick={launchTestLesson} className="shadow-lg shadow-blue-500/20 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl px-6 py-3 font-black text-xs uppercase tracking-widest">🚀 Launch Test Class</Button>}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-slate-200 dark:text-slate-200">
+                        <Card onClick={() => setActiveTab('my_students')} className="!bg-blue-900/10 border-blue-500/20 text-center cursor-pointer hover:bg-blue-900/20 hover:scale-105 transition-all group">
+                            <p className="text-xs font-bold text-blue-400 uppercase">Active Students</p>
+                            <p className="text-3xl font-black text-white">{scopedStudents.length}</p>
+                            <p className="text-[9px] mt-2 text-blue-500/60 uppercase font-black opacity-0 group-hover:opacity-100 transition-opacity">Open Registry →</p>
+                        </Card>
+                        <Card onClick={() => setActiveTab('progress')} className="!bg-purple-900/10 border-purple-500/20 text-center cursor-pointer hover:bg-purple-900/20 hover:scale-105 transition-all group">
+                            <p className="text-xs font-bold text-purple-400 uppercase">Classes Accessible</p>
+                            <p className="text-3xl font-black text-white">{teacherClasses.length}</p>
+                            <p className="text-[9px] mt-2 text-purple-500/60 uppercase font-black opacity-0 group-hover:opacity-100 transition-opacity">Open Intelligence →</p>
+                        </Card>
+                        <Card onClick={() => setActiveTab('assignments')} className="!bg-orange-900/10 border-orange-500/20 text-center cursor-pointer hover:bg-orange-900/20 hover:scale-105 transition-all group">
+                            <p className="text-xs font-bold text-orange-400 uppercase">Alerts</p>
+                            <p className="text-3xl font-black text-white">{submissions.filter(s => s.status === 'Submitted').length}</p>
+                            <p className="text-[9px] mt-2 text-orange-500/60 uppercase font-black opacity-0 group-hover:opacity-100 transition-opacity">Manage Tasks →</p>
+                        </Card>
+                    </div>
+                    <TeacherStudentActivity teacherClasses={teacherClasses} />
+                </div>
+            );
             case 'my_students': return <TeacherStudentsList students={scopedStudents} assignments={assignments} submissions={submissions} />;
             case 'assignments': return <TeacherAssignments user={user!} userProfile={userProfile!} teacherClasses={teacherClasses} />;
             case 'attendance': return <TeacherAttendance teacherClasses={teacherClasses} students={scopedStudents} />;

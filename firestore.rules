@@ -69,27 +69,21 @@ service cloud.firestore {
 
     function isValidToken(tokenId) {
       return tokenId in [
-        'EDUTEC-SECURE-8822-XP', 'EDUTEC-ACTIVE-4491-ZT', 'EDUTEC-PRIME-1103-QA',
-        'EDUTEC-SYSTEM-9901-LK', 'EDUTEC-MATRIX-2234-MW', 'EDUTEC-KERNEL-5567-PS',
-        'EDUTEC-VAULT-X992-LK', 'EDUTEC-BLOCK-Z112-MW', 'EDUTEC-NODAL-K443-PS',
-        'EDUTEC-CYPHER-P009-RV', 'EDUTEC-ACCESS-Q887-NB', 'EDUTEC-SIGNAL-W332-XC',
-        'EDUTEC-HYPER-L771-BH', 'EDUTEC-DELTA-R554-MJ', 'EDUTEC-SIGMA-T221-OP',
-        'EDUTEC-OMEGA-A110-PQ', 'EDUTEC-ALPHA-B221-RS', 'EDUTEC-THETA-C332-TU',
-        'EDUTEC-KAPPA-M123-SV', 'EDUTEC-ZETA-M456-RX', 'EDUTEC-EP-990-PL',
-        'EDUTEC-UNIV-ULT-Z99', 'EDUTEC-GLOBAL-ULT-W88', 'EDUTEC-ELITE-ULT-P77',
-        'EDUTEC-CORE-ULT-H11', 'EDUTEC-MAX-ULT-Y22', 'EDUTEC-PRO-ULT-X33'
+        'EDUTEC-TRIAL-8822-XP','EDUTEC-TRIAL-4491-ZT','EDUTEC-TRIAL-1103-QA',
+        'EDUTEC-TERM-X992-LK','EDUTEC-TERM-Z112-MW','EDUTEC-TERM-K443-PS',
+        'EDUTEC-TERM-P009-RV','EDUTEC-TERM-Q887-NB','EDUTEC-TERM-W332-XC',
+        'EDUTEC-TERM-L771-BH','EDUTEC-TERM-R554-MJ','EDUTEC-TERM-T221-OP',
+        'EDUTEC-MONT-M123-SV','EDUTEC-MONT-M456-RX',
+        'EDUTEC-YEAR-ULT-Z99','EDUTEC-YEAR-ULT-W88','EDUTEC-YEAR-ULT-P77'
       ];
     }
 
     match /activationTokens/{tokenId} {
-      allow get: if isSignedIn() && isValidToken(tokenId);
-
+      allow get: if isSignedIn();
       allow create: if isSuperAdmin() && isValidToken(tokenId);
-
       allow update: if isCallerAdmin()
         && isValidToken(tokenId)
         && resource.data.isUsed == false
-        && resource.data.isActive == true
         && request.resource.data.isUsed == true
         && request.resource.data.usedBy == request.auth.uid;
     }
@@ -104,22 +98,16 @@ service cloud.firestore {
 
       allow list: if isCallerApproved();
 
-      allow create: if
-        (
-          isSignedIn()
-          && request.auth.uid == userId
-          && request.resource.data.role in ['student','teacher','parent']
-          && request.resource.data.status == 'pending'
-          && !('isAlsoAdmin' in request.resource.data)
-        );
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role in ['student','teacher','parent']
+        && request.resource.data.status == 'pending'
+        && !('isAlsoAdmin' in request.resource.data);
 
-      allow update: if
-        isCallerAdmin()
-        || (
-          isSignedIn()
-          && request.auth.uid == userId
-          && isSafeUserUpdate()
-        );
+      allow update: if isCallerAdmin()
+        || (isSignedIn()
+            && request.auth.uid == userId
+            && isSafeUserUpdate());
 
       allow delete: if isCallerAdmin();
     }
@@ -139,6 +127,23 @@ service cloud.firestore {
     }
 
     /* ==============================
+       NOTIFICATIONS (NEW)
+    ============================== */
+
+    match /notifications/{notifId} {
+      allow get, update: if isCallerApproved()
+        && resource.data.userId == request.auth.uid;
+
+      allow list: if isCallerApproved()
+        && resource.data.userId == request.auth.uid;
+
+      allow create: if isCallerApproved()
+        || isCallerAdmin();
+
+      allow delete: if isCallerAdmin();
+    }
+
+    /* ==============================
        SCHOOL CONFIG
     ============================== */
 
@@ -148,25 +153,12 @@ service cloud.firestore {
     }
 
     /* ==============================
-       CONVERSATIONS + MESSAGES
+       TIMETABLES (NEW)
     ============================== */
 
-    match /conversations/{conversationId} {
-      function isParticipant() {
-        return request.auth.uid in resource.data.participantUids;
-      }
-
-      allow get, update: if isCallerApproved() && isParticipant();
-      allow list: if isCallerApproved() && isParticipant();
-
-      allow create: if isCallerApproved()
-        && request.auth.uid in request.resource.data.participantUids;
-
-      match /messages/{messageId} {
-        allow read, list: if isCallerApproved() && isParticipant();
-        allow create: if isCallerApproved()
-          && request.resource.data.senderId == request.auth.uid;
-      }
+    match /timetables/{classId} {
+      allow read: if isCallerApproved();
+      allow write: if isCallerAdmin();
     }
 
     /* ==============================
@@ -181,10 +173,8 @@ service cloud.firestore {
         && request.resource.data.teacherId == request.auth.uid;
 
       allow update, delete: if isCallerAdmin()
-        || (
-          userDoc(request.auth.uid).data.role == 'teacher'
-          && resource.data.teacherId == request.auth.uid
-        );
+        || (userDoc(request.auth.uid).data.role == 'teacher'
+            && resource.data.teacherId == request.auth.uid);
     }
 
     /* ==============================
@@ -201,25 +191,125 @@ service cloud.firestore {
         || request.auth.uid == resource.data.teacherId;
 
       allow update: if isCallerAdmin()
-        || (
-          userDoc(request.auth.uid).data.role == 'teacher'
-          && request.auth.uid == resource.data.teacherId
-        );
+        || (userDoc(request.auth.uid).data.role == 'teacher'
+            && request.auth.uid == resource.data.teacherId);
 
       allow delete: if isCallerAdmin();
     }
 
     /* ==============================
-       GENERATED CONTENT
+       TEACHING MATERIALS (NEW)
     ============================== */
 
-    match /generatedContent/{contentId} {
+    match /teachingMaterials/{materialId} {
+      allow read: if isCallerApproved();
+      allow write: if isCallerApproved()
+        && (userDoc(request.auth.uid).data.role in ['admin','teacher']);
+    }
+
+    /* ==============================
+       VIDEO CONTENT (NEW)
+    ============================== */
+
+    match /videoContent/{creatorId}/videos/{videoId} {
+      allow read: if isCallerApproved();
+      allow write: if isCallerApproved()
+        && request.auth.uid == creatorId;
+    }
+
+    /* ==============================
+       PUBLISHED FLYERS (NEW)
+    ============================== */
+
+    match /publishedFlyers/{flyerId} {
+      allow read: if true;
+      allow write: if isCallerAdmin();
+    }
+
+    /* ==============================
+       CALENDAR EVENTS (NEW)
+    ============================== */
+
+    match /calendarEvents/{eventId} {
+      allow read: if true;
+      allow write: if isCallerAdmin();
+    }
+
+    /* ==============================
+       GROUPS (NEW)
+    ============================== */
+
+    match /groups/{groupId} {
+      allow read: if isCallerApproved()
+        && (request.auth.uid in resource.data.memberUids
+            || request.auth.uid == resource.data.teacherId
+            || isCallerAdmin());
+
+      allow create: if isCallerApproved()
+        && userDoc(request.auth.uid).data.role == 'teacher';
+
+      allow update, delete: if isCallerApproved()
+        && (request.auth.uid == resource.data.teacherId || isCallerAdmin());
+    }
+
+    /* ==============================
+       LIVE LESSONS (NEW)
+    ============================== */
+
+    match /liveLessons/{lessonId} {
       allow read: if isCallerApproved();
 
       allow create: if isCallerApproved()
         && userDoc(request.auth.uid).data.role == 'teacher';
 
-      allow update, delete: if isCallerAdmin();
+      allow update, delete: if isCallerApproved()
+        && (request.auth.uid == resource.data.teacherId || isCallerAdmin());
+
+      match /responses/{responseId} {
+        allow read: if isCallerApproved()
+          && (request.auth.uid == resource.data.teacherId || isCallerAdmin());
+
+        allow create: if isCallerApproved()
+          && userDoc(request.auth.uid).data.role == 'student';
+      }
+    }
+
+    /* ==============================
+       ELECTIONS (NEW)
+    ============================== */
+
+    match /electionConfig/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isCallerAdmin();
+    }
+
+    match /electionPositions/{posId} {
+      allow read: if isSignedIn();
+      allow write: if isCallerAdmin();
+    }
+
+    match /electionApplications/{appId} {
+      allow read: if isSignedIn();
+      allow create: if isCallerApproved()
+        && userDoc(request.auth.uid).data.role == 'student';
+
+      allow update: if isCallerAdmin()
+        || request.auth.uid == resource.data.studentId;
+
+      allow delete: if isCallerAdmin();
+    }
+
+    match /electionVotes/{voteId} {
+      allow create: if isCallerApproved();
+
+      allow read, list: if isCallerAdmin()
+        || (
+          isSignedIn() &&
+          (
+            get(/databases/$(database)/documents/electionConfig/active).data.status == 'results'
+            || get(/databases/$(database)/documents/electionConfig/active).data.publishedResults == true
+          )
+        );
     }
 
     /* ==============================

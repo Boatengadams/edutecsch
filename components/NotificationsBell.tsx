@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuthentication } from '../hooks/useAuth';
 import { db, firebase } from '../services/firebase';
@@ -12,12 +11,10 @@ const NotificationsBell: React.FC = () => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-
     useEffect(() => {
-        // PERMISSION GUARD: Only listen if user is signed in.
-        // We allow reading notifications even for pending users so they get approval alerts.
-        // But we wait for the user object to avoid 'undefined' UID errors in the query.
-        if (!user?.uid) {
+        // SECURITY GUARD: Missing or pending profiles are not allowed to list notifications per rules.
+        // We stop the listener immediately to prevent Uncaught Firebase Errors.
+        if (!user?.uid || !userProfile || (userProfile.status !== 'approved' && userProfile.role !== 'admin')) {
             setLoading(false);
             setNotifications([]);
             return;
@@ -35,18 +32,16 @@ const NotificationsBell: React.FC = () => {
             setNotifications(fetchedNotifications);
             setLoading(false);
         }, err => {
-            // Log only real errors, suppress expected initial permission denied during login state transition
+            // SILENT FAIL: During login transition, listeners might fire before custom claims or firestore status updates propagate.
             if (err.code !== 'permission-denied') {
-                console.error("Notifications restricted:", err.message);
-            } else {
-                console.warn("Notifications permission pending auth stabilization...");
+                console.error("Notifications access fault:", err.message);
             }
             setNotifications([]);
             setLoading(false);
         });
 
         return () => unsubscribe();
-    }, [user?.uid]);
+    }, [user?.uid, userProfile?.status]);
     
      useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -96,7 +91,7 @@ const NotificationsBell: React.FC = () => {
                     {loading ? (
                         <div className="p-4 flex justify-center"><Spinner /></div>
                     ) : (
-                        <ul className="max-h-96 overflow-y-auto">
+                        <ul className="max-h-96 overflow-y-auto custom-scrollbar">
                             {notifications.length > 0 ? (
                                 notifications.map(n => {
                                     const isRead = n.readBy.includes(user?.uid || '');
