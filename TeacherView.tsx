@@ -139,20 +139,20 @@ const TeacherView: React.FC<{ isSidebarExpanded: boolean; setIsSidebarExpanded: 
                         {!activeLiveLesson && <Button onClick={launchTestLesson} className="shadow-lg shadow-blue-500/20 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl px-6 py-3 font-black text-xs uppercase tracking-widest">🚀 Launch Test Class</Button>}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-slate-200 dark:text-slate-200">
-                        <Card onClick={() => setActiveTab('my_students')} className="!bg-blue-900/10 border-blue-500/20 text-center cursor-pointer hover:bg-blue-900/20 hover:scale-105 transition-all group">
-                            <p className="text-xs font-bold text-blue-400 uppercase">Active Students</p>
-                            <p className="text-3xl font-black text-white">{scopedStudents.length}</p>
-                            <p className="text-[9px] mt-2 text-blue-500/60 uppercase font-black opacity-0 group-hover:opacity-100 transition-opacity">Open Registry →</p>
+                        <Card onClick={() => setActiveTab('my_students')} className="!bg-blue-900/10 border-blue-500/20 text-center cursor-pointer hover:bg-blue-900/20 hover:scale-[1.03] transition-all group">
+                            <p className="text-xs font-bold text-blue-400 uppercase tracking-widest">Active Students</p>
+                            <p className="text-4xl font-black text-white mt-1">{scopedStudents.length}</p>
+                            <p className="text-[9px] mt-4 text-blue-500 font-black uppercase opacity-0 group-hover:opacity-100 transition-opacity">Open Registry →</p>
                         </Card>
-                        <Card onClick={() => setActiveTab('progress')} className="!bg-purple-900/10 border-purple-500/20 text-center cursor-pointer hover:bg-purple-900/20 hover:scale-105 transition-all group">
-                            <p className="text-xs font-bold text-purple-400 uppercase">Classes Accessible</p>
-                            <p className="text-3xl font-black text-white">{teacherClasses.length}</p>
-                            <p className="text-[9px] mt-2 text-purple-500/60 uppercase font-black opacity-0 group-hover:opacity-100 transition-opacity">Open Intelligence →</p>
+                        <Card onClick={() => setActiveTab('progress')} className="!bg-purple-900/10 border-purple-500/20 text-center cursor-pointer hover:bg-purple-900/20 hover:scale-[1.03] transition-all group">
+                            <p className="text-xs font-bold text-purple-400 uppercase tracking-widest">Intelligence Map</p>
+                            <p className="text-4xl font-black text-white mt-1">{teacherClasses.length} Sectors</p>
+                            <p className="text-[9px] mt-4 text-purple-500 font-black uppercase opacity-0 group-hover:opacity-100 transition-opacity">Open Analytics →</p>
                         </Card>
-                        <Card onClick={() => setActiveTab('assignments')} className="!bg-orange-900/10 border-orange-500/20 text-center cursor-pointer hover:bg-orange-900/20 hover:scale-105 transition-all group">
-                            <p className="text-xs font-bold text-orange-400 uppercase">Alerts</p>
-                            <p className="text-3xl font-black text-white">{submissions.filter(s => s.status === 'Submitted').length}</p>
-                            <p className="text-[9px] mt-2 text-orange-500/60 uppercase font-black opacity-0 group-hover:opacity-100 transition-opacity">Manage Tasks →</p>
+                        <Card onClick={() => setActiveTab('assignments')} className="!bg-orange-900/10 border-orange-500/20 text-center cursor-pointer hover:bg-orange-900/20 hover:scale-[1.03] transition-all group">
+                            <p className="text-xs font-bold text-orange-400 uppercase tracking-widest">Protocol Alerts</p>
+                            <p className="text-4xl font-black text-white mt-1">{submissions.filter(s => s.status === 'Submitted').length} New</p>
+                            <p className="text-[9px] mt-4 text-orange-500 font-black uppercase opacity-0 group-hover:opacity-100 transition-opacity">Manage Tasks →</p>
                         </Card>
                     </div>
                     <TeacherStudentActivity teacherClasses={teacherClasses} />

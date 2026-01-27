@@ -98,7 +98,7 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
     const { user, userProfile, loading, schoolSettings, subscriptionStatus } = useAuthentication();
     const [showGlobalSearch, setShowGlobalSearch] = useState(false);
     const [activeRoleOverride, setActiveRoleOverride] = useState<UserRole | null>(() => {
-        return (localStorage.getItem('edutec_role_override') as UserRole) || null;
+        return (localStorage.getItem('edutec_portal_override') as UserRole) || null;
     });
     const [showOnboarding, setShowOnboarding] = useState(false);
     const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -117,12 +117,6 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
         }
         localStorage.setItem('edutec-theme', theme);
     }, [theme]);
-
-    useEffect(() => {
-        if (userProfile && !localStorage.getItem(`edutec_onboarding_${userProfile.role}`)) {
-            setShowOnboarding(true);
-        }
-    }, [userProfile]);
 
     const OMNI_EMAILS = ["bagsgraphics4g@gmail.com", "boatengadams4g@gmail.com"];
     const isOmniUser = OMNI_EMAILS.includes(user?.email || "");
@@ -149,24 +143,21 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
     const handleRoleSwitch = () => {
         if (!canSwitchRoles) return;
         
-        const availableRoles: UserRole[] = [];
-        // Determine what roles this user actually has permission for
+        const possibleRoles: UserRole[] = [];
         if (isOmniUser) {
-            availableRoles.push('admin', 'teacher', 'student', 'parent');
+            possibleRoles.push('admin', 'teacher', 'student', 'parent');
         } else {
-            // Add primary role
-            availableRoles.push(userProfile.role);
-            // Add privileged roles
-            if (userProfile.isAlsoAdmin && !availableRoles.includes('admin')) availableRoles.push('admin');
-            if (userProfile.isAlsoTeacher && !availableRoles.includes('teacher')) availableRoles.push('teacher');
+            possibleRoles.push(userProfile.role);
+            if (userProfile.isAlsoAdmin && !possibleRoles.includes('admin')) possibleRoles.push('admin');
+            if (userProfile.isAlsoTeacher && !possibleRoles.includes('teacher')) possibleRoles.push('teacher');
         }
 
-        const currentIdx = availableRoles.indexOf(verifiedRole);
-        const nextIdx = (currentIdx + 1) % availableRoles.length;
-        const nextRole = availableRoles[nextIdx];
+        const currentIdx = possibleRoles.indexOf(verifiedRole);
+        const nextIdx = (currentIdx + 1) % possibleRoles.length;
+        const nextRole = possibleRoles[nextIdx];
         
         setActiveRoleOverride(nextRole);
-        localStorage.setItem('edutec_role_override', nextRole);
+        localStorage.setItem('edutec_portal_override', nextRole);
     };
 
     const DEFAULT_LOGO = "https://cdn-icons-png.flaticon.com/512/5968/5968213.png";
@@ -207,7 +198,7 @@ const AppContent: React.FC<{isSidebarExpanded: boolean; setIsSidebarExpanded: (v
                         </button>
                     )}
                     <NotificationsBell />
-                    <Button size="sm" variant="ghost" onClick={() => { localStorage.removeItem('edutec_role_override'); firebaseAuth.signOut(); }} className="text-red-600 dark:text-red-400 px-2 py-1 md:px-3 md:py-1.5 text-xs hover:bg-red-900/10 transition-colors">Sign Out</Button>
+                    <Button size="sm" variant="ghost" onClick={() => { firebaseAuth.signOut(); localStorage.removeItem('edutec_portal_override'); }} className="text-red-600 dark:text-red-400 px-2 py-1 md:px-3 md:py-1.5 text-xs hover:bg-red-900/10 transition-colors">Sign Out</Button>
                 </div>
             </header>
             <div className="flex-1 flex overflow-hidden relative z-10 w-full max-w-full">

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { rtdb } from '../services/firebase';
-import { UserProfile } from '../types';
 import Card from './common/Card';
 import Spinner from './common/Spinner';
 
@@ -43,7 +42,7 @@ const TeacherStudentActivity: React.FC<TeacherStudentActivityProps> = ({ teacher
                 ...data[key]
             }));
 
-            // Filter: Only students who are currently 'online' AND in this teacher's assigned sectors
+            // STRICT FILTER: Only students who are currently 'online' AND in this teacher's assigned classes
             const liveStudents = users.filter(user => 
                 user.role === 'student' && 
                 user.state === 'online' && 
@@ -51,7 +50,7 @@ const TeacherStudentActivity: React.FC<TeacherStudentActivityProps> = ({ teacher
                 teacherClasses.includes(user.class)
             );
             
-            // Sort by most recently changed status
+            // Sort by most recently active (last changed)
             liveStudents.sort((a, b) => b.last_changed - a.last_changed);
             
             setActiveUsers(liveStudents);
@@ -70,12 +69,12 @@ const TeacherStudentActivity: React.FC<TeacherStudentActivityProps> = ({ teacher
         <Card className="!bg-slate-900/60 border-emerald-500/10">
             <div className="flex justify-between items-center mb-6">
                 <div>
-                    <h3 className="text-xl font-black text-white uppercase tracking-tighter">Live Learning Pulse</h3>
+                    <h3 className="text-xl font-black text-white uppercase tracking-tighter">Live Activity</h3>
                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Authorized real-time presence feed</p>
                 </div>
                 <div className="flex items-center gap-2 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20">
                     <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></div>
-                    <span className="text-emerald-400 font-black text-[10px] uppercase tracking-widest">{activeUsers.length} Active Now</span>
+                    <span className="text-emerald-400 font-black text-[10px] uppercase tracking-widest">{activeUsers.length} Students Active</span>
                 </div>
             </div>
             
@@ -85,7 +84,7 @@ const TeacherStudentActivity: React.FC<TeacherStudentActivityProps> = ({ teacher
                         <tr>
                             <th className="px-6 py-4 font-black">Learner Identity</th>
                             <th className="px-6 py-4 font-black">Registry</th>
-                            <th className="px-6 py-4 font-black text-right">Uplink State</th>
+                            <th className="px-6 py-4 font-black text-right">Uplink Duration</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
@@ -106,10 +105,7 @@ const TeacherStudentActivity: React.FC<TeacherStudentActivityProps> = ({ teacher
                                         <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-black text-slate-400 uppercase border border-white/5">{user.class}</span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-emerald-400 font-black text-[9px] uppercase tracking-widest">Connected</span>
-                                            <span className="text-[9px] font-mono text-slate-600 uppercase">{timeSince < 1 ? 'Live' : `${timeSince}m ago`}</span>
-                                        </div>
+                                        <span className="text-[10px] font-mono text-emerald-500/80">{timeSince < 1 ? 'Live' : `${timeSince}m`}</span>
                                     </td>
                                 </tr>
                             );
@@ -118,7 +114,7 @@ const TeacherStudentActivity: React.FC<TeacherStudentActivityProps> = ({ teacher
                              <tr>
                                 <td colSpan={3} className="px-6 py-12 text-center text-slate-600 italic">
                                     <span className="text-4xl block mb-2 opacity-10">📡</span>
-                                    <p className="text-[10px] uppercase font-black tracking-widest">No active learners detected in assigned sectors.</p>
+                                    <p className="text-[10px] uppercase font-black tracking-widest">No active learners in your sectors.</p>
                                 </td>
                             </tr>
                         )}

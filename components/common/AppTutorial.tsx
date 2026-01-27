@@ -92,42 +92,44 @@ const AppTutorial: React.FC<AppTutorialProps> = ({ role, onClose, isTriggeredMan
     const step = steps[currentStep];
 
     return (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 md:p-10 bg-slate-950/95 backdrop-blur-3xl animate-fade-in">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 md:p-10 bg-slate-950/95 backdrop-blur-3xl animate-fade-in overflow-y-auto">
             {/* Background Decorative Element */}
-            <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br ${step.color} rounded-full blur-[160px] opacity-10 pointer-events-none transition-all duration-1000`}></div>
+            <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[600px] h-[600px] bg-gradient-to-br ${step.color} rounded-full blur-[160px] opacity-10 pointer-events-none transition-all duration-1000`}></div>
 
-            <Card className="w-full max-w-3xl !p-0 overflow-hidden bg-slate-900/40 border-2 border-white/10 shadow-[0_100px_200px_-50px_rgba(0,0,0,1)] relative rounded-[4rem]">
+            <Card className="w-full max-w-2xl !p-0 overflow-hidden bg-slate-900/40 border-2 border-white/10 shadow-[0_100px_200px_-50px_rgba(0,0,0,1)] relative rounded-[3rem] sm:rounded-[4rem] my-auto">
                 
                 {/* Global Progress Track */}
-                <div className="absolute top-0 left-0 w-full h-2 bg-slate-950/50">
+                <div className="absolute top-0 left-0 w-full h-1.5 bg-slate-950/50">
                     <div 
-                        className={`h-full bg-gradient-to-r ${step.color} transition-all duration-1000 ease-[cubic-bezier(0.23,1,0.32,1)] shadow-[0_0_30px_rgba(59,130,246,0.8)]`}
+                        className={`h-full bg-gradient-to-r ${step.color} transition-all duration-1000 shadow-[0_0_20px_rgba(59,130,246,0.8)]`}
                         style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
                     />
                 </div>
 
-                <div className="p-10 md:p-24 text-center flex flex-col items-center relative overflow-hidden">
+                <div className="p-8 sm:p-12 md:p-16 text-center flex flex-col items-center relative min-h-[500px]">
                     {/* Background Text Label */}
-                    <div className="absolute top-0 right-0 p-12 opacity-[0.03] text-[15rem] font-black pointer-events-none select-none uppercase tracking-tighter transform translate-x-20 -translate-y-20">
+                    <div className="absolute top-0 right-0 p-8 opacity-[0.03] text-[10rem] sm:text-[15rem] font-black pointer-events-none select-none uppercase tracking-tighter transform translate-x-20 -translate-y-20">
                         {step.icon}
                     </div>
 
                     {/* Immersive Animated Icon */}
-                    <div className={`w-32 h-32 md:w-44 md:h-44 rounded-[3.5rem] bg-gradient-to-br ${step.color} flex items-center justify-center text-6xl md:text-8xl mb-12 md:mb-16 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.8)] border-4 border-white/20 group relative transition-transform duration-700 hover:rotate-6 active:scale-95`}>
+                    <div className={`w-24 h-24 sm:w-32 md:w-32 rounded-[2.5rem] bg-gradient-to-br ${step.color} flex items-center justify-center text-4xl sm:text-6xl md:text-6xl mb-8 sm:mb-12 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.8)] border-4 border-white/20 group relative transition-transform duration-700 hover:rotate-6`}>
                          <div className="absolute inset-0 bg-white/20 rounded-full animate-ping opacity-30 pointer-events-none"></div>
-                         <span className="relative z-10 drop-shadow-[0_20px_20px_rgba(0,0,0,0.5)]">{step.icon}</span>
+                         <span className="relative z-10 drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]">{step.icon}</span>
                     </div>
 
-                    <div className="space-y-6 mb-16 md:mb-20 relative z-10">
-                        <h3 className="text-4xl md:text-7xl font-black text-white uppercase tracking-tighter leading-none text-shadow-xl">
+                    <div className="space-y-4 sm:space-y-6 mb-10 sm:mb-12 relative z-10">
+                        <h3 className="text-3xl sm:text-5xl md:text-5xl font-black text-white uppercase tracking-tighter leading-tight text-shadow-xl">
                             {step.title}
                         </h3>
-                        <p className="text-slate-400 text-base md:text-2xl leading-relaxed font-medium max-w-xl mx-auto opacity-90">
-                            {step.description}
-                        </p>
+                        <div className="min-h-[60px] sm:min-h-[80px] flex items-center justify-center">
+                            <p className="text-slate-400 text-sm sm:text-lg leading-relaxed font-medium max-w-lg mx-auto opacity-90">
+                                {step.description}
+                            </p>
+                        </div>
                         {step.protocol && (
-                            <div className="pt-6">
-                                <span className="text-[10px] md:text-[12px] font-black text-blue-400 uppercase tracking-[0.4em] bg-blue-500/10 px-6 py-2.5 rounded-full border-2 border-blue-500/20 shadow-2xl backdrop-blur-md">
+                            <div className="pt-2">
+                                <span className="text-[8px] sm:text-[10px] font-black text-blue-400 uppercase tracking-[0.4em] bg-blue-500/10 px-4 py-1.5 rounded-full border border-blue-500/20 shadow-xl backdrop-blur-md inline-block">
                                     Protocol: {step.protocol}
                                 </span>
                             </div>
@@ -135,22 +137,22 @@ const AppTutorial: React.FC<AppTutorialProps> = ({ role, onClose, isTriggeredMan
                     </div>
 
                     {/* Navigation Control */}
-                    <div className="w-full space-y-8 relative z-10">
-                        <div className="flex flex-col md:flex-row items-center gap-5 w-full">
+                    <div className="w-full space-y-6 sm:space-y-8 mt-auto relative z-10">
+                        <div className="flex flex-col sm:flex-row items-center gap-4 w-full">
                             {currentStep > 0 && (
                                 <button 
                                     onClick={handlePrev}
-                                    className="w-full md:w-auto px-12 py-5 rounded-[2rem] bg-slate-800/80 backdrop-blur-md text-slate-300 font-black text-xs uppercase tracking-[0.2em] hover:bg-slate-700 hover:text-white transition-all border border-white/10 active:scale-95 shadow-xl"
+                                    className="w-full sm:w-auto px-10 py-4 rounded-[2rem] bg-slate-800/80 backdrop-blur-md text-slate-300 font-black text-[10px] uppercase tracking-[0.2em] hover:bg-slate-700 hover:text-white transition-all border border-white/5 active:scale-95 shadow-xl"
                                 >
                                     Previous
                                 </button>
                             )}
                             <button 
                                 onClick={handleNext} 
-                                className={`flex-grow w-full py-6 md:py-8 rounded-[2.5rem] font-black uppercase text-xs md:text-xl tracking-[0.4em] shadow-[0_30px_70px_-10px_rgba(0,0,0,0.6)] group relative overflow-hidden transition-all hover:scale-[1.02] active:scale-95 text-white bg-gradient-to-r ${step.color}`}
+                                className={`flex-grow w-full py-5 sm:py-6 rounded-[2rem] font-black uppercase text-[10px] sm:text-sm tracking-[0.3em] shadow-[0_20px_50px_-10px_rgba(59,130,246,0.6)] group relative overflow-hidden transition-all hover:scale-[1.02] active:scale-95 text-white bg-gradient-to-r ${step.color}`}
                             >
                                 <div className="absolute inset-0 bg-white/20 transform -translate-x-full group-hover:translate-x-full transition-transform duration-[1.5s]"></div>
-                                <span className="relative z-10 flex items-center justify-center gap-4">
+                                <span className="relative z-10 flex items-center justify-center gap-3">
                                     {currentStep === steps.length - 1 ? "Initialize Portal 🚀" : "Next Protocol →"}
                                 </span>
                             </button>
@@ -158,7 +160,7 @@ const AppTutorial: React.FC<AppTutorialProps> = ({ role, onClose, isTriggeredMan
                         
                         <button 
                             onClick={handleFinish}
-                            className="text-[10px] md:text-[12px] font-black text-slate-600 uppercase tracking-[0.6em] hover:text-red-500 transition-all py-4 px-10 group"
+                            className="text-[9px] sm:text-[10px] font-black text-slate-600 uppercase tracking-[0.6em] hover:text-red-500 transition-all py-2 group"
                         >
                             Terminate Introduction <span className="group-hover:translate-x-2 inline-block transition-transform">»</span>
                         </button>
@@ -166,11 +168,11 @@ const AppTutorial: React.FC<AppTutorialProps> = ({ role, onClose, isTriggeredMan
                 </div>
 
                 {/* Step Indicators */}
-                <div className="p-8 bg-slate-950/80 border-t border-white/5 flex justify-center gap-3">
+                <div className="p-6 sm:p-8 bg-slate-950/80 border-t border-white/5 flex justify-center gap-2 sm:gap-3">
                     {steps.map((_, i) => (
                         <div 
                             key={i} 
-                            className={`h-2 rounded-full transition-all duration-1000 ease-[cubic-bezier(0.23,1,0.32,1)] ${i === currentStep ? 'w-20 bg-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.8)]' : 'w-4 bg-slate-800'}`}
+                            className={`h-1.5 rounded-full transition-all duration-700 ${i === currentStep ? 'w-12 sm:w-16 bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)]' : 'w-2.5 bg-slate-800'}`}
                         />
                     ))}
                 </div>
